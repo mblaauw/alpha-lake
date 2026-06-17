@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: lake_catalog
+      POSTGRES_USER: lake
+      POSTGRES_PASSWORD: lake
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lake -d lake_catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rustfs:
+    image: ghcr.io/rustfs/rustfs:latest
+    command: ["server", "--addr", "0.0.0.0:9000", "--data-dir", "/data"]
+    ports:
+      - "9000:9000"
+    volumes:
+      - rustfsdata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ALPHA_LAKE_CONFIG: /config/stack.toml
+      ALPHA_LAKE_EODHD_API_KEY: "${ALPHA_LAKE_EODHD_API_KEY:-}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4317
+    volumes:
+      - ./config:/config:ro
+      - ./src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    entrypoint: ["alpha-lake"]
+
+  otel:
+    image: otel/opentelemetry-collector-contrib:latest
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - .stack/otel/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    command: ["--config", "/etc/otel-collector.yaml"]
+
+volumes:
+  pgdata:
+  rustfsdata:

@@ -1,0 +1,67 @@
+[project]
+name = "alpha-lake"
+version = "0.1.0"
+description = "Stack-first bitemporal market-data lakehouse"
+requires-python = ">=3.14"
+license = { text = "Apache-2.0" }
+authors = [{ name = "M. Blaauw" }]
+
+dependencies = [
+    "polars>=1.0",
+    "patito>=0.5",
+    "duckdb>=1.2",
+    "httpx>=0.28",
+    "tenacity>=9.0",
+    "typer>=0.15",
+    "pyarrow>=18.0",
+    "pydantic>=2.0",
+    "opentelemetry-api>=1.30",
+    "opentelemetry-sdk>=1.30",
+    "toml>=0.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "import-linter>=2.0",
+    "dlt>=1.0",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
+
+[tool.import-linter]
+root_package = "alpha_lake"
+include_external_packages = true
+
+[[tool.import-linter.contracts]]
+name = "layer-rules"
+type = "independence"
+layers = [
+    "models",
+    "ports",
+    "connectors",
+    "canonical",
+    "quality",
+    "catalog",
+    "serving",
+    "flows",
+    "cli",
+]
+
+[tool.typer]
+app_name = "alpha-lake"
+
+[project.scripts]
+alpha-lake = "alpha_lake.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

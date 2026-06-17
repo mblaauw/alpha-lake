@@ -1,0 +1,28 @@
+[lake]
+runtime = "stack"
+catalog = "ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake"
+data_path = "s3://lake/"
+
+[s3]
+endpoint = "rustfs:9000"
+url_style = "path"
+use_ssl = false
+
+[quality.bars]
+max_staleness_days = 2
+halt_on_stale_prices = true
+
+[quality.earnings_calendar]
+max_staleness_days = 7
+
+[quality.fundamentals]
+max_staleness_days = 30
+
+[quality.insider_tx]
+max_staleness_days = 3
+
+[quality.mentions]
+max_staleness_days = 1
+
+[quality.security_master]
+max_staleness_days = 7

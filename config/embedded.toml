@@ -1,0 +1,4 @@
+[lake]
+runtime = "embedded"
+catalog = "ducklake:sqlite:data/lake.catalog"
+data_path = "data/lake/"
