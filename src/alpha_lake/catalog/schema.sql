@@ -36,6 +36,19 @@ CREATE TABLE IF NOT EXISTS manifest (
     parser_version_intended INT
 );
 
+CREATE TABLE IF NOT EXISTS security_master (
+    security_id VARCHAR NOT NULL,
+    symbol VARCHAR NOT NULL,
+    name VARCHAR,
+    exchange VARCHAR,
+    figi VARCHAR,
+    cik VARCHAR,
+    effective_start DATE NOT NULL,
+    effective_end DATE,
+    available_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (security_id, symbol, effective_start)
+);
+
 CREATE TABLE IF NOT EXISTS reconciliation_event (
     event_id VARCHAR PRIMARY KEY,
     dataset VARCHAR NOT NULL,
