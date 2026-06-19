@@ -59,13 +59,14 @@ include = ["tests/**"]
 [tool.ty.overrides.rules]
 possibly-unresolved-reference = "warn"
 
-[tool.import-linter]
+[tool.importlinter]
 root_package = "alpha_lake"
 include_external_packages = true
 
-[[tool.import-linter.contracts]]
+[[tool.importlinter.contracts]]
 name = "layer-rules"
-type = "independence"
+type = "layers"
+containers = "alpha_lake"
 layers = [
     "models",
     "ports",
