@@ -3,14 +3,14 @@
 **Status:** Proposed
 
 **Context:**
-Alpha-Lake needs a lakehouse format that supports ACID transactions, time travel, and SCD2 operations on Parquet data. DuckLake is a catalog built on DuckDB that provides these capabilities with a Delta-compatible storage layer.
+Alpha-Lake needs a lakehouse format that supports ACID transactions, time travel, and SCD2-style versioned writes on Parquet data. DuckLake keeps lake metadata in a SQL catalog and stores data as open Parquet files.
 
 **Decision:**
 Use DuckLake as the lakehouse catalog and storage format. DuckLake provides:
-- ACID transactions via Delta-compatible commits
+- ACID transactions via the DuckLake catalog
 - Time travel via snapshot isolation
 - Native DuckDB SQL interface
-- S3/MinIO compatible storage backend
+- S3-compatible storage backend
 - SCD2 operations via SQL MERGE with append-only semantics
 
 **Consequences:**
@@ -20,6 +20,6 @@ Use DuckLake as the lakehouse catalog and storage format. DuckLake provides:
 - Negative: DuckLake 1.0 is relatively new; ecosystem maturity considerations
 
 **References:**
-- DESIGN.md §3.1
+- DESIGN.md §16
 
 **Date:** 2026-06-18

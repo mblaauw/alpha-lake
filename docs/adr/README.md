@@ -26,3 +26,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Proposed |
 | 0017 | Derived technical indicator library (neutral, PIT-bounded, cacheable) | Accepted |
 | 0018 | Derived news & social analytics layer (neutral, PIT-bounded, versioned) | Accepted |
+| 0019 | Polars + Patito for DataFrame processing and model validation | Proposed |

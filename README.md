@@ -23,7 +23,7 @@ just health    # check dataset freshness and status
 | Insider transactions | SEC EDGAR Forms 3/4/5 | commercial (future) |
 | Earnings calendar | EODHD | — |
 | News articles | Tiingo News | Alpaca News, EODHD News |
-| Social mentions | Reddit API | Tiingo/EODHD enrichment |
+| Social posts | Reddit API | Tiingo/EODHD enrichment |
 | Corporate actions | EODHD / Tiingo splits-dividends | SEC filings (validation) |
 | Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
 
@@ -35,7 +35,7 @@ just health    # check dataset freshness and status
 | Epic 1 | Phase 1 | Bars vertical slice: connector → PIT read | P0 |
 | Epic 2 | Phase 2 | Testing: replay harness, fixtures, contract tests | P0 |
 | Epic 3 | Phase 3 | Identity: security master, corp actions, adjusted views | P1 |
-| Epic 4 | Phase 4 | Remaining datasets: fundamentals, insider, news, mentions | P1 |
+| Epic 4 | Phase 4 | Remaining datasets: fundamentals, insider, news, social/text analytics | P1 |
 | Epic 5 | Phase 5 | Serving: panel, PIT joins, catalog, health, latest_* | P1 |
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 |
 | Epic 7 | Phase 7 | Packaging: vendor, air-gap, Nix, release workflow | P2 |
@@ -58,7 +58,7 @@ All work is tracked on the [Alpha-Lake Project Board](https://github.com/users/m
 
 ## Design
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (653 lines, v3.1).
+See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).
 
 ## Architecture Decision Records
 
@@ -80,6 +80,8 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementat
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Proposed |
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Proposed |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Proposed |
+| 0017 | Derived technical indicator library | Accepted |
+| 0018 | Derived news & social analytics layer | Accepted |
 
 ## License
 

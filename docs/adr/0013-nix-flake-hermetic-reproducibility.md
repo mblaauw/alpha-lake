@@ -13,6 +13,6 @@
 - Negative: Nix learning curve for contributors
 
 **References:**
-- DESIGN.md §22
+- DESIGN.md §23
 
 **Date:** 2026-06-18

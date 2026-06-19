@@ -13,6 +13,6 @@
 - Negative: Slightly slower inner dev loop
 
 **References:**
-- DESIGN.md §3, §27 Phase 0, §27 Phase 1b
+- DESIGN.md §3, §28 Phase 2
 
 **Date:** 2026-06-18

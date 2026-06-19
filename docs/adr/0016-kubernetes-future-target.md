@@ -13,6 +13,6 @@
 - Negative: RustFS single-node may hit scale limits
 
 **References:**
-- DESIGN.md §22, §27 Phase 7
+- DESIGN.md §23, §28 Phase 8
 
 **Date:** 2026-06-18

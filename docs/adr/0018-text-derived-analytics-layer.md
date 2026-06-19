@@ -28,18 +28,20 @@ Key challenges:
 Alpha-Lake provides a neutral text-derived analytics layer that follows the same
 principles as the technical indicator library (ADR-0017):
 
-1. **Source-grounded canonical datasets** — `news_articles`, `social_posts`,
-   `entity_mentions`, `sentiment_annotations`, `attention_metrics` store raw or
-   model-derived facts with full lineage and versioning.
-2. **Neutral derived metrics** — volume, velocity, sentiment distribution, entity
+1. **Source-grounded canonical datasets** — `news_articles` and `social_posts`
+   store raw text facts with full lineage and PIT metadata.
+2. **Versioned derived datasets** — `entity_mentions`, `sentiment_annotations`,
+   and `attention_metrics` store reproducible annotation/metric outputs with full
+   lineage and PIT metadata; they are not source-grounded canonical truth.
+3. **Neutral derived metrics** — volume, velocity, sentiment distribution, entity
    linkage, topic/event clustering, novelty, engagement, source quality, co-mentions,
    text features. All use labels that describe, not judge.
-3. **Versioned annotations** — every derived text annotation records `model_version`,
+4. **Versioned annotations** — every derived text annotation records `model_version`,
    `prompt_version`, `taxonomy_version`, `input_text_hash`, `source_dataset_version`.
-4. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
-5. **Rebuildable cache** — an optional cache stores frequently-used NLP outputs
+5. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
+6. **Rebuildable cache** — an optional cache stores frequently-used NLP outputs
    and aggregated metrics, following the same rules as the indicator cache (§14.4).
-6. **Forbidden outputs** — `bullish_news_signal`, `reddit_hype_score`,
+7. **Forbidden outputs** — `bullish_news_signal`, `reddit_hype_score`,
    `buy_pressure_score`, `trade_candidate_rank`, `negative_catalyst_action`, and any
    output that interprets sentiment or attention as trading/risk signals.
 

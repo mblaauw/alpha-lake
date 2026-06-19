@@ -48,5 +48,5 @@ vendor:
 
 # Lint and type-check
 lint:
-    ruff check src/ tests/
-    ty src/
+    uv run ruff check src/ tests/
+    uv run ty check --output-format full

@@ -21,7 +21,19 @@ max_staleness_days = 30
 [quality.insider_tx]
 max_staleness_days = 3
 
-[quality.mentions]
+[quality.social_posts]
+max_staleness_days = 1
+
+[quality.entity_mentions]
+max_staleness_days = 1
+
+[quality.news_articles]
+max_staleness_days = 1
+
+[quality.sentiment_annotations]
+max_staleness_days = 2
+
+[quality.attention_metrics]
 max_staleness_days = 1
 
 [quality.security_master]

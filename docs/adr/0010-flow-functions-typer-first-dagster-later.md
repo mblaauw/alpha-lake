@@ -12,6 +12,6 @@
 - Negative: Dagster integration must be retrofitted
 
 **References:**
-- DESIGN.md §18, §27 Phase 5
+- DESIGN.md §19, §28 Phase 6
 
 **Date:** 2026-06-18

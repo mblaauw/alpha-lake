@@ -130,9 +130,10 @@ knowledge time available_at     when the lake could first serve it   ← the PIT
 system time    DuckLake snapshot when the lake physically committed   (audit / rollback)
 ```
 
-- **`as_of` is a query parameter, never a stored column.** Only `available_at` governs visibility.
+- **`as_of` is a query parameter, never a canonical stored column.** Only `available_at` governs visibility. Rebuildable derived caches may store the requested `as_of` as cache-key metadata; that cache value is not canonical truth.
 - **System time ≠ knowledge time.** They coincide at first ingest but diverge on backfill/replay. `available_at` is a stored domain fact; DuckLake snapshots are audit/reproducibility — never the PIT boundary.
 - **Restatements are versions, not overwrites.** A correction mints a new `available_at` version; prior versions are retained.
+- **Valid-time filtering is dataset-class-specific.** Historical observation reads exclude future effective dates; known-future event reads may return future `event_date`/`effective_date` rows when they were already knowable at `as_of`.
 
 ## 5. Domain model overview
 
@@ -163,23 +164,30 @@ Each stage maps to a Part II section: fetch §7–8, parse/validate §13, canoni
 
 ## 7. Source registry (Zone 0)
 
-All source behavior is data, not code. One row per source drives connectors, precedence, freshness, and reconciliation.
+All source behavior is data, not code. One source row drives connector mechanics; one dataset-source row drives dataset-specific precedence, freshness, parser, contract, and reconciliation behavior.
 
 ```
-source_id            stable id (e.g. "eodhd")
-source_name          human label
-source_type          rest | html | file
-auth_type            api_key | oauth | none
-api_key_env          env var name for the secret (never the secret)
-rate_limit_per_min   token-bucket budget
-cadence              daily | weekly | on_demand
-freshness_sla_days   max acceptable staleness (drives §13)
-retry_policy         max_attempts, backoff, jitter
-parser_version       current parser id
-contract_version     dataset contract id served
-source_priority      lower = higher precedence (drives §11 stage 2)
-owner                accountable name
-enabled              bool
+source_registry:
+  source_id            stable id (e.g. "eodhd")
+  source_name          human label
+  source_type          rest | html | file
+  auth_type            api_key | oauth | none
+  api_key_env          env var name for the secret (never the secret)
+  rate_limit_per_min   token-bucket budget
+  retry_policy         max_attempts, backoff, jitter
+  owner                accountable name
+  enabled              bool
+
+source_dataset_registry:
+  dataset_id           canonical dataset id
+  source_id            source_registry FK
+  role                 primary | secondary | validation | enrichment
+  priority             lower = higher precedence within this dataset
+  cadence              daily | weekly | on_demand
+  freshness_sla_days   max acceptable staleness for this dataset/source pair
+  parser_version       current parser id for this dataset/source pair
+  contract_version     dataset contract id served
+  enabled              bool
 ```
 
 ### Data suppliers (per-dataset)
@@ -198,6 +206,8 @@ enabled              bool
 | attention_metrics | derived from news_articles + social_posts | — |
 | Corporate actions | EODHD or Tiingo splits-dividends | SEC filings (validation) |
 | Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
+
+Precedence and freshness are dataset-specific, not global source properties. A source can be primary for one dataset and secondary or validation-only for another. `source_dataset_registry.priority` drives §11 stage-2 source collapse. Dataset-level SLA and parser/contract versions live there because the same supplier can serve different datasets with different cadences, schemas, and authority.
 
 Each connector is modeled as one issue per (dataset, supplier) pair on the project board. See the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the full issue breakdown.
 
@@ -256,8 +266,8 @@ source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  quality_statu
 | `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + content_hash + parser_version` |
 | `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + content_hash` |
 | `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + content_hash` |
-| `news_articles` | article_id, title, description, url, text_hash, published_at, available_at, source_name, raw_payload_hash | `article_id + source_id` | natural + `available_at + content_hash` |
-| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, available_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + content_hash` |
+| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | `article_id + source_id` | natural + `available_at + content_hash` |
+| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + content_hash` |
 | `entity_mentions` | mention_id, text_item_id, text_item_type (news_article / social_post), security_id, entity_name, entity_type, confidence, match_method | `mention_id` | natural + `available_at + content_hash` |
 | `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label (positive/neutral/negative), model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | `annotation_id` | natural + `available_at + content_hash + model_version` |
 | `attention_metrics` | security_id, window_start, window_end, window_type (1d/3d/7d), article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | `security_id + window_start + window_end + window_type` | natural + `available_at + content_hash` |
@@ -292,7 +302,9 @@ Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the 
 
 ## 11. The point-in-time read (mechanics)
 
-Every research read applies `effective_date <= :as_of AND available_at <= :as_of`, then resolves to one value in **two stages**: newest knowledge-time version per source, then source precedence.
+Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source, then source precedence.
+
+For historical observation datasets such as bars, the valid-time rule is `effective_date <= :as_of`. For known-future event datasets such as earnings calendars or announced corporate actions, readers may return future `event_date`/`effective_date` rows if `available_at <= :as_of`; the fact that an event is scheduled in the future can itself be knowable today.
 
 ```sql
 WITH versioned AS (                              -- stage 1: newest version per (fact, source)
@@ -302,16 +314,17 @@ WITH versioned AS (                              -- stage 1: newest version per 
   FROM bars
   WHERE security_id = :sid
     AND effective_date BETWEEN :start AND :end
+    AND effective_date <= :as_of
     AND available_at <= :as_of)
 SELECT * EXCLUDE (v_rn, s_rn) FROM (             -- stage 2: collapse sources by precedence
   SELECT *, row_number() OVER (
             PARTITION BY security_id, effective_date
-            ORDER BY source_priority ASC) AS s_rn
+            ORDER BY dataset_source_priority ASC) AS s_rn
   FROM versioned WHERE v_rn = 1)
 WHERE s_rn = 1;
 ```
 
-Stage 1 alone returns one row per source; stage 2 yields the single canonical answer. `source_priority` is registry data (§7).
+Stage 1 alone returns one row per source; stage 2 yields the single canonical answer. Dataset-specific source priority is registry data (§7).
 
 **Restatement (worked example):**
 
@@ -355,13 +368,16 @@ raw price 2025-01-01; split effective 2025-06-01; split available_at 2025-06-02
 
   | Dataset | SLA |
   |---|---|
+  | attention_metrics | ≤ 1d |
   | bars | available by next trading day |
   | earnings_calendar | ≤ 7d |
+  | entity_mentions | ≤ 1d |
   | fundamentals | ≤ 30d (or source-specific) |
   | insider_tx | ≤ 3 trading days |
   | news_articles | ≤ 1d |
-  | social_posts | ≤ 1d |
   | security_master | ≤ 7d |
+  | sentiment_annotations | ≤ 2d |
+  | social_posts | ≤ 1d |
 
 - *Point-in-time* — no research read defaults to "latest".
 
@@ -511,13 +527,13 @@ The lake computes neutral market-derived measurements. Alpha-Quant decides what 
 Alpha-Lake provides a neutral text-derived analytics layer for news and social data.
 
 Canonical text datasets store source-grounded facts: article/post metadata, raw payload
-lineage, publication time, availability time, source identity, entity links, and immutable
-text hashes.
+lineage, publication time, availability time, source identity, and immutable text hashes.
 
-Derived NLP outputs such as sentiment, topic labels, embeddings, summaries, novelty
-scores, mention counts, and attention velocity may be computed and cached, but they are
-not canonical truth. Every derived text annotation must record the model version, prompt
-version, taxonomy version, input text hash, source dataset version, and `as_of` boundary.
+Derived NLP outputs such as entity links, sentiment, topic labels, embeddings, summaries,
+novelty measures, mention counts, and attention velocity are versioned derived datasets
+or rebuildable caches, not source-grounded canonical truth. Every derived text annotation
+must record the model version, prompt version, taxonomy version, input text hash, source
+dataset version, and `as_of` boundary.
 
 Alpha-Lake may measure attention and sentiment. It must not decide whether attention or
 sentiment is bullish, bearish, tradable, risky, or actionable. That interpretation belongs
@@ -525,23 +541,24 @@ to Alpha-Quant or another consumer.
 
 ### 15.1 Text analytics design rules
 
-1. **Source-grounded** — canonical tables store raw text facts with full lineage.
-2. **Annotated, not judged** — derived NLP outputs use neutral labels (sentiment score, topic,
+1. **Source-grounded canonical layer** — `news_articles` and `social_posts` store raw text facts with full lineage.
+2. **Versioned derived layer** — `entity_mentions`, `sentiment_annotations`, and `attention_metrics` are reproducible derived annotation/metric datasets, not source-provided truth.
+3. **Annotated, not judged** — derived NLP outputs use neutral labels (sentiment score, topic,
    entity, embedding). No `bullish`, `bearish`, `risky`, `actionable`, `signal`.
-3. **Versioned** — every annotation records `model_version`, `prompt_version`, `taxonomy_version`,
+4. **Versioned** — every annotation records `model_version`, `prompt_version`, `taxonomy_version`,
    `input_text_hash`, `source_dataset_version`.
-4. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
-5. **Rebuildable** — all derived values are reproducible from canonical text datasets.
+5. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
+6. **Rebuildable** — all derived values are reproducible from canonical text datasets.
 
 ### 15.2 Canonical text datasets
 
 | Dataset | Content | Grounding |
 |---------|---------|-----------|
-| `news_articles` | article_id, title, description, url, text_hash, published_at, available_at, source_name, raw_payload_hash | Source-provided metadata; raw payload archived |
-| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, available_at, engagement_json | Source-provided metadata; raw payload archived |
-| `entity_mentions` | mention_id, text_item_id, text_item_type, security_id, entity_name, entity_type, confidence, match_method | Inferred via NLP + security master; confidence recorded |
-| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label, model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | ML model / vendor output; version pinned |
-| `attention_metrics` | security_id, window_start, window_end, window_type, article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | Derived from news_articles + social_posts + sentiment_annotations |
+| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | Source-provided metadata; raw payload archived |
+| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | Source-provided metadata; raw payload archived |
+| `entity_mentions` | mention_id, text_item_id, text_item_type, security_id, entity_name, entity_type, confidence, match_method | Versioned derived linkage via NLP + security master; confidence recorded |
+| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label, model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | Versioned derived ML/vendor annotation; model/prompt/taxonomy pinned |
+| `attention_metrics` | security_id, window_start, window_end, window_type, article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | Rebuildable derived metrics from news_articles + social_posts + sentiment_annotations |
 
 ### 15.3 Derived metric categories
 
@@ -722,7 +739,13 @@ use_ssl   = false
 enabled = true
 api_key_env = "ALPHA_LAKE_EODHD_API_KEY"
 rate_limit_per_minute = 60
-source_priority = 10
+
+[source_datasets.bars.eodhd]
+role = "primary"
+priority = 10
+freshness_sla_days = 2
+parser_version = "eodhd-bars-v1"
+contract_version = "bars.v1"
 
 [quality.bars]
 max_staleness_days = 2
@@ -813,7 +836,7 @@ alpha-lake/
 - **I2** Every canonical row carries lineage + maps to a DuckLake snapshot.
 - **I3** No strategy/decision semantics anywhere (no scores, ranks, flags).
 - **I4** Corrections are new `available_at` versions, never overwrites.
-- **I5** No research read returns `available_at > as_of` or `effective_date > as_of`.
+- **I5** No research read returns `available_at > as_of`; valid-time filtering follows the dataset class, so historical observations exclude future effective dates while known-future events may expose future event dates already knowable at `as_of`.
 - **I6** Adjusted views apply only corp actions known at `as_of`.
 - **I7** Replay is deterministic; uses recorded `available_at`, never wall-clock.
 - **I8** Canonical keyed by `security_id`; `symbol` resolved point-in-time.
@@ -834,7 +857,7 @@ alpha-lake/
 0005 security_id (security master) as canonical key from v1
 0006 Raw-only bars; adjustment as read-time, PIT-bounded view
 0007 dlt + SCD2 for ingestion; raw archived before normalize
-0008 Polars + Patito: unified model/schema/validator
+0019 Polars + Patito: unified model/schema/validator
 0009 Fact store + transform library, never a feature store
 0010 Flow functions; Typer app-container CLI first, Dagster optional shell later
 0011 OpenTelemetry: OTLP collector in stack, console exporter in embedded harness
@@ -843,6 +866,8 @@ alpha-lake/
 0014 Source registry as data; precedence/freshness/retry not hardcoded
 0015 Embedded mode demoted to test/debug/fixture/golden-replay harness
 0016 Kubernetes is a future deployment target, not the v0.1 development substrate
+0017 Derived technical indicator library (§14)
+0018 Text-derived analytics layer (§15)
 ```
 
 ## 28. Build plan (from scratch, stack-first, vertical-slice, oracle-gated)
@@ -851,13 +876,13 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 
 - **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, RustFS object store, Alpha-Lake app container, config loading, DuckLake attach, `models/` + `ports/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
 - **Phase 1 — bars vertical slice against the real stack.** dlt source → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
-- **Phase 1b — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
-- **Phase 2 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
-- **Phase 3 — remaining datasets.** fundamentals → insider → news_articles + social_posts → earnings_calendar, each repeating the Phase-1 vertical pattern.
-- **Phase 4 — serving surface.** as-of panel / spine join; catalog; health; explicit `latest_*` non-research paths where needed.
-- **Phase 5 — orchestration hardening.** Add Dagster assets over the already-proven `flows/`; asset checks wrap Patito gates; date partitions improve backfill UX. Dagster is not allowed to own business logic.
-- **Phase 6 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, optional `vendor/bin/rustfs`, offline `just up --offline`, fixture bundles, and reproducibility docs.
-- **Phase 7 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; RustFS clustering only when GA and genuinely needed.
+- **Phase 2 — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
+- **Phase 3 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
+- **Phase 4 — remaining datasets.** fundamentals → insider → news_articles + social_posts → entity_mentions + sentiment_annotations + attention_metrics → earnings_calendar, each repeating the Phase-1 vertical pattern.
+- **Phase 5 — serving surface.** as-of panel / spine join; catalog; health; explicit `latest_*` non-research paths; technical indicator library serving (§14); text analytics serving (§15).
+- **Phase 6 — orchestration hardening.** Add Dagster assets over the already-proven `flows/`; asset checks wrap Patito gates; date partitions improve backfill UX. Dagster is not allowed to own business logic.
+- **Phase 7 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, optional `vendor/bin/rustfs`, offline `just up --offline`, fixture bundles, and reproducibility docs.
+- **Phase 8 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; RustFS clustering only when GA and genuinely needed.
 
 ## 29. Tech stack
 

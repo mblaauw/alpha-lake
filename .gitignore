@@ -9,3 +9,4 @@ data/
 .env
 *.local.toml
 .DS_Store
+logs/

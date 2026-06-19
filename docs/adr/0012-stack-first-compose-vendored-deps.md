@@ -13,6 +13,6 @@
 - Negative: Container image updates require explicit vendoring step
 
 **References:**
-- DESIGN.md §22, §3
+- DESIGN.md §23, §3
 
 **Date:** 2026-06-18
