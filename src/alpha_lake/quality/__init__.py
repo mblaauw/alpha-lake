@@ -10,7 +10,7 @@ def check_market_sanity(df: pl.DataFrame) -> pl.DataFrame:
         & (pl.col("open") <= pl.col("high"))
         & (pl.col("close") <= pl.col("high"))
         & (pl.col("volume") >= 0)
-        & (pl.col("open") > 0)
+        & (pl.col("open") >= 0)
     )
     return df.with_columns(
         pl.when(condition)

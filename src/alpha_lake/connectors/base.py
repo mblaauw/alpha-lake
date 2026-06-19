@@ -28,6 +28,7 @@ def build_manifest(
     raw_bytes: bytes,
     http_status: int,
     parser_version: int,
+    ingest_ts: str | None = None,
 ) -> dict[str, Any]:
     return {
         "source_id": source_id,
@@ -36,7 +37,7 @@ def build_manifest(
         "request_params_hash": hashlib.sha256(
             json.dumps(params or {}, sort_keys=True).encode()
         ).hexdigest(),
-        "ingest_ts": None,
+        "ingest_ts": ingest_ts,
         "http_status": http_status,
         "content_hash": compute_content_hash(raw_bytes),
         "content_type": "",
