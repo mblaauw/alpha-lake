@@ -16,7 +16,7 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0006 | Read-time adjusted price computation | Proposed |
 | 0007 | Embedded SQLite/local-fs harness for testing | Proposed |
 | 0008 | dlt for ingestion framework with idempotency | Proposed |
-| 0009 | Fact store + transform library, never a feature store | Proposed |
+| 0009 | Fact store + transform library, never a feature store | Refined by 0017 |
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Proposed |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Proposed |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Proposed |
@@ -24,3 +24,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Proposed |
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Proposed |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Proposed |
+| 0017 | Derived technical indicator library (neutral, PIT-bounded, cacheable) | Accepted |

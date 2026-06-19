@@ -378,15 +378,124 @@ ReconciliationDisagreement{
   primary_value  secondary_value  difference  tolerance  severity  available_at }
 ```
 
-## 14. Derived transform library (no materialized features)
+## 14. Derived technical indicator library
 
-The lake materializes **no** strategy-windowed features (`ema_50`, `atr_14`, …) — windows are strategy choices. It provides clean PIT bars, adjusted views, corp-action sets, security master, calendar, and a **pure parameterized transform library** (Python functions + DuckDB/SQLMesh macros) consumers compose.
+Alpha-Lake provides a broad, neutral technical-indicator library over PIT-safe daily bars.
+
+These indicators are **not canonical market facts** and are not stored on the canonical `bars` table. They are deterministic, rebuildable, parameterized transforms over:
+
+* raw OHLCV bars,
+* corporate-action-aware adjusted bar views,
+* known-at-`as_of` corporate actions,
+* optionally benchmark/index bars where the indicator requires comparison.
+
+The purpose is to prevent every downstream consumer from reimplementing common calculations while keeping strategy interpretation outside the lake.
 
 ```python
-# served by the lake (neutral):
-ema(close, window);  atr(high, low, close, window);  rolling_volume(volume, window)
-# NOT served (strategy semantics): trend_score, risk_on, candidate_rank
+lake.indicators.sma(symbol="AAPL", window=50, as_of=A, price_mode="split_adjusted")
+lake.indicators.macd(symbol="AAPL", fast=12, slow=26, signal=9, as_of=A)
+lake.indicators.bollinger(symbol="AAPL", window=20, stddev=2.0, as_of=A)
 ```
+
+### 14.1 Indicator design rules
+
+* Indicators are **parameterized**; no hardcoded strategy windows.
+* Indicators are **PIT-bounded**; inputs must satisfy `available_at <= as_of`.
+* Indicators are **neutral**; no `buy`, `sell`, `bullish`, `bearish`, `rank`, `score`, or `signal`.
+* Indicators are **derived views or cacheable outputs**, not canonical facts.
+* Indicator outputs record input dataset versions, parameters, code version, and price mode.
+* Consumers own interpretation, thresholds, ranking, portfolio logic, and trading decisions.
+
+### 14.2 Indicator categories
+
+Alpha-Lake may provide the following indicator families because they are mechanically derivable from daily OHLCV bars.
+
+| Category                   | Examples |
+| -------------------------- | -------- |
+| Price transforms           | close, adjusted close view, typical price, median price, weighted close, OHLC average |
+| Returns                    | simple return, log return, cumulative return, rolling return, gap return, overnight/intraday proxy return |
+| Moving averages            | SMA, EMA, WMA, VWMA, SMMA/RMA, DEMA, TEMA, HMA, KAMA, ALMA, ZLEMA |
+| Trend                      | MACD, PPO, ADX, DMI, Aroon, DPO, TRIX, Mass Index, Vortex Indicator |
+| Momentum                   | RSI, Stochastic Oscillator, Stochastic RSI, ROC, Momentum, Williams %R, CCI, TSI, Ultimate Oscillator, KST |
+| Volatility                 | True Range, ATR, NATR, rolling standard deviation, historical volatility, Parkinson volatility, Garman-Klass volatility, Rogers-Satchell volatility |
+| Bands/channels             | Bollinger Bands, Keltner Channels, Donchian Channels, Price Channels, STARC Bands |
+| Volume                     | volume SMA/EMA, volume z-score, OBV, Volume Price Trend, Accumulation/Distribution Line, Chaikin Money Flow, Chaikin Oscillator, Money Flow Index, Force Index, Ease of Movement, Negative/Positive Volume Index |
+| Range/breakout             | rolling high/low, highest high, lowest low, breakout distance, channel position, close location value |
+| Risk/statistics            | rolling beta, rolling correlation, rolling covariance, rolling Sharpe-like ratio, rolling drawdown, max drawdown, downside deviation, skew, kurtosis |
+| Support/resistance helpers | pivot points, rolling support/resistance levels, distance to rolling high/low |
+| Candlestick facts          | candle body, upper/lower wick, range, doji-like shape, engulfing-like shape, hammer-like shape |
+| Relative strength          | relative return versus benchmark, ratio series, rolling relative momentum, rolling beta-adjusted return |
+| Calendar/bar metadata      | trading-day index, month/quarter/year flags, day-of-week, month-end, quarter-end |
+
+Candlestick pattern helpers are allowed only as neutral structural descriptions of OHLC shapes. They must not be named or exposed as trading advice.
+
+### 14.3 Indicators that require caution
+
+Some indicators can be derived from daily bars but need explicit semantics:
+
+| Indicator type                | Rule |
+| ----------------------------- | ---- |
+| VWAP                          | Daily OHLCV cannot produce true intraday VWAP. Alpha-Lake may expose only an approximate period VWAP using typical price × volume. |
+| Anchored VWAP                 | Allowed only when the anchor date is provided explicitly by the consumer. |
+| Total-return indicators       | Allowed only when `price_mode="total_return_adjusted"` is explicitly requested. |
+| Benchmark-relative indicators | Allowed only when the benchmark/index/security is explicitly provided. |
+| Pattern recognition           | Allowed as neutral OHLC geometry, not as predictive labels. |
+
+### 14.4 Optional materialized indicator cache
+
+Frequently reused indicators may be cached, but the cache remains rebuildable derived state.
+
+```
+technical_indicator_cache
+  security_id
+  effective_date
+  as_of
+  price_mode
+  indicator_name
+  parameters_hash
+  parameters_json
+  value_json
+  input_dataset_version
+  input_snapshot_id
+  code_version
+  created_at
+```
+
+Cache rules:
+
+1. Cache entries are invalidated when input bars, corporate actions, security master mappings, code version, or parameter definitions change.
+2. Cache entries are not canonical truth.
+3. Cache entries must be reproducible from canonical inputs.
+4. Cache reads must preserve the same PIT guarantees as normal readers.
+5. Cache misses compute on demand or fail explicitly, depending on caller policy.
+
+### 14.5 Boundary with Alpha-Quant
+
+Alpha-Lake may provide:
+
+```text
+sma(close, 50)
+macd(close, 12, 26, 9)
+bollinger(close, 20, 2)
+rolling_return(close, 20)
+atr(high, low, close, 14)
+relative_strength(close, benchmark_close, 90)
+```
+
+Alpha-Lake must not provide:
+
+```text
+golden_cross_signal
+macd_buy_signal
+low_risk_entry
+candidate_rank
+trend_score
+portfolio_weight
+stop_loss_action
+trade_decision
+```
+
+The lake computes neutral market-derived measurements. Alpha-Quant decides what they mean.
 
 ## 15. Storage — DuckLake + RustFS
 
