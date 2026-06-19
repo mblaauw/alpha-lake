@@ -1,6 +1,8 @@
 # ADR-0013: Nix flake as hermetic reproducibility ceiling
 
-**Status:** Proposed
+**Status:** Accepted
+
+**Implementation:** `flake.nix` at repo root with Python 3.14, uv, docker-compose in a devShell.
 
 **Context:** Compose + uv provides practical reproducibility. A Nix flake provides the maximal hermetic ceiling, pinning every tool at the OS level.
 
