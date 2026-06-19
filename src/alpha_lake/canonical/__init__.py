@@ -162,3 +162,51 @@ def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
     count = con.execute("SELECT COUNT(*) FROM staging_ca").fetchone()[0]
     con.execute("DROP TABLE IF EXISTS staging_ca")
     return count
+
+
+_DATASET_KEYS: dict[str, list[str]] = {
+    "fundamentals": ["security_id", "fiscal_period", "statement_type", "line_item", "source_id"],
+    "insider_tx": ["security_id", "filer_cik", "issuer_cik", "transaction_code", "effective_date", "source_id"],
+    "earnings_calendar": ["security_id", "report_date", "source_id"],
+    "news_articles": ["article_id", "source_id"],
+    "social_posts": ["post_id_hash", "source_id"],
+    "entity_mentions": ["mention_id"],
+    "sentiment_annotations": ["annotation_id"],
+    "attention_metrics": ["security_id", "window_start", "window_end", "window_type"],
+}
+
+
+def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) -> int:
+    """Generic canonical write for any dataset table.
+
+    Creates table if not exists, computes version_hash, dedup by natural key.
+    """
+    df = compute_version_hash(df)
+
+    cols = ", ".join(df.columns)
+    placeholders = ", ".join(f"s.{c}" for c in df.columns)
+    natural_keys = _DATASET_KEYS.get(table, ["id"])
+
+    df_no_nv = df.drop("normalization_version")
+    staging_cols = ", ".join(df_no_nv.columns)
+    staging_placeholders = ", ".join(f"s.{c}" for c in df_no_nv.columns)
+
+    con.execute("DROP TABLE IF EXISTS _staging")
+    polars_to_duckdb(con, df_no_nv, "_staging")
+
+    join_on = " AND ".join(f"t.{k} = s.{k}" for k in natural_keys)
+    con.execute(f"""
+        INSERT INTO {table} ({staging_cols})
+        SELECT {staging_placeholders}
+        FROM _staging s
+        WHERE NOT EXISTS (
+            SELECT 1 FROM {table} t
+            WHERE {join_on}
+              AND t.available_at = s.available_at
+              AND t.version_hash = s.version_hash
+        )
+    """)
+
+    count = con.execute("SELECT COUNT(*) FROM _staging").fetchone()[0]
+    con.execute("DROP TABLE IF EXISTS _staging")
+    return count
