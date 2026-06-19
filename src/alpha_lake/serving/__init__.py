@@ -5,6 +5,8 @@ from datetime import date, datetime
 import duckdb
 import polars as pl
 
+from alpha_lake.clock import get_clock
+
 from alpha_lake.interop import duckdb_to_polars
 from alpha_lake.source_registry import get_source_precedence
 
@@ -81,4 +83,4 @@ def read_bars_latest(
     end_date: date | None = None,
 ) -> pl.DataFrame:
     """PIT-unsafe: returns newest data available as of now()."""
-    return read_bars_asof(con, security_ids, datetime.now(), start_date, end_date)
+    return read_bars_asof(con, security_ids, get_clock().now(), start_date, end_date)
