@@ -30,6 +30,16 @@ def test_config_reconcile():
     assert cfg.volume_diff_pct == 5.0
 
 
+def test_normalize_bars():
+    from datetime import datetime, timezone
+    from alpha_lake.normalize import bars_from_json
+    ts = datetime(2026, 6, 18, 12, 0, 0, tzinfo=timezone.utc)
+    raw = [{"date": "2026-06-18", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 10000}]
+    df = bars_from_json(raw, "sec_test", "eodhd", "fetch_1", "run_1", "abc123", ts)
+    assert df.shape == (1, 20)
+    assert df["close"][0] == 100.5
+
+
 def test_raw_archive():
     from alpha_lake.config import load_config
     from alpha_lake.raw import archive, read_raw
