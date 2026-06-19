@@ -80,11 +80,11 @@ def vwap(high: pl.Series, low: pl.Series, close: pl.Series, volume: pl.Series) -
     return cum_pv / cum_v
 
 
-def macd(series: pl.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> dict[str, pl.Series]:
+def macd(series: pl.Series, fast: int = 12, slow: int = 26, signal_period: int = 9) -> dict[str, pl.Series]:
     """MACD line, signal line, histogram."""
     ema_fast = ema(series, fast)
     ema_slow = ema(series, slow)
     macd_line = ema_fast - ema_slow
-    signal_line = ema(macd_line, signal)
+    signal_line = ema(macd_line, signal_period)
     histogram = macd_line - signal_line
-    return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
+    return {"macd": macd_line, "signal_line": signal_line, "histogram": histogram}
