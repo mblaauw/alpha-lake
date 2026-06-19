@@ -5,10 +5,7 @@ WORKDIR /app
 RUN pip install uv
 
 COPY pyproject.toml uv.lock ./
+COPY src/ src/
 RUN uv sync --frozen --no-dev --no-cache
 
-COPY src/ src/
-
-RUN uv build --no-cache && uv pip install dist/*.whl --no-cache
-
-ENTRYPOINT ["alpha-lake"]
+ENTRYPOINT ["uv", "run", "--frozen", "python", "-m", "alpha_lake.cli"]

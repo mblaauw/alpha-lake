@@ -20,6 +20,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.30",
     "exchange-calendars>=4.0",
     "zstd>=1.5",
+    "psycopg2-binary>=2.9.12",
 ]
 
 [project.optional-dependencies]
@@ -108,5 +109,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "dagster>=1.10",
+    "dagster-duckdb>=0.25",
     "hypothesis>=6.0",
 ]

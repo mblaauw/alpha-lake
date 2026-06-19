@@ -1,11 +1,11 @@
 [lake]
 runtime = "stack"
-catalog = "ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake"
+catalog = "ducklake:postgres://lake:lake@postgres:5432/lake_catalog"
 data_path = "s3://lake/"
 calendar_version = "4.13.2"
 
 [s3]
-endpoint = "rustfs:9000"
+endpoint = "minio:9000"
 url_style = "path"
 use_ssl = false
 

@@ -12,6 +12,8 @@ _SCHEMA_PATH = pathlib.Path(__file__).parent / "schema.sql"
 
 def _build_connect_path(cfg: RootConfig) -> str:
     raw = cfg.lake.catalog
+    if raw.startswith("ducklake:postgres:") and "://" in raw:
+        return raw.removeprefix("ducklake:")
     if raw.startswith("ducklake:postgres:"):
         conn_str = raw.removeprefix("ducklake:postgres:")
         return f"postgres://{conn_str}"
@@ -41,16 +43,47 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
 
 
 def bootstrap(cfg: RootConfig) -> None:
+    if cfg.lake.runtime == "stack":
+        _bootstrap_postgres(cfg)
     con = connect(cfg)
     if _SCHEMA_PATH.exists():
         sql = _SCHEMA_PATH.read_text()
         for statement in sql.split(";"):
             stmt = statement.strip()
             if stmt:
-                con.execute(stmt)
+                try:
+                    con.execute(stmt)
+                except Exception as e:
+                    import sys; print(f"  warning: {e}", file=sys.stderr)
     else:
         _create_default_schema(con)
     con.close()
+
+
+def _bootstrap_postgres(cfg: RootConfig) -> None:
+    """Run catalog schema directly against Postgres."""
+    import psycopg2
+    raw = cfg.lake.catalog
+    if raw.startswith("ducklake:postgres://"):
+        conn_str = raw.removeprefix("ducklake:")
+    elif raw.startswith("ducklake:postgres:"):
+        conn_str = "postgresql" + raw.removeprefix("ducklake")
+    else:
+        return
+    conn = psycopg2.connect(conn_str)
+    cur = conn.cursor()
+    if _SCHEMA_PATH.exists():
+        sql = _SCHEMA_PATH.read_text()
+        for statement in sql.split(";"):
+            stmt = statement.strip()
+            if stmt:
+                try:
+                    cur.execute(stmt)
+                except Exception as e:
+                    import sys; print(f"  warning: {e}", file=sys.stderr)
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def _create_default_schema(con: duckdb.DuckDBPyConnection) -> None:
@@ -99,24 +132,21 @@ def _create_default_schema(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def list_datasets(con: duckdb.DuckDBPyConnection) -> list[dict[str, object]]:
-    """List all dataset tables and their schema version."""
-    rows = con.execute("""
-        SELECT table_name FROM information_schema.tables
-        WHERE table_schema = 'main'
-          AND table_type = 'BASE TABLE'
-          AND table_name NOT LIKE 'pg_%'
-          AND table_name NOT LIKE '_staging%'
-          AND table_name != 'staging_bars'
-          AND table_name != 'staging_ca'
-        ORDER BY table_name
-    """).fetchall()
+    """List all dataset tables and their schema version.
+
+    Uses DuckDB SHOW TABLES which works with both local and attached tables.
+    """
+    rows = con.execute("SHOW TABLES").fetchall()
+    skip = {"pg_", "_staging", "staging_bars", "staging_ca", "sqlite_"}
     result = []
     for row in rows:
         table = row[0]
+        if any(table.startswith(p) for p in skip):
+            continue
         try:
-            ver = con.execute(f"SELECT MAX(schema_version) FROM {table}").fetchone()
+            ver = con.execute(f"SELECT MAX(schema_version) FROM \"{table}\"").fetchone()
             version = ver[0] if ver and ver[0] else 0
-            count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            count = con.execute(f"SELECT COUNT(*) FROM \"{table}\"").fetchone()
             row_count = count[0] if count and count[0] else 0
         except Exception:
             version = 0

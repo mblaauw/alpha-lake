@@ -15,18 +15,22 @@ services:
       timeout: 3s
       retries: 5
 
-  rustfs:
-    image: ghcr.io/rustfs/rustfs:0.2.5
-    command: ["server", "--addr", "0.0.0.0:9000", "--data-dir", "/data"]
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
     ports:
       - "9000:9000"
+      - "9001:9001"
     volumes:
-      - rustfsdata:/data
+      - miniodata:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 3s
       retries: 5
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
 
   app:
     build:
@@ -42,9 +46,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rustfs:
+      minio:
         condition: service_healthy
-    entrypoint: ["alpha-lake"]
+    entrypoint: ["uv", "run", "--frozen", "alpha-lake"]
 
   otel:
     image: otel/opentelemetry-collector-contrib:0.123.0
@@ -57,4 +61,4 @@ services:
 
 volumes:
   pgdata:
-  rustfsdata:
+  miniodata:
