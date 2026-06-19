@@ -98,7 +98,7 @@ def _create_default_schema(con: duckdb.DuckDBPyConnection) -> None:
     """)
 
 
-def list_datasets(con: duckdb.DuckDBPyConnection) -> list[dict[str, str]]:
+def list_datasets(con: duckdb.DuckDBPyConnection) -> list[dict[str, object]]:
     """List all dataset tables and their schema version."""
     rows = con.execute("""
         SELECT table_name FROM information_schema.tables

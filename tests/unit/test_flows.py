@@ -13,7 +13,8 @@ def test_ingest_bars():
     con = duckdb.connect()
     count = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
     assert count == 1
-    rows = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()[0]
+    _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
+    rows = _r[0] if _r else 0
     assert rows == 1
     con.close()
 

@@ -91,10 +91,8 @@ def backfill_bars(
     days = trading_days_in_range(start_date, end_date)
     for sid in security_ids:
         for dt in days:
-            existing = con.execute(
-                "SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?",
-                [sid, dt]
-            ).fetchone()[0]
+            _r = con.execute("SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?", [sid, dt]).fetchone()
+            existing = _r[0] if _r else 0
             if existing == 0:
                 total += ingest_bars(con, [sid], dt.isoformat(), dt.isoformat(), source_id)
     return total
@@ -159,4 +157,5 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
             GROUP BY {key_cols}, available_at, version_hash
         )
     """)
-    return con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    _r = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    return _r[0] if _r else 0
