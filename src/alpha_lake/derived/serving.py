@@ -50,7 +50,7 @@ def compute_indicator(
         m = macd(close)
         return bars.with_columns(
             pl.Series("macd", m["macd"]),
-            pl.Series("macd_signal", m["signal"]),
+            pl.Series("macd_signal_line", m["signal_line"]),
             pl.Series("macd_histogram", m["histogram"]),
         )
 

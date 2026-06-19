@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import polars as pl
+from datetime import timezone
 
 from alpha_lake.derived.indicators import ema
 
@@ -85,7 +86,7 @@ def compute_attention_metrics(
         rows.append({
             "security_id": sid,
             "effective_date": date.today(),
-            "available_at": datetime.utcnow(),
+            "available_at": datetime.now(timezone.utc),
             "window_start": date.today() - timedelta(days=window_days),
             "window_end": date.today(),
             "window_type": f"{window_days}d",

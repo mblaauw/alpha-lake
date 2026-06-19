@@ -69,16 +69,16 @@ def test_derived_typical_price():
     assert typical_price(df)[0] == 100.0
 
 
-def test_derived_sma():
+def test_derived_sma_passthrough():
     df = pl.DataFrame({"close": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    result = sma(df, 3)
+    result = sma(df["close"], 3)
     assert result[2] == 2.0
     assert result[4] == 4.0
 
 
-def test_derived_ema():
+def test_derived_ema_passthrough():
     df = pl.DataFrame({"close": [1.0, 2.0, 3.0]})
-    result = ema(df, 3)
+    result = ema(df["close"], 3)
     assert result[0] == 1.0
 
 
