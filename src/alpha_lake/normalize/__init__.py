@@ -46,8 +46,8 @@ def bars_from_json(
     df = pl.DataFrame(rows)
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
-        pl.col("available_at").cast(pl.Datetime),
-        pl.col("source_published_at").cast(pl.Datetime),
-        pl.col("ingested_at").cast(pl.Datetime),
-        pl.col("validated_at").cast(pl.Datetime),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )

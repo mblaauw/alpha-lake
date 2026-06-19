@@ -65,9 +65,9 @@ def test_canonical_write_contract():
         "quality_status": ["valid"],
         "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
     }).with_columns(
-        pl.col("source_published_at").cast(pl.Datetime("us")),
-        pl.col("ingested_at").cast(pl.Datetime("us")),
-        pl.col("validated_at").cast(pl.Datetime("us")),
+        pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
     count = write_bars(con, df)
     assert count == 1

@@ -23,9 +23,9 @@ def _df(
         "schema_version": [1], "parser_version": [1], "quality_status": ["valid"],
         "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
     }).with_columns(
-        pl.col("source_published_at").cast(pl.Datetime),
-        pl.col("ingested_at").cast(pl.Datetime),
-        pl.col("validated_at").cast(pl.Datetime),
+        pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
 
 
@@ -80,9 +80,9 @@ def test_multiple_securities_independent_visibility(con):
         "source_published_at": [None, None], "ingested_at": [None, None],
         "validated_at": [None, None],
     }).with_columns(
-        pl.col("source_published_at").cast(pl.Datetime),
-        pl.col("ingested_at").cast(pl.Datetime),
-        pl.col("validated_at").cast(pl.Datetime),
+        pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
     write_bars(con, df1)
     result = read_bars_asof(con, ["sec_a", "sec_b"], datetime(2026, 1, 10, 12, 0))
