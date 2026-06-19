@@ -79,6 +79,10 @@ layers = [
     "cli",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
 [tool.typer]
 app_name = "alpha-lake"
 
