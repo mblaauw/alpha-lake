@@ -73,3 +73,4 @@ def test_canonical_write_contract():
     assert count == 1
     result = con.execute("SELECT close FROM lake_bars WHERE security_id='sec_test'").fetchone()[0]
     assert result == 100.5
+    con.close()

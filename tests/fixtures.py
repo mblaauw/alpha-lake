@@ -22,8 +22,6 @@ def golden_output() -> pl.DataFrame:
 def sample_bars_df() -> pl.DataFrame:
     from datetime import date, datetime
 
-    import polars as pl
-
     df = pl.DataFrame({
         "security_id": ["sec_aap"], "effective_date": [date(2026, 1, 5)],
         "available_at": [datetime(2026, 1, 5, 16, 0, 0)],
@@ -42,8 +40,6 @@ def sample_bars_df() -> pl.DataFrame:
 
 def sample_bars_restated() -> pl.DataFrame:
     from datetime import date, datetime
-
-    import polars as pl
 
     df = pl.DataFrame({
         "security_id": ["sec_aap"], "effective_date": [date(2026, 1, 5)],
