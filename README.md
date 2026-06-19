@@ -40,7 +40,7 @@ just health    # check dataset freshness and status
 | Epic 4 | Phase 4 | Remaining datasets: fundamentals, insider, news, social/text analytics | P1 ✅ |
 | Epic 5 | Phase 5 | Serving: panel, PIT joins, catalog, health, latest_* | P1 ✅ |
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 ✅ |
-| Epic 7 | Phase 7 | Packaging: vendor, air-gap, Nix, release workflow | P2 |
+| Epic 7 | Phase 7 | Packaging: vendor, air-gap, Nix, release workflow | P2 ✅ |
 | Epic 8 | Phase 8 | Hardening: contracts, SQLMesh, Arrow Flight, K8s | P2 |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
