@@ -11,8 +11,8 @@ A standalone, bitemporal, replayable **market-data lakehouse**. It ingests, arch
 Two registers, one source of truth:
 
 - **Part I — Systems Design** (§0–6): the *what and why*. Architecture, principles, runtime model, the conceptual model. Read this to understand the system.
-- **Part II — Implementation Reference** (§7–24): the *how*. Exact schemas, SQL, field specs, pipeline shapes, test specs. Read this to build it.
-- **Part III — Governance** (§25–30): invariants, ADRs, build plan, stack, non-goals.
+- **Part II — Implementation Reference** (§7–25): the *how*. Exact schemas, SQL, field specs, pipeline shapes, test specs. Read this to build it.
+- **Part III — Governance** (§26–31): invariants, ADRs, build plan, stack, non-goals.
 
 Section cross-references link the two registers (a concept in Part I points to its buildable spec in Part II).
 
@@ -34,14 +34,14 @@ Consumers decide what it means.
 ## 1. Principles
 
 1. **Raw is immutable.** Archive every payload verbatim before parsing; fix bugs by replay, never rewrite. → §8
-2. **Canonical is reproducible.** `canonical = f(raw, parser_version, schema_version, config, security_master)`. → §20
+2. **Canonical is reproducible.** `canonical = f(raw, parser_version, schema_version, config, security_master)`. → §21
 3. **Point-in-time correctness > convenience.** No consumer sees future data; every research read is knowledge-time bounded. → §11
 4. **Tri-temporal, explicitly.** Valid / knowledge / system time are three clocks; conflating any two is a bug. → §4, §11
 5. **Degrade, never corrupt.** Failure → explicit degraded state; bad data → quarantine with lineage. → §13
 6. **Facts, not opinions.** Neutral transforms only; the lake never knows if a value is bullish or tradable. → §14
-7. **Contracts are the API; layout is not.** Consumers bind to typed models and readers. → §17
-8. **Self-contained & reproducible.** The reference runtime is a local Compose stack; all deps are pinned and vendorable. → §22
-9. **Stack-first, not laptop-first.** The real catalog/object-store boundary is exercised from day one; embedded mode is only a test/replay harness. → §3, §27
+7. **Contracts are the API; layout is not.** Consumers bind to typed models and readers. → §18
+8. **Self-contained & reproducible.** The reference runtime is a local Compose stack; all deps are pinned and vendorable. → §23
+9. **Stack-first, not laptop-first.** The real catalog/object-store boundary is exercised from day one; embedded mode is only a test/replay harness. → §3, §28
 
 ## 2. Architecture
 
@@ -75,7 +75,7 @@ flowchart LR
 
 The domain core (`models/`, `ports/`) has no I/O. Adapters implement ports; the serving layer is the only thing consumers import.
 
-### 2.2 Layer rules (CI-enforced by `import-linter`, §16)
+### 2.2 Layer rules (CI-enforced by `import-linter`, §17)
 
 | Layer | May import | May not import |
 |---|---|---|
@@ -140,9 +140,9 @@ The lake's models describe **facts**; it never holds decisions. → full schemas
 
 | Fact entities (lake) | Forbidden here (consumer-owned) |
 |---|---|---|
-| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `MentionFact`, `NewsFact`, `CorporateActionFact`, `EarningsEventFact`, `DataQualityEvent`, `DatasetVersion` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
+| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `NewsArticleFact`, `SocialPostFact`, `EntityMentionFact`, `SentimentAnnotationFact`, `AttentionMetricFact`, `CorporateActionFact`, `EarningsEventFact`, `DataQualityEvent`, `DatasetVersion` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
 
-**Eligibility test for anything the lake exposes** (§14): *its definition would be byte-identical for two consumers who completely disagree about market direction.*
+**Eligibility test for anything the lake exposes** (§14–15): *its definition would be byte-identical for two consumers who completely disagree about market direction.*
 
 ## 6. Component flow
 
@@ -155,7 +155,7 @@ flowchart LR
   C --> D[derive views] --> S[serve · PIT readers / panel / catalog]
 ```
 
-Each stage maps to a Part II section: fetch §7–8, parse/validate §13, canonicalize §9/§11/§16, derive §14, serve §17.
+Each stage maps to a Part II section: fetch §7–8, parse/validate §13, canonicalize §9/§11/§17, derive §14, serve §18.
 
 ---
 
@@ -191,8 +191,11 @@ enabled              bool
 | Fundamentals | SEC EDGAR Companyfacts | Tiingo, EODHD |
 | Insider transactions | SEC EDGAR Forms 3/4/5 | commercial (future) |
 | Earnings calendar | EODHD | — |
-| News articles | Tiingo News | Alpaca News, EODHD News |
-| Social mentions | Reddit API | Tiingo/EODHD enrichment |
+| news_articles | Tiingo News | Alpaca News, EODHD News |
+| social_posts | Reddit API | Tiingo/EODHD enrichment |
+| entity_mentions | inferred from source text (NLP) | SEC EDGAR (CIK to ticker mapping) |
+| sentiment_annotations | vendor/ML model (FinBERT, LLM) | — |
+| attention_metrics | derived from news_articles + social_posts | — |
 | Corporate actions | EODHD or Tiingo splits-dividends | SEC filings (validation) |
 | Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
 
@@ -253,8 +256,11 @@ source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  quality_statu
 | `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + content_hash + parser_version` |
 | `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + content_hash` |
 | `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + content_hash` |
-| `news` | article_id, title, description, url, published_date, source_name, relevance_score, sentiment_score | `article_id + source_id` | natural + `available_at + content_hash` |
-| `mentions` | venue, count | `security_id + source_id + venue + effective_date` | natural + `available_at + content_hash` |
+| `news_articles` | article_id, title, description, url, text_hash, published_at, available_at, source_name, raw_payload_hash | `article_id + source_id` | natural + `available_at + content_hash` |
+| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, available_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + content_hash` |
+| `entity_mentions` | mention_id, text_item_id, text_item_type (news_article / social_post), security_id, entity_name, entity_type, confidence, match_method | `mention_id` | natural + `available_at + content_hash` |
+| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label (positive/neutral/negative), model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | `annotation_id` | natural + `available_at + content_hash + model_version` |
+| `attention_metrics` | security_id, window_start, window_end, window_type (1d/3d/7d), article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | `security_id + window_start + window_end + window_type` | natural + `available_at + content_hash` |
 | `earnings_calendar` | report_date, session | `security_id + report_date + source_id` | natural + `available_at + content_hash` |
 
 **Raw-only bars rule:** adjusted prices are *views* (§12), never stored facts; `price_mode` is a serve parameter, never part of identity.
@@ -282,7 +288,7 @@ WHERE symbol = :symbol AND exchange = :exchange
 QUALIFY row_number() OVER (ORDER BY available_at DESC) = 1;
 ```
 
-Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the API edge (§17) for caller convenience.
+Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the API edge (§18) for caller convenience.
 
 ## 11. The point-in-time read (mechanics)
 
@@ -353,7 +359,8 @@ raw price 2025-01-01; split effective 2025-06-01; split available_at 2025-06-02
   | earnings_calendar | ≤ 7d |
   | fundamentals | ≤ 30d (or source-specific) |
   | insider_tx | ≤ 3 trading days |
-  | mentions | ≤ 1d |
+  | news_articles | ≤ 1d |
+  | social_posts | ≤ 1d |
   | security_master | ≤ 7d |
 
 - *Point-in-time* — no research read defaults to "latest".
@@ -497,7 +504,115 @@ trade_decision
 
 The lake computes neutral market-derived measurements. Alpha-Quant decides what they mean.
 
-## 15. Storage — DuckLake + RustFS
+
+
+## 15. Derived news & social analytics layer
+
+Alpha-Lake provides a neutral text-derived analytics layer for news and social data.
+
+Canonical text datasets store source-grounded facts: article/post metadata, raw payload
+lineage, publication time, availability time, source identity, entity links, and immutable
+text hashes.
+
+Derived NLP outputs such as sentiment, topic labels, embeddings, summaries, novelty
+scores, mention counts, and attention velocity may be computed and cached, but they are
+not canonical truth. Every derived text annotation must record the model version, prompt
+version, taxonomy version, input text hash, source dataset version, and `as_of` boundary.
+
+Alpha-Lake may measure attention and sentiment. It must not decide whether attention or
+sentiment is bullish, bearish, tradable, risky, or actionable. That interpretation belongs
+to Alpha-Quant or another consumer.
+
+### 15.1 Text analytics design rules
+
+1. **Source-grounded** — canonical tables store raw text facts with full lineage.
+2. **Annotated, not judged** — derived NLP outputs use neutral labels (sentiment score, topic,
+   entity, embedding). No `bullish`, `bearish`, `risky`, `actionable`, `signal`.
+3. **Versioned** — every annotation records `model_version`, `prompt_version`, `taxonomy_version`,
+   `input_text_hash`, `source_dataset_version`.
+4. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
+5. **Rebuildable** — all derived values are reproducible from canonical text datasets.
+
+### 15.2 Canonical text datasets
+
+| Dataset | Content | Grounding |
+|---------|---------|-----------|
+| `news_articles` | article_id, title, description, url, text_hash, published_at, available_at, source_name, raw_payload_hash | Source-provided metadata; raw payload archived |
+| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, available_at, engagement_json | Source-provided metadata; raw payload archived |
+| `entity_mentions` | mention_id, text_item_id, text_item_type, security_id, entity_name, entity_type, confidence, match_method | Inferred via NLP + security master; confidence recorded |
+| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label, model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | ML model / vendor output; version pinned |
+| `attention_metrics` | security_id, window_start, window_end, window_type, article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | Derived from news_articles + social_posts + sentiment_annotations |
+
+### 15.3 Derived metric categories
+
+| Category | Examples |
+|----------|----------|
+| Volume | article count, mention count, unique source count, unique author count |
+| Velocity | 1d/3d/7d mention change, news acceleration, abnormal volume z-score |
+| Sentiment | mean sentiment, sentiment distribution, positive/neutral/negative share |
+| Entity linkage | ticker mentions, company-name mentions, CIK/entity match confidence |
+| Topic / event | topic labels, event clusters, earnings-related / news-related classification |
+| Novelty | duplicate detection, first-seen story, repeated-story count |
+| Engagement | Reddit score, comments, upvote ratio, engagement velocity |
+| Source quality | source category, publisher reliability tier, official/company/regulatory/news/social |
+| Co-mentions | company-company co-mentions, company-sector co-mentions |
+| Text features | embeddings, keyword hits, named entities, summary, language |
+
+### 15.4 Annotation recording rules
+
+Every derived text annotation row must include:
+
+```
+model_version      pinned model identifier (e.g. "finbert-v2")
+prompt_version     pinned prompt/recipe identifier (e.g. "sentiment-v3")
+taxonomy_version   pinned label taxonomy version (e.g. "entity-taxonomy-v1")
+input_text_hash    sha256 of the text string or canonical content_hash of the source row
+source_dataset_version  version of the canonical dataset at time of annotation
+as_of              PIT boundary that governed the computation
+```
+
+### 15.5 Boundary with Alpha-Quant
+
+Alpha-Lake may provide:
+
+```text
+mention_count(AAPL, 2026-06-01, 2026-06-07)
+mean_sentiment(AAPL, 2026-06-01, 2026-06-07)
+article_velocity(AAPL, 7d)
+unique_sources(AAPL, 2026-06-01, 2026-06-07)
+entity_mentions(AAPL, "AAPL", "ticker")
+topic_labels(article_id, "earnings")
+novelty_score(article_id, 0.92)
+engagement_velocity(post_id, 3d)
+```
+
+Alpha-Lake must not provide:
+
+```text
+bullish_news_signal
+reddit_hype_score
+buy_pressure_score
+trade_candidate_rank
+negative_catalyst_action
+sentiment_signal = "bearish"
+risk_flag = "avoid"
+```
+
+The lake measures attention and sentiment. It never decides what they mean.
+
+### 15.6 Optional materialized text analytics cache
+
+Frequently reused NLP outputs or aggregated metrics may be cached in a table analogous
+to the indicator cache (§14.4). Cache rules are identical:
+
+1. Cache entries are invalidated when source canonical text data, model version, prompt
+   version, or taxonomy version change.
+2. Cache entries are not canonical truth.
+3. Cache entries must be reproducible from canonical inputs.
+4. Cache reads must preserve the same PIT guarantees as normal readers.
+5. Cache misses compute on demand or fail explicitly, depending on caller policy.
+
+## 16. Storage — DuckLake + RustFS
 
 **DuckLake 1.0**: open Parquet data + all metadata in a SQL catalog; ACID, time-travel snapshots, schema evolution as catalog transactions.
 
@@ -517,11 +632,11 @@ ATTACH 'ducklake:sqlite:data/lake.catalog' AS lake (DATA_PATH 'data/lake/');
 
 > **Maturity:** RustFS is Beta (GA mid-2026); distributed mode not yet GA — run **single-node** in the reference stack. The embedded harness avoids object storage entirely by using local filesystem fixtures. The lake binds to the S3 *interface*, not to RustFS — SeaweedFS/Garage are endpoint-swap fallbacks.
 
-**Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — one snapshot per ingestion run, tagged `ingestion_run_id`, giving audit trail + pinnable reproducibility (§20).
+**Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — one snapshot per ingestion run, tagged `ingestion_run_id`, giving audit trail + pinnable reproducibility (§21).
 
 **Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
 
-## 16. Ingestion pipeline — dlt
+## 17. Ingestion pipeline — dlt
 
 ```python
 @dlt.source
@@ -535,7 +650,7 @@ def eodhd():
 
 **SCD2 mapping:** dlt's SCD2 provides the versioning machinery; the bitemporal write keeps `effective_date` as a dimension and uses **`available_at` as the SCD2 validity axis**. The canonical write is an explicit, tested step on top of dlt — not fully delegated. **Schema contracts:** `freeze` on canonical (new fields require a version bump), `evolve` only in raw/staging.
 
-## 17. Serving API
+## 18. Serving API
 
 ```python
 lake = MarketLake.open(config)
@@ -557,7 +672,7 @@ lake.catalog.datasets(); lake.health(as_of=A)
 
 Readers return typed models / Arrow tables. **Catalog** answers *what exists + is it trustworthy* (schema version, freshness, row/quarantine/reconciliation counts, dataset versions = DuckLake snapshots, lineage) from the DuckLake catalog DB — no separate metadata service. **Remote (deferred):** Arrow Flight SQL / ADBC (zero-copy, not REST); DuckLake read-only HTTPS share for simple cases.
 
-## 18. Orchestration — flow functions, thin shells
+## 19. Orchestration — flow functions, thin shells
 
 Pipeline logic lives once in `flows/`. Shells wrap the same flow functions with no duplicated logic. The **Typer CLI inside the app container is the first operational shell** because it is the simplest way to prove the vertical slice against the real stack. Dagster is added after the core ingestion and PIT reader are correct.
 
@@ -574,11 +689,11 @@ flowchart LR
 
 **Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates; dlt's Dagster integration drives extraction. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
-## 19. Observability — OpenTelemetry
+## 20. Observability — OpenTelemetry
 
 One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the reference stack and **console** in the embedded harness. Spans wrap each flow/asset. Metrics: `ingestion_runs, fetch_{ok,fail}`, `source_latency`, `rows_written`, `quarantine_count`, `reconciliation_count`, `freshness_lag`, `snapshot_count`, `replay_duration`. Health per dataset: `latest_effective_date`, `latest_available_at`, `freshness_status`, `row_count`, `quarantine_count`, `source_status`, `blocking_reason`.
 
-## 20. Determinism & replay
+## 21. Determinism & replay
 
 **Contract:** `canonical = f(raw, parser_version, schema_version, config, security_master_snapshot)`. **Replay/rebuild use the recorded `available_at` from the manifest, never wall-clock** (I7) — else re-ingest is nondeterministic.
 
@@ -588,7 +703,7 @@ One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the re
 
 **Golden replay** compares **both** business output **and** bitemporal row visibility — a replay that drops knowledge time is not point-in-time faithful.
 
-## 21. Configuration & secrets
+## 22. Configuration & secrets
 
 Configuration is explicit about runtime shape. `stack` is the default; `embedded` is accepted only for tests, replay, and debugging.
 
@@ -625,7 +740,7 @@ data_path = "data/lake/"
 
 Secrets via env or git-ignored local config — **never** written to raw, canonical, manifests, events, fixtures, snapshots. Connector logs redact `api_key/token/secret/authorization/cookie`.
 
-## 22. Self-containment, Compose runtime & vendoring
+## 23. Self-containment, Compose runtime & vendoring
 
 The repo runs end-to-end with no external service or network. The reference runtime is a local **Docker Compose / Podman Compose** stack; Kubernetes is a future deployment target, not the v0.1 development substrate.
 
@@ -656,7 +771,7 @@ flowchart TB
 
 **Core `just` recipes:** `up · down · reset · logs · bootstrap · ingest · health · vendor · test · replay`. The old idea of `solo` as a primary command is replaced by explicit `test` and `replay` harness commands.
 
-## 23. Repo layout
+## 24. Repo layout
 
 ```
 alpha-lake/
@@ -680,7 +795,7 @@ alpha-lake/
 └── tests/{unit,integration,contract,replay,boundary}/
 ```
 
-## 24. CI, contracts, versioning
+## 25. CI, contracts, versioning
 
 **Dataset contracts:** `contracts/<name>.vN.yaml` — PK, partition key, required/nullable fields, point-in-time columns, freshness SLA, allowed quality statuses, backward-compat rules. CI validates live data against the contract.
 
@@ -692,7 +807,7 @@ alpha-lake/
 
 # Part III — Governance
 
-## 25. System invariants
+## 26. System invariants
 
 - **I1** Raw payloads, manifests, fixtures are immutable.
 - **I2** Every canonical row carries lineage + maps to a DuckLake snapshot.
@@ -709,7 +824,7 @@ alpha-lake/
 - **I13** The repo runs end-to-end offline from vendored dependencies.
 - **I14** The reference runtime is stack-first Compose; embedded mode is only for tests, debugging, fixture generation, and golden replay.
 
-## 26. ADR log
+## 27. ADR log
 
 ```
 0001 DuckLake as table format + catalog (Parquet data, SQL-catalog metadata)
@@ -730,7 +845,7 @@ alpha-lake/
 0016 Kubernetes is a future deployment target, not the v0.1 development substrate
 ```
 
-## 27. Build plan (from scratch, stack-first, vertical-slice, oracle-gated)
+## 28. Build plan (from scratch, stack-first, vertical-slice, oracle-gated)
 
 Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/RustFS object storage + app-container execution — are exercised immediately.
 
@@ -738,13 +853,13 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 - **Phase 1 — bars vertical slice against the real stack.** dlt source → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
 - **Phase 1b — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
 - **Phase 2 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
-- **Phase 3 — remaining datasets.** fundamentals → insider → mentions → earnings_calendar, each repeating the Phase-1 vertical pattern.
+- **Phase 3 — remaining datasets.** fundamentals → insider → news_articles + social_posts → earnings_calendar, each repeating the Phase-1 vertical pattern.
 - **Phase 4 — serving surface.** as-of panel / spine join; catalog; health; explicit `latest_*` non-research paths where needed.
 - **Phase 5 — orchestration hardening.** Add Dagster assets over the already-proven `flows/`; asset checks wrap Patito gates; date partitions improve backfill UX. Dagster is not allowed to own business logic.
 - **Phase 6 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, optional `vendor/bin/rustfs`, offline `just up --offline`, fixture bundles, and reproducibility docs.
 - **Phase 7 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; RustFS clustering only when GA and genuinely needed.
 
-## 28. Tech stack
+## 29. Tech stack
 
 | Concern | Choice |
 |---|---|
@@ -764,11 +879,11 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 
 One dataframe lib (Polars), one SQL engine (DuckDB) — never both for the same job; they share Arrow. All dependencies open-source; no managed service required. Kubernetes remains a later deployment target, not a v0.1 design dependency.
 
-## 29. Non-goals (v1)
+## 30. Non-goals (v1)
 
 Strategy logic; materialized features; intraday/streaming; distributed compute; hosted multi-tenant service; ML online feature store; governance UI; Kubernetes platformization; RustFS clustering. Design the seams (object storage, Postgres catalog, Flight serving, Dagster/SQLMesh, Kubernetes deployment, clustering); do not build the distributed platform in v1.
 
-## 30. Summary
+## 31. Summary
 
 ```mermaid
 flowchart LR

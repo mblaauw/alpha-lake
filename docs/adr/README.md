@@ -25,3 +25,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Proposed |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Proposed |
 | 0017 | Derived technical indicator library (neutral, PIT-bounded, cacheable) | Accepted |
+| 0018 | Derived news & social analytics layer (neutral, PIT-bounded, versioned) | Accepted |
