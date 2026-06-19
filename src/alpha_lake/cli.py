@@ -91,6 +91,8 @@ def replay(
 @app.command(name="freeze-fixtures")
 def freeze_fixtures():
     """Freeze test fixtures for golden replay."""
+    from alpha_lake.fixtures import freeze as _freeze
+    _freeze()
 
 
 def main():
