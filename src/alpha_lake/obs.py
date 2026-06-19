@@ -6,7 +6,12 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 tracer = trace.get_tracer(__name__)
 
 
-def setup_otel(endpoint: str = "http://otel:4317") -> None:
+def setup_otel(endpoint: str | None = None) -> None:
+    if endpoint is None:
+        import os
+        endpoint = os.environ.get(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4317"
+        )
     provider = TracerProvider()
     exporter = OTLPSpanExporter(endpoint=endpoint)
     provider.add_span_processor(BatchSpanProcessor(exporter))

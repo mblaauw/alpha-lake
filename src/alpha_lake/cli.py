@@ -5,13 +5,16 @@ import httpx
 import typer
 
 from alpha_lake.config import get_config, load_config
+from alpha_lake.obs import setup_otel
 
 app = typer.Typer(name="alpha-lake")
 
 
 @app.callback()
 def _main():
-    load_config()
+    cfg = load_config()
+    if cfg.lake.runtime == "stack":
+        setup_otel()
 
 
 @app.command()
