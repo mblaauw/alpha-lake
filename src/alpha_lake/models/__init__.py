@@ -6,11 +6,6 @@ from typing import Annotated
 import pydantic
 from pydantic import StringConstraints
 
-
-from typing import Annotated
-
-from pydantic import StringConstraints
-
 SecurityId = Annotated[str, StringConstraints(pattern=r"^sec_[a-z0-9]+$")]
 """Deterministic security identifier. Never random or symbol-prefixed."""
 
