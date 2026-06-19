@@ -35,3 +35,26 @@ CREATE TABLE IF NOT EXISTS manifest (
     byte_size INT,
     parser_version_intended INT
 );
+
+CREATE TABLE IF NOT EXISTS lake_bars (
+    security_id VARCHAR NOT NULL,
+    effective_date DATE NOT NULL,
+    available_at TIMESTAMP NOT NULL,
+    source_id VARCHAR NOT NULL,
+    source_published_at TIMESTAMP,
+    ingested_at TIMESTAMP,
+    validated_at TIMESTAMP,
+    open DOUBLE NOT NULL,
+    high DOUBLE NOT NULL,
+    low DOUBLE NOT NULL,
+    close DOUBLE NOT NULL,
+    volume BIGINT NOT NULL,
+    source_fetch_id VARCHAR,
+    raw_payload_hash VARCHAR,
+    ingestion_run_id VARCHAR,
+    content_hash VARCHAR,
+    version_hash VARCHAR,
+    schema_version INT DEFAULT 1,
+    parser_version INT DEFAULT 1,
+    quality_status VARCHAR DEFAULT 'valid'
+);
