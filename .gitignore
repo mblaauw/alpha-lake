@@ -10,3 +10,4 @@ data/
 *.local.toml
 .DS_Store
 logs/
+tests/replay/fixtures/
