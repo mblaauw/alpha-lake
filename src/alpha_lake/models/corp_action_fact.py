@@ -4,6 +4,7 @@ import patito as pt
 
 
 class CorpActionFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime

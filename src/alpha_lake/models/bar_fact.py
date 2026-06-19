@@ -7,6 +7,7 @@ from patito import Field
 
 
 class BarFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime

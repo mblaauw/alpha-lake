@@ -16,7 +16,7 @@ services:
       retries: 5
 
   rustfs:
-    image: ghcr.io/rustfs/rustfs:latest
+    image: ghcr.io/rustfs/rustfs:0.2.5
     command: ["server", "--addr", "0.0.0.0:9000", "--data-dir", "/data"]
     ports:
       - "9000:9000"
@@ -47,7 +47,7 @@ services:
     entrypoint: ["alpha-lake"]
 
   otel:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.123.0
     ports:
       - "4317:4317"
       - "4318:4318"
