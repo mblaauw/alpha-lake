@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from pathlib import Path
 
 import pydantic
-import toml
 
 
 class SourceConfig(pydantic.BaseModel):
@@ -61,7 +61,8 @@ def load_config(path: str | None = None) -> RootConfig:
     if path is None:
         path = os.environ.get("ALPHA_LAKE_CONFIG", "config/stack.toml")
 
-    raw = toml.load(Path(path))
+    with open(path, "rb") as f:
+        raw = tomllib.load(f)
 
     api_key = os.environ.get("ALPHA_LAKE_EODHD_API_KEY", "")
     if api_key and "eodhd" not in raw.get("sources", {}):
