@@ -105,3 +105,8 @@ alpha-lake = "alpha_lake.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.0",
+]
