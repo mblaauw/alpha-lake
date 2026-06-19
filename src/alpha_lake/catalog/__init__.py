@@ -16,7 +16,7 @@ def _build_connect_path(cfg: RootConfig) -> str:
         conn_str = raw.removeprefix("ducklake:postgres:")
         return f"postgres://{conn_str}"
     if raw.startswith("ducklake:sqlite:"):
-        return raw.removeprefix("ducklake:")
+        return raw.removeprefix("ducklake:sqlite:")
     return raw
 
 
