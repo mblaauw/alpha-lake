@@ -28,7 +28,17 @@ Full spec: `@docs/DESIGN.md`. Decisions: `@docs/adr/`.
   Gate checklists live in `@docs/gates/`. Load the relevant gate document and tick items
   as part of the epic-closing PR.
 - **Update issue status and project board** after every merged PR. Closed issues that remain on the
-  board should reflect "Done".
+  board should reflect "Done" or "Review".
+- **When closing any issue, always check the full project board** for other closed issues not yet in
+  "Review"/"Done" status — not just issues from the current epic. Use:
+  ```bash
+  gh issue list --state closed --limit 200 --json number,projectItems -q "." | python3 -c "
+  import sys,json
+  for i in json.load(sys.stdin):
+      s = i.get('projectItems',[{}])[0].get('status',{}).get('name','')
+      if s not in ('Review','Done',''): print(f'#{i[\"number\"]}: {s}')
+  "
+  ```
 
 ## Command surface
 
