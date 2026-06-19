@@ -67,6 +67,26 @@ CREATE TABLE IF NOT EXISTS reconciliation_event (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS corp_actions (
+    security_id VARCHAR NOT NULL,
+    effective_date DATE NOT NULL,
+    available_at TIMESTAMPTZ NOT NULL,
+    source_id VARCHAR NOT NULL,
+    action_type VARCHAR NOT NULL,
+    ratio_numerator DOUBLE,
+    ratio_denominator DOUBLE,
+    dividend_amount DOUBLE,
+    dividend_currency VARCHAR,
+    source_fetch_id VARCHAR,
+    raw_payload_hash VARCHAR,
+    ingestion_run_id VARCHAR,
+    content_hash VARCHAR,
+    version_hash VARCHAR,
+    schema_version INT DEFAULT 1,
+    parser_version INT DEFAULT 1,
+    quality_status VARCHAR DEFAULT 'valid'
+);
+
 CREATE TABLE IF NOT EXISTS ingest_outcome (
     outcome_id VARCHAR PRIMARY KEY,
     run_id VARCHAR NOT NULL,
