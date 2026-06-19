@@ -51,3 +51,4 @@ def test_restatement_proof():
     assert read_after["close"][0] == 101.0, "post-restatement as_of should see corrected value"
 
     assert read_after["version_hash"][0] != read_historical["version_hash"][0], "version_hash should differ"
+    con.close()

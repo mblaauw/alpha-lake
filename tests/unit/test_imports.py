@@ -50,12 +50,10 @@ def test_quality_market_sanity():
 
 
 def test_canonical_write_bars():
-    from pathlib import Path
     from datetime import date, datetime
     import duckdb
     import polars as pl
     from alpha_lake.canonical import write_bars
-    Path("data").mkdir(exist_ok=True)
     con = duckdb.connect()
     df = pl.DataFrame({
         "security_id": ["sec_test"], "effective_date": [date(2026, 6, 18)],
@@ -72,6 +70,7 @@ def test_canonical_write_bars():
     )
     count = write_bars(con, df)
     assert count == 1
+    con.close()
 
 
 def test_bar_fact():
