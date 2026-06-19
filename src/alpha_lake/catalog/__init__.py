@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Any
 
 import duckdb
 
 from alpha_lake.config import RootConfig
+from alpha_lake.duckdb_ext import configure_s3, ensure_extensions
 
 _SCHEMA_SQL = pathlib.Path(__file__).parent / "schema.sql"
 
@@ -25,14 +25,14 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     con.execute("SET timezone = 'UTC'")
 
     if cfg.lake.runtime == "stack":
-        con.execute("LOAD httpfs")
-        con.execute("LOAD parquet")
-        con.execute("LOAD postgres")
+        ensure_extensions(con)
+        configure_s3(
+            con,
+            endpoint=cfg.s3.endpoint,
+            use_ssl=cfg.s3.use_ssl,
+            url_style=cfg.s3.url_style,
+        )
         con.execute(f"CALL postgres_attach('{_build_connect_path(cfg)}')")
-        con.execute("SET s3_region = 'us-east-1'")
-        con.execute("SET s3_url_style = 'path'")
-        con.execute(f"SET s3_endpoint = '{cfg.s3.endpoint}'")
-        con.execute("SET s3_use_ssl = false")
     else:
         db_path = _build_connect_path(cfg)
         con.execute(f"ATTACH '{db_path}' AS lake_catalog (TYPE sqlite)")
