@@ -17,18 +17,17 @@ def read_bars_asof(
     end_date: date | None = None,
 ) -> pl.DataFrame:
     source_priority = get_source_precedence("bars_daily")
-    priority_sql = "CASE source_id " + " ".join(
-        f"WHEN '{s}' THEN {i}" for i, s in enumerate(source_priority)
-    )
-    priority_sql += f" ELSE {len(source_priority)} END"
+    params: list = [security_ids, as_of, as_of.date()]
 
     date_filter = ""
     if start_date:
-        date_filter += f" AND b.effective_date >= '{start_date}'"
+        date_filter += " AND b.effective_date >= ?"
+        params.append(start_date)
     if end_date:
-        date_filter += f" AND b.effective_date <= '{end_date}'"
+        date_filter += " AND b.effective_date <= ?"
+        params.append(end_date)
 
-    query = f"""
+    query = """
         WITH per_source AS (
             SELECT
                 b.security_id,
@@ -43,16 +42,16 @@ def read_bars_asof(
                     ORDER BY b.available_at DESC
                 ) AS version_rank
             FROM lake_bars b
-            WHERE b.security_id IN ({','.join(f"'{s}'" for s in security_ids)})
-              AND b.available_at <= '{as_of}'
-              AND b.effective_date <= '{as_of.date()}'
-              {date_filter}
+            WHERE b.security_id = ANY(?)
+              AND b.available_at <= CAST(? AS TIMESTAMP)
+              AND b.effective_date <= CAST(? AS DATE)
+    """ + date_filter + """
         ),
         preferred AS (
             SELECT *,
                 ROW_NUMBER() OVER (
                     PARTITION BY security_id, effective_date
-                    ORDER BY {priority_sql}, available_at DESC
+                    ORDER BY """ + _priority_case(source_priority) + """, available_at DESC
                 ) AS source_rank
             FROM per_source
             WHERE version_rank = 1
@@ -64,7 +63,15 @@ def read_bars_asof(
         WHERE source_rank = 1
         ORDER BY security_id, effective_date
     """
-    return duckdb_to_polars(con, query)
+    return duckdb_to_polars(con, query, params)
+
+
+def _priority_case(source_priority: list[str]) -> str:
+    parts = ["CASE source_id"]
+    for i, s in enumerate(source_priority):
+        parts.append(f"WHEN '{s}' THEN {i}")
+    parts.append(f"ELSE {len(source_priority)} END")
+    return " ".join(parts)
 
 
 def read_bars_latest(
