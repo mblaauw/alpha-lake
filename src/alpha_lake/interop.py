@@ -15,14 +15,6 @@ def polars_to_duckdb(
     rel.create(table_name)
 
 
-def register_view(
-    con: duckdb.DuckDBPyConnection,
-    df: pl.DataFrame | pl.LazyFrame,
-    view_name: str,
-) -> None:
-    if isinstance(df, pl.LazyFrame):
-        df = df.collect()
-    con.register(view_name, df.to_arrow())
 
 
 def duckdb_to_polars(
