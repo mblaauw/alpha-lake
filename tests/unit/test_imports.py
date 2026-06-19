@@ -30,6 +30,12 @@ def test_config_reconcile():
     assert cfg.volume_diff_pct == 5.0
 
 
+def test_pit_reader_imports():
+    from alpha_lake.serving import read_bars_asof, read_bars_latest
+    assert read_bars_asof is not None
+    assert read_bars_latest is not None
+
+
 def test_quality_market_sanity():
     from datetime import date
     import polars as pl
