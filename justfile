@@ -50,3 +50,4 @@ vendor:
 lint:
     uv run ruff check src/ tests/
     uv run ty check --output-format full
+    uv run lint-imports
