@@ -26,7 +26,10 @@ def ingest_bars(
 ) -> int:
     """Run the full bars ingestion pipeline for a list of security IDs.
 
-    1. Fetch raw data from the primary source
+    NOTE: Currently uses synthetic sample data. Real API fetch will be
+    wired in a future update when connector API keys are available in CI.
+
+    1. Generate synthetic raw data
     2. Archive raw bytes
     3. Normalize to Polars DataFrame
     4. Validate with market sanity checks
@@ -86,13 +89,14 @@ def backfill_bars(
     from alpha_lake.calendar_ import trading_days_in_range
     total = 0
     days = trading_days_in_range(start_date, end_date)
-    for dt in days:
-        existing = con.execute(
-            "SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?",
-            [security_ids[0], dt]
-        ).fetchone()[0]
-        if existing == 0:
-            total += ingest_bars(con, security_ids, dt.isoformat(), dt.isoformat(), source_id)
+    for sid in security_ids:
+        for dt in days:
+            existing = con.execute(
+                "SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?",
+                [sid, dt]
+            ).fetchone()[0]
+            if existing == 0:
+                total += ingest_bars(con, [sid], dt.isoformat(), dt.isoformat(), source_id)
     return total
 
 
@@ -103,22 +107,32 @@ def reparse_bars(
 ) -> int:
     """Reparse raw archive data and rewrite canonical rows."""
     from alpha_lake.raw import read_raw
+    from alpha_lake.normalize import bars_from_json
+    from alpha_lake.quality import check_market_sanity
+    import json
     total = 0
     for sid in security_ids:
         if effective_date:
             rows = con.execute(
-                "SELECT content_hash FROM lake_bars WHERE security_id = ? AND effective_date = ?",
+                "SELECT content_hash, source_id, source_fetch_id, ingestion_run_id, "
+                "available_at, ingested_at FROM lake_bars WHERE security_id = ? AND effective_date = ?",
                 [sid, effective_date]
             ).fetchall()
         else:
             rows = con.execute(
-                "SELECT DISTINCT content_hash FROM lake_bars WHERE security_id = ?",
+                "SELECT DISTINCT content_hash, source_id, source_fetch_id, ingestion_run_id, "
+                "available_at, ingested_at FROM lake_bars WHERE security_id = ?",
                 [sid]
             ).fetchall()
         for row in rows:
-            content_hash = row[0]
+            content_hash, src_id, fetch_id, run_id, avail_at, ingested_at = row
             raw = read_raw(content_hash)
-            total += 1
+            raw_data = json.loads(raw.decode())
+            if isinstance(raw_data, dict):
+                raw_data = [raw_data]
+            df = bars_from_json(raw_data, sid, src_id, fetch_id, run_id, content_hash, avail_at, ingested_at)
+            df = check_market_sanity(df)
+            total += write_bars(con, df)
     return total
 
 
@@ -137,6 +151,7 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
         raise ValueError(f"No key map for {table}")
 
     key_cols = ", ".join(keys)
+    # Note: rowid works in DuckDB/SQLite but NOT in Postgres through postgres_scan.
     con.execute(f"""
         DELETE FROM {table}
         WHERE rowid NOT IN (

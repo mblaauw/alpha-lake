@@ -3,3 +3,18 @@ runtime = "embedded"
 catalog = "ducklake:sqlite:data/lake.catalog"
 data_path = "data/lake/"
 calendar_version = "4.13.2"
+
+[source_datasets.eodhd]
+[source_datasets.eodhd.bars_daily]
+enabled = true
+parser_version = 1
+[source_datasets.eodhd.earnings_calendar]
+enabled = true
+parser_version = 1
+[source_datasets.tiingo]
+[source_datasets.tiingo.bars_daily]
+enabled = true
+parser_version = 1
+[source_datasets.tiingo.news_articles]
+enabled = true
+parser_version = 1
