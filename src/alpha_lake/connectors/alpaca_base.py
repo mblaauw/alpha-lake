@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 
 import httpx
-from alpha_lake.config import SourceConfig
 
 
 def alpaca_client() -> httpx.AsyncClient:

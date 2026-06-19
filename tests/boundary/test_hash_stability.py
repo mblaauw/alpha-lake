@@ -1,7 +1,6 @@
 import hashlib
 import json
-from datetime import date, datetime
-from pathlib import Path
+from datetime import datetime
 
 import polars as pl
 import pytest

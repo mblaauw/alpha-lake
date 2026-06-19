@@ -1,4 +1,5 @@
 """Smoke tests — verify core modules import without error."""
+from datetime import UTC
 
 
 def test_cli_imports():
@@ -18,7 +19,7 @@ def test_obs_imports():
 
 
 def test_source_registry():
-    from alpha_lake.source_registry import get_source_precedence, get_dataset_sources
+    from alpha_lake.source_registry import get_source_precedence
     assert get_source_precedence("bars_daily") == ["eodhd", "tiingo"]
 
 
@@ -37,7 +38,9 @@ def test_pit_reader_imports():
 
 def test_quality_market_sanity():
     from datetime import date
+
     import polars as pl
+
     from alpha_lake.quality import check_market_sanity
     df = pl.DataFrame({
         "security_id": ["sec_ok", "sec_bad"], "effective_date": [date(2026, 6, 18), date(2026, 6, 18)],
@@ -51,8 +54,10 @@ def test_quality_market_sanity():
 
 def test_canonical_write_bars():
     from datetime import date, datetime
+
     import duckdb
     import polars as pl
+
     from alpha_lake.canonical import write_bars
     con = duckdb.connect()
     df = pl.DataFrame({
@@ -75,8 +80,10 @@ def test_canonical_write_bars():
 
 def test_bar_fact():
     from datetime import date, datetime
-    from alpha_lake.models.bar_fact import BarFact
+
     import polars as pl
+
+    from alpha_lake.models.bar_fact import BarFact
     df = pl.DataFrame({
         "security_id": ["sec_test"],
         "effective_date": [date(2026, 6, 18)],
@@ -96,9 +103,10 @@ def test_bar_fact():
 
 
 def test_normalize_bars():
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from alpha_lake.normalize import bars_from_json
-    ts = datetime(2026, 6, 18, 12, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 18, 12, 0, 0, tzinfo=UTC)
     raw = [{"date": "2026-06-18", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 10000}]
     df = bars_from_json(raw, "sec_test", "eodhd", "fetch_1", "run_1", "abc123", ts)
     assert df.shape == (1, 20)
@@ -114,7 +122,8 @@ def test_raw_archive():
 
 
 def test_calendar_imports():
-    from alpha_lake.calendar_ import is_trading_day, previous_trading_day
     from datetime import date
+
+    from alpha_lake.calendar_ import is_trading_day, previous_trading_day
     assert is_trading_day(date(2026, 6, 18)) is True
     assert previous_trading_day(date(2026, 6, 19)) == date(2026, 6, 18)

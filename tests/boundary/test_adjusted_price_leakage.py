@@ -1,20 +1,23 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import duckdb
 import polars as pl
 import pytest
 
-from alpha_lake.canonical import write_bars
-from alpha_lake.serving import read_bars_asof
+from alpha_lake.canonical import write_bars, write_corp_actions
+from alpha_lake.normalize.corp_actions import splits_from_json
+from alpha_lake.serving import read_bars_adjusted
 
 
-def _bar_df(close_val: float, available: str, source: str = "eodhd") -> pl.DataFrame:
-    ts = datetime.fromisoformat(available)
+def _bar(close: float, avail: str) -> pl.DataFrame:
+    ts = datetime.fromisoformat(avail)
+    eff = date(2026, 1, 5)
     return pl.DataFrame({
-        "security_id": ["sec_lk"], "effective_date": [date(2026, 1, 5)],
-        "available_at": [ts], "source_id": [source],
-        "open": [100.0], "high": [101.0], "low": [99.0], "close": [close_val],
-        "volume": [10000], "source_fetch_id": [""], "raw_payload_hash": [""],
+        "security_id": ["sec_lk"], "effective_date": [eff],
+        "available_at": [ts], "source_id": ["eodhd"],
+        "open": [close], "high": [close * 1.01], "low": [close * 0.99],
+        "close": [close], "volume": [10000],
+        "source_fetch_id": [""], "raw_payload_hash": [""],
         "ingestion_run_id": [""], "content_hash": [""], "version_hash": [""],
         "schema_version": [1], "parser_version": [1], "quality_status": ["valid"],
         "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
@@ -29,41 +32,58 @@ def _bar_df(close_val: float, available: str, source: str = "eodhd") -> pl.DataF
 def con():
     c = duckdb.connect()
     c.execute("SET timezone = 'UTC'")
-    c.execute("CREATE TABLE IF NOT EXISTS adjustments (security_id VARCHAR, effective_date DATE, factor DOUBLE, available_at TIMESTAMP)")
     yield c
     c.close()
 
 
 def test_raw_price_unaffected_by_future_adjustment(con):
-    write_bars(con, _bar_df(100.0, "2026-01-05T16:00:00"))
-
-    con.execute(
-        "INSERT INTO adjustments VALUES ('sec_lk', '2026-01-05', 1.05, '2026-01-10T08:00:00')"
+    """Split recorded after as_of must not affect adjusted price."""
+    write_bars(con, _bar(100.0, "2026-01-05T16:00:00+00:00"))
+    split = splits_from_json(
+        [{"date": "2026-01-01", "splitRatio": "2:1"}],
+        "sec_lk", "eodhd_splits", "f1", "r1", "c1",
+        datetime(2026, 1, 10, 8, 0, tzinfo=timezone.utc),
     )
+    write_corp_actions(con, split)
 
-    result = read_bars_asof(con, ["sec_lk"], datetime(2026, 1, 9, 12, 0))
-    assert result["close"][0] == 100.0
+    result = read_bars_adjusted(con, ["sec_lk"],
+        datetime(2026, 1, 8, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+    assert result["close"][0] == 100.0, "split not yet knowable"
 
 
 def test_adjustment_applied_when_knowable(con):
-    write_bars(con, _bar_df(100.0, "2026-01-05T16:00:00"))
-
-    con.execute(
-        "INSERT INTO adjustments VALUES ('sec_lk', '2026-01-05', 1.05, '2026-01-10T08:00:00')"
+    """Split with available_at <= as_of must be applied."""
+    write_bars(con, _bar(100.0, "2026-01-05T16:00:00+00:00"))
+    split = splits_from_json(
+        [{"date": "2026-01-01", "splitRatio": "2:1"}],
+        "sec_lk", "eodhd_splits", "f1", "r1", "c1",
+        datetime(2026, 1, 8, 8, 0, tzinfo=timezone.utc),
     )
+    write_corp_actions(con, split)
 
-    result = read_bars_asof(con, ["sec_lk"], datetime(2026, 1, 11, 12, 0))
-    assert result["close"][0] == 100.0
+    result = read_bars_adjusted(con, ["sec_lk"],
+        datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+    assert result["close"][0] == 50.0, "split should be applied"
 
 
 def test_multiple_adjustment_sources_respect_visibility(con):
-    write_bars(con, _bar_df(100.0, "2026-01-05T16:00:00"))
+    """Two splits at different available_ats must apply independently."""
+    write_bars(con, _bar(100.0, "2026-01-05T16:00:00+00:00"))
 
-    con.execute("INSERT INTO adjustments VALUES ('sec_lk', '2026-01-05', 1.02, '2026-01-08T08:00:00')")
-    con.execute("INSERT INTO adjustments VALUES ('sec_lk', '2026-01-05', 1.05, '2026-01-12T08:00:00')")
+    s1 = splits_from_json([{"date": "2026-01-01", "splitRatio": "2:1"}],
+        "sec_lk", "eodhd_splits", "f1", "r1", "c1",
+        datetime(2026, 1, 8, 8, 0, tzinfo=timezone.utc))
+    write_corp_actions(con, s1)
 
-    result_early = read_bars_asof(con, ["sec_lk"], datetime(2026, 1, 9, 12, 0))
-    assert result_early["close"][0] == 100.0
+    s2 = splits_from_json([{"date": "2026-01-15", "splitRatio": "3:1"}],
+        "sec_lk", "eodhd_splits", "f2", "r1", "c2",
+        datetime(2026, 1, 20, 8, 0, tzinfo=timezone.utc))
+    write_corp_actions(con, s2)
 
-    result_late = read_bars_asof(con, ["sec_lk"], datetime(2026, 1, 13, 12, 0))
-    assert result_late["close"][0] == 100.0
+    early = read_bars_adjusted(con, ["sec_lk"],
+        datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+    assert early["close"][0] == 50.0, "only first split visible"
+
+    late = read_bars_adjusted(con, ["sec_lk"],
+        datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+    assert late["close"][0] == pytest.approx(100.0 / 6.0, rel=1e-3), "both splits visible"

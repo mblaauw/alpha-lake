@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -11,7 +11,7 @@ def test_normalize_produces_valid_barfact():
     sample_response = [
         {"date": "2026-01-05", "open": 200.0, "high": 205.0, "low": 199.0, "close": 203.5, "volume": 5000000},
     ]
-    ts = datetime(2026, 1, 5, 16, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 1, 5, 16, 0, 0, tzinfo=UTC)
     df = bars_from_json(sample_response, "sec_test", "eodhd", "fetch_1", "run_1", "abc123", ts)
     validated = BarFact.validate(df)
     assert validated.height == 1
@@ -53,7 +53,9 @@ def test_raw_archive_roundtrip():
 
 def test_canonical_write_contract():
     from datetime import date
+
     import duckdb
+
     from alpha_lake.canonical import write_bars
     con = duckdb.connect()
     df = pl.DataFrame({

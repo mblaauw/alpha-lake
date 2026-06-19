@@ -1,8 +1,9 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from alpha_lake.canonical import write_bars
 from alpha_lake.serving import read_bars_asof
@@ -35,8 +36,8 @@ _ids = st.text(min_size=1, max_size=10).filter(lambda s: s.isascii())
 def test_never_leak(security_id: str, effective: date):
     """Every returned row must have available_at <= as_of (invariant I5)."""
     con = duckdb.connect()
-    as_of = datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc)
-    write_bars(con, _row(security_id, effective, datetime(2025, 6, 1, 16, 0, tzinfo=timezone.utc), 100.0))
+    as_of = datetime(2025, 6, 15, 12, 0, tzinfo=UTC)
+    write_bars(con, _row(security_id, effective, datetime(2025, 6, 1, 16, 0, tzinfo=UTC), 100.0))
     result = read_bars_asof(con, [security_id], as_of)
     for row in result.iter_rows(named=True):
         assert row["available_at"] <= as_of, f"Leak: available_at={row['available_at']} > as_of={as_of}"
@@ -48,9 +49,9 @@ def test_never_leak(security_id: str, effective: date):
 def test_restatement_immutable(security_id: str, effective: date):
     """A later restatement must not change what an earlier as_of sees."""
     con = duckdb.connect()
-    t1 = datetime(2025, 6, 1, 16, 0, tzinfo=timezone.utc)
-    t2 = datetime(2025, 6, 3, 8, 0, tzinfo=timezone.utc)
-    as_of_early = datetime(2025, 6, 2, 12, 0, tzinfo=timezone.utc)
+    t1 = datetime(2025, 6, 1, 16, 0, tzinfo=UTC)
+    t2 = datetime(2025, 6, 3, 8, 0, tzinfo=UTC)
+    as_of_early = datetime(2025, 6, 2, 12, 0, tzinfo=UTC)
 
     write_bars(con, _row(security_id, effective, t1, 100.0))
     before = read_bars_asof(con, [security_id], as_of_early)
@@ -69,11 +70,11 @@ def test_restatement_immutable(security_id: str, effective: date):
 def test_backfill_visibility(security_id: str, effective: date):
     """A backfill must be invisible to as_of before its available_at."""
     con = duckdb.connect()
-    write_bars(con, _row(security_id, effective, datetime(2025, 6, 10, 16, 0, tzinfo=timezone.utc), 100.0))
+    write_bars(con, _row(security_id, effective, datetime(2025, 6, 10, 16, 0, tzinfo=UTC), 100.0))
 
-    early = read_bars_asof(con, [security_id], datetime(2025, 6, 5, 12, 0, tzinfo=timezone.utc))
+    early = read_bars_asof(con, [security_id], datetime(2025, 6, 5, 12, 0, tzinfo=UTC))
     assert early.height == 0, "Backfill leaked into earlier as_of"
 
-    late = read_bars_asof(con, [security_id], datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc))
+    late = read_bars_asof(con, [security_id], datetime(2025, 6, 15, 12, 0, tzinfo=UTC))
     assert late.height == 1, "Backfill not visible at later as_of"
     con.close()

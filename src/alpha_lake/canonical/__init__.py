@@ -183,8 +183,6 @@ def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) 
     """
     df = compute_version_hash(df)
 
-    cols = ", ".join(df.columns)
-    placeholders = ", ".join(f"s.{c}" for c in df.columns)
     natural_keys = _DATASET_KEYS.get(table, ["id"])
 
     df_no_nv = df.drop("normalization_version")

@@ -1,7 +1,6 @@
 import datetime
 
 import patito as pt
-from patito import Field
 
 
 class CorpActionFact(pt.Model):

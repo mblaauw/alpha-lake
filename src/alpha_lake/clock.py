@@ -22,17 +22,17 @@ class SystemClock(Clock):
     """Production clock using real UTC system time."""
 
     def now(self) -> datetime.datetime:
-        return datetime.datetime.now(datetime.timezone.utc)
+        return datetime.datetime.now(datetime.UTC)
 
     def today(self) -> datetime.date:
-        return datetime.datetime.now(datetime.timezone.utc).date()
+        return datetime.datetime.now(datetime.UTC).date()
 
 
 class FixedClock(Clock):
     """Test clock returning a fixed datetime."""
 
     def __init__(self, fixed: datetime.datetime | None = None):
-        self._fixed = fixed or datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        self._fixed = fixed or datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
 
     def now(self) -> datetime.datetime:
         return self._fixed

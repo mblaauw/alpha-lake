@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
@@ -26,7 +26,7 @@ def _mk(table: str, **kw) -> pl.DataFrame:
         "attention_metrics": AttentionMetricFact,
     }
     model = models[table]
-    ts = datetime(2025, 6, 1, 16, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 6, 1, 16, 0, tzinfo=UTC)
     defaults = {
         "available_at": ts, "source_fetch_id": "", "raw_payload_hash": "",
         "ingestion_run_id": "", "content_hash": "", "version_hash": "",

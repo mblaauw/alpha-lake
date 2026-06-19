@@ -1,5 +1,5 @@
 from alpha_lake.catalog import _build_connect_path
-from alpha_lake.config import RootConfig, LakeConfig
+from alpha_lake.config import LakeConfig, RootConfig
 
 
 def test_build_connect_path_postgres():

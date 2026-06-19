@@ -42,8 +42,8 @@ def health():
     cfg = get_config()
 
     if cfg.lake.runtime == "stack":
-        _check_postgres(cfg)
-        _check_rustfs(cfg)
+        _check_postgres()
+        _check_rustfs()
     else:
         typer.echo(f"Runtime: {cfg.lake.runtime} (no external services to check)")
 
@@ -52,7 +52,7 @@ def health():
         typer.echo(f"  {name}: max_staleness={qc.max_staleness_days}d")
 
 
-def _check_postgres(cfg) -> None:
+def _check_postgres() -> None:
     try:
         with socket.create_connection(("postgres", 5432), timeout=5.0):
             typer.echo("postgres: ok")
@@ -61,7 +61,9 @@ def _check_postgres(cfg) -> None:
         sys.exit(1)
 
 
-def _check_rustfs(cfg) -> None:
+def _check_rustfs() -> None:
+    from alpha_lake.config import get_config as _get_cfg
+    cfg = _get_cfg()
     try:
         r = httpx.get(
             f"http://{cfg.s3.endpoint}/minio/health/live", timeout=5.0

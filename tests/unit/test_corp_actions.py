@@ -1,7 +1,6 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 
 import duckdb
-import polars as pl
 
 from alpha_lake.canonical import write_corp_actions
 from alpha_lake.models.corp_action_fact import CorpActionFact
@@ -16,7 +15,7 @@ def test_parse_ratio():
 
 def test_splits_from_json():
     raw = [{"date": "2025-06-01", "splitRatio": "2:1"}]
-    ts = datetime(2025, 6, 2, 8, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 6, 2, 8, 0, tzinfo=UTC)
     df = splits_from_json(raw, "sec_test", "eodhd_splits", "f1", "r1", "c1", ts)
     assert df.height == 1
     validated = CorpActionFact.validate(df)
@@ -26,7 +25,7 @@ def test_splits_from_json():
 
 def test_dividends_from_json():
     raw = [{"date": "2025-06-01", "dividend": 0.25, "currency": "USD"}]
-    ts = datetime(2025, 6, 2, 8, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 6, 2, 8, 0, tzinfo=UTC)
     df = dividends_from_json(raw, "sec_test", "eodhd_dividends", "f1", "r1", "c1", ts)
     assert df.height == 1
     validated = CorpActionFact.validate(df)
@@ -36,7 +35,7 @@ def test_dividends_from_json():
 
 def test_write_corp_actions():
     con = duckdb.connect()
-    ts = datetime(2025, 6, 2, 8, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 6, 2, 8, 0, tzinfo=UTC)
     raw = [{"date": "2025-06-01", "splitRatio": "2:1"}]
     df = splits_from_json(raw, "sec_test", "eodhd_splits", "f1", "r1", "c1", ts)
     count = write_corp_actions(con, df)

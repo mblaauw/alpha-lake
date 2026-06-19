@@ -61,7 +61,7 @@ rate_limit_per_sec = 20.0
 max_retries = 3
 
 [sources.sec]
-base_url = "https://www.sec.gov"
+base_url = "https://data.sec.gov"
 rate_limit_per_sec = 10.0
 max_retries = 5
 
