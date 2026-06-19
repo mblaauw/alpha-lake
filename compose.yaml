@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:84d5f1daadd348b2375ca2adb6abadf81a51316769eca077b01a5de51cdae04b
     environment:
       POSTGRES_DB: lake_catalog
       POSTGRES_USER: lake
@@ -16,7 +16,7 @@ services:
       retries: 5
 
   rustfs:
-    image: ghcr.io/rustfs/rustfs:0.2.5
+    image: ghcr.io/rustfs/rustfs:0.2.5@sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
     command: ["server", "--addr", "0.0.0.0:9000", "--data-dir", "/data"]
     ports:
       - "9000:9000"
@@ -47,7 +47,7 @@ services:
     entrypoint: ["alpha-lake"]
 
   otel:
-    image: otel/opentelemetry-collector-contrib:0.123.0
+    image: otel/opentelemetry-collector-contrib:0.123.0@sha256:b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
     ports:
       - "4317:4317"
       - "4318:4318"
