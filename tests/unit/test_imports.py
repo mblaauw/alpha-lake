@@ -30,6 +30,14 @@ def test_config_reconcile():
     assert cfg.volume_diff_pct == 5.0
 
 
+def test_raw_archive():
+    from alpha_lake.config import load_config
+    from alpha_lake.raw import archive, read_raw
+    load_config("config/embedded.toml")
+    h = archive(b"test data")
+    assert read_raw(h) == b"test data"
+
+
 def test_calendar_imports():
     from alpha_lake.calendar_ import is_trading_day, previous_trading_day
     from datetime import date
