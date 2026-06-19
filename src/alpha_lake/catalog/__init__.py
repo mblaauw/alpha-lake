@@ -7,7 +7,7 @@ import duckdb
 from alpha_lake.config import RootConfig
 from alpha_lake.duckdb_ext import configure_s3, ensure_extensions
 
-_SCHEMA_SQL = pathlib.Path(__file__).parent / "schema.sql"
+_SCHEMA_PATH = pathlib.Path(__file__).parent / "schema.sql"
 
 
 def _build_connect_path(cfg: RootConfig) -> str:
@@ -42,8 +42,8 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
 
 def bootstrap(cfg: RootConfig) -> None:
     con = connect(cfg)
-    if _SCHEMA_SQL.exists():
-        sql = _SCHEMA_SQL.read_text()
+    if _SCHEMA_PATH.exists():
+        sql = _SCHEMA_PATH.read_text()
         for statement in sql.split(";"):
             stmt = statement.strip()
             if stmt:

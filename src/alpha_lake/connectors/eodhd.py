@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from alpha_lake.connectors.base import RawFetch, build_client, build_manifest, compute_content_hash, fetch_with_retry
+from alpha_lake.connectors.base import RawFetch, build_client, build_manifest, fetch_with_retry
 from alpha_lake.source_registry import get_source
 
 
