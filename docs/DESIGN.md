@@ -139,8 +139,8 @@ system time    DuckLake snapshot when the lake physically committed   (audit / r
 The lake's models describe **facts**; it never holds decisions. → full schemas §9.
 
 | Fact entities (lake) | Forbidden here (consumer-owned) |
-|---|---|
-| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `MentionFact`, `CorporateActionFact`, `EarningsEventFact`, `DataQualityEvent`, `DatasetVersion` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
+|---|---|---|
+| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `MentionFact`, `NewsFact`, `CorporateActionFact`, `EarningsEventFact`, `DataQualityEvent`, `DatasetVersion` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
 
 **Eligibility test for anything the lake exposes** (§14): *its definition would be byte-identical for two consumers who completely disagree about market direction.*
 
@@ -181,6 +181,22 @@ source_priority      lower = higher precedence (drives §11 stage 2)
 owner                accountable name
 enabled              bool
 ```
+
+### Data suppliers (per-dataset)
+
+| Dataset | Primary Source | Secondary Source(s) |
+|---------|---------------|---------------------|
+| OHLCV bars — daily | EODHD or Tiingo EOD | Alpaca |
+| OHLCV bars — intraday | Alpaca (deferred) | Tiingo IEX, EODHD |
+| Fundamentals | SEC EDGAR Companyfacts | Tiingo, EODHD |
+| Insider transactions | SEC EDGAR Forms 3/4/5 | commercial (future) |
+| Earnings calendar | EODHD | — |
+| News articles | Tiingo News | Alpaca News, EODHD News |
+| Social mentions | Reddit API | Tiingo/EODHD enrichment |
+| Corporate actions | EODHD or Tiingo splits-dividends | SEC filings (validation) |
+| Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
+
+Each connector is modeled as one issue per (dataset, supplier) pair on the project board. See the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the full issue breakdown.
 
 ## 8. Connectors & raw archive
 
@@ -237,6 +253,7 @@ source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  quality_statu
 | `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + content_hash + parser_version` |
 | `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + content_hash` |
 | `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + content_hash` |
+| `news` | article_id, title, description, url, published_date, source_name, relevance_score, sentiment_score | `article_id + source_id` | natural + `available_at + content_hash` |
 | `mentions` | venue, count | `security_id + source_id + venue + effective_date` | natural + `available_at + content_hash` |
 | `earnings_calendar` | report_date, session | `security_id + report_date + source_id` | natural + `available_at + content_hash` |
 
