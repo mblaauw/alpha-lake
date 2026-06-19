@@ -1,6 +1,10 @@
+import socket
+import sys
+
+import httpx
 import typer
 
-from alpha_lake.config import load_config
+from alpha_lake.config import get_config, load_config
 
 app = typer.Typer(name="alpha-lake")
 
@@ -27,7 +31,41 @@ def ingest(
 @app.command()
 def health():
     """Check dataset freshness and system health."""
-    typer.echo("All systems nominal.")
+    cfg = get_config()
+
+    if cfg.lake.runtime == "stack":
+        _check_postgres(cfg)
+        _check_rustfs(cfg)
+    else:
+        typer.echo(f"Runtime: {cfg.lake.runtime} (no external services to check)")
+
+    typer.echo(f"Datasets configured: {len(cfg.quality)}")
+    for name, qc in cfg.quality.items():
+        typer.echo(f"  {name}: max_staleness={qc.max_staleness_days}d")
+
+
+def _check_postgres(cfg) -> None:
+    try:
+        with socket.create_connection(("postgres", 5432), timeout=5.0):
+            typer.echo("postgres: ok")
+    except Exception as e:
+        typer.echo(f"postgres: unreachable — {e}")
+        sys.exit(1)
+
+
+def _check_rustfs(cfg) -> None:
+    try:
+        r = httpx.get(
+            f"http://{cfg.s3.endpoint}/minio/health/live", timeout=5.0
+        )
+        if r.status_code == 200:
+            typer.echo("rustfs: ok")
+        else:
+            typer.echo(f"rustfs: unexpected status {r.status_code}")
+            sys.exit(1)
+    except Exception as e:
+        typer.echo(f"rustfs: unreachable — {e}")
+        sys.exit(1)
 
 
 @app.command()
