@@ -33,6 +33,10 @@ health:
 test *args:
     uv run pytest {{ args }}
 
+# Run type checks
+typecheck:
+    uv run ty check --output-format full
+
 # Run golden replay
 replay *args:
     uv run pytest tests/replay/ {{ args }}
