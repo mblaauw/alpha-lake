@@ -1,6 +1,6 @@
 # ADR-0001: DuckLake as lakehouse format and catalog
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:**
 Alpha-Lake needs a lakehouse format that supports ACID transactions, time travel, and SCD2-style versioned writes on Parquet data. DuckLake keeps lake metadata in a SQL catalog and stores data as open Parquet files.

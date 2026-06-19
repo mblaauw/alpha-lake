@@ -1,6 +1,6 @@
 # ADR-0019: Polars + Patito for DataFrame processing and model validation
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:**
 Alpha-Lake ingests, normalizes, and validates raw market data before writing it as canonical bitemporal facts. Two critical pipeline stages—parsing raw records into structured rows and validating those rows against a contract—need a DataFrame library and a schema/validation approach.
@@ -33,7 +33,6 @@ Patito models inherit from Pydantic `BaseModel`, so existing Pydantic patterns (
 - Negative: Streaming ingestion sources that produce Arrow natively (some dlt sources) can bypass Polars entirely, making Patito validation an extra pass.
 
 **References:**
-- DESIGN.md §23 (tech stack), §27 (ADR table), §28 (build plan, Phase 1), §29 (tech stack table)
-- Related issues: #NNN
+- DESIGN.md §6, §17, §28 (build plan, Phase 1), §29 (tech stack table)
 
 **Date:** 2026-06-19

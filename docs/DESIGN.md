@@ -134,14 +134,15 @@ system time    DuckLake snapshot when the lake physically committed   (audit / r
 - **System time ≠ knowledge time.** They coincide at first ingest but diverge on backfill/replay. `available_at` is a stored domain fact; DuckLake snapshots are audit/reproducibility — never the PIT boundary.
 - **Restatements are versions, not overwrites.** A correction mints a new `available_at` version; prior versions are retained.
 - **Valid-time filtering is dataset-class-specific.** Historical observation reads exclude future effective dates; known-future event reads may return future `event_date`/`effective_date` rows when they were already knowable at `as_of`.
+- **Timestamp/date policy.** All instants (`available_at`, `ingested_at`, `validated_at`, source publish times when precise) are stored UTC. `effective_date` is an exchange-local session date resolved through the pinned trading-calendar oracle, not the UTC calendar date.
 
 ## 5. Domain model overview
 
-The lake's models describe **facts**; it never holds decisions. → full schemas §9.
+The lake's market models describe **facts**; operational datasets describe pipeline state and never participate in the research PIT read path. → full schemas §9.
 
-| Fact entities (lake) | Forbidden here (consumer-owned) |
+| Market fact entities (lake) | Operational / metadata datasets | Forbidden here (consumer-owned) |
 |---|---|---|
-| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `NewsArticleFact`, `SocialPostFact`, `EntityMentionFact`, `SentimentAnnotationFact`, `AttentionMetricFact`, `CorporateActionFact`, `EarningsEventFact`, `DataQualityEvent`, `DatasetVersion` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
+| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `NewsArticleFact`, `SocialPostFact`, `EntityMentionFact`, `SentimentAnnotationFact`, `AttentionMetricFact`, `CorporateActionFact`, `EarningsEventFact` | `DataQualityEvent`, `DatasetVersion`, `QuarantineRow`, `ReconciliationEvent`, `IngestionOutcome` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
 
 **Eligibility test for anything the lake exposes** (§14–15): *its definition would be byte-identical for two consumers who completely disagree about market direction.*
 
@@ -229,13 +230,14 @@ source_id  endpoint
 request_params_hash     pinned canonicalization (sorted keys, normalized types)
 request_params_json
 ingest_ts  http_status
-content_hash            sha256 of raw bytes — the idempotency key
+content_hash            sha256 of raw bytes — archive integrity / storage dedup
 content_type  byte_size
 parser_version_intended
-vault_path
 ```
 
-**Idempotency (I9):** re-fetch with identical `content_hash` is a no-op; a changed hash mints a new canonical version. Nothing in the archive is ever rewritten or deleted (I1).
+**Archive integrity:** re-fetch with identical `content_hash` is a raw-storage no-op. Nothing in the archive is ever rewritten or deleted (I1).
+
+**Semantic version identity (I9):** canonical versioning and restatement detection use `version_hash = sha256(canonicalized_records)`, not raw bytes. The canonicalization recipe is pinned per parser/normalizer version: sorted keys, normalized numeric precision, normalized dates, stable null handling, deterministic row ordering, and `normalization_version`. Non-deterministic API envelopes, response ordering, gzip framing, request IDs, and server timestamps must not mint a new semantic version when the canonical records are unchanged.
 
 ## 9. Canonical data model
 
@@ -255,31 +257,31 @@ validated_at        passed-validation time
 
 ```
 security_id  source_id  schema_version  parser_version
-source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  quality_status
+source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  version_hash  quality_status
 ```
 
 **Per-dataset business fields & keys:**
 
 | Dataset | Business fields | Natural key | Version identity |
 |---|---|---|---|
-| `bars` | open, high, low, close, volume (**raw only**) | `security_id + effective_date + source_id` | natural + `available_at + content_hash` |
-| `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + content_hash + parser_version` |
-| `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + content_hash` |
-| `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + content_hash` |
-| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | `article_id + source_id` | natural + `available_at + content_hash` |
-| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + content_hash` |
-| `entity_mentions` | mention_id, text_item_id, text_item_type (news_article / social_post), security_id, entity_name, entity_type, confidence, match_method | `mention_id` | natural + `available_at + content_hash` |
-| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label (positive/neutral/negative), model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | `annotation_id` | natural + `available_at + content_hash + model_version` |
-| `attention_metrics` | security_id, window_start, window_end, window_type (1d/3d/7d), article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | `security_id + window_start + window_end + window_type` | natural + `available_at + content_hash` |
-| `earnings_calendar` | report_date, session | `security_id + report_date + source_id` | natural + `available_at + content_hash` |
+| `bars` | open, high, low, close, volume (**raw only**) | `security_id + effective_date + source_id` | natural + `available_at + version_hash` |
+| `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + version_hash + parser_version` |
+| `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + version_hash` |
+| `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + version_hash` |
+| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | `article_id + source_id` | natural + `available_at + version_hash` |
+| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + version_hash` |
+| `entity_mentions` | mention_id, text_item_id, text_item_type (news_article / social_post), security_id, entity_name, entity_type, confidence, match_method | `mention_id` | natural + `available_at + version_hash` |
+| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label (positive/neutral/negative), model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | `annotation_id` | natural + `available_at + version_hash + model_version` |
+| `attention_metrics` | security_id, window_start, window_end, window_type (1d/3d/7d), article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | `security_id + window_start + window_end + window_type` | natural + `available_at + version_hash` |
+| `earnings_calendar` | report_date, session | `security_id + report_date + source_id` | natural + `available_at + version_hash` |
 
 **Raw-only bars rule:** adjusted prices are *views* (§12), never stored facts; `price_mode` is a serve parameter, never part of identity.
 
-**Hash canonicalization:** any fallback hash (e.g. insider `normalized_hash` when CIK is absent) uses a pinned recipe — sorted keys, normalized numeric precision, normalized dates, stable null handling, `normalization_version` — or idempotency breaks across parser versions.
+**Hash canonicalization:** `version_hash` and any fallback hash (e.g. insider `normalized_hash` when CIK is absent) use the pinned recipe above or idempotency breaks across parser versions.
 
 ## 10. Security master & resolution
 
-`symbol` is unstable (rename/reuse); `security_id` is canonical from row one.
+`symbol` is unstable (rename/reuse); `security_id` is canonical from row one and deterministic across replay.
 
 **Model:**
 
@@ -287,6 +289,8 @@ source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  quality_statu
 security_id  symbol  exchange  name  cik  figi  isin  currency
 valid_from  valid_to  status  source_id  available_at
 ```
+
+**Deterministic minting:** `security_id` is minted from stable identifiers, never from a symbol and never from randomness. The minting input is the first available stable-key tuple in priority order: FIGI, then CIK, then ISIN, then a documented composite fallback (`exchange + source_native_id + first_listed_date`) only when no global identifier is available. The generated ID is a deterministic hash/ULID over the chosen tuple and `security_master_id_version`. If FIGI/CIK/ISIN disagree across sources, the row is quarantined for identity conflict unless an explicit mapping already exists in the security master. A brand-new security is minted only when no active or historical security record matches any stable identifier in the tuple.
 
 **Point-in-time resolution** (itself bitemporal — cannot leak a future rename):
 
@@ -302,7 +306,7 @@ Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the 
 
 ## 11. The point-in-time read (mechanics)
 
-Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source, then source precedence.
+Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source, then source precedence. The preferred implementation for stage 1 is DuckDB's native `ASOF JOIN` against the requested spine (newest version whose `available_at <= as_of`); window-function collapse is acceptable only for small/simpler paths or tests.
 
 For historical observation datasets such as bars, the valid-time rule is `effective_date <= :as_of`. For known-future event datasets such as earnings calendars or announced corporate actions, readers may return future `event_date`/`effective_date` rows if `available_at <= :as_of`; the fact that an event is scheduled in the future can itself be knowable today.
 
@@ -310,7 +314,7 @@ For historical observation datasets such as bars, the valid-time rule is `effect
 WITH versioned AS (                              -- stage 1: newest version per (fact, source)
   SELECT *, row_number() OVER (
             PARTITION BY security_id, effective_date, source_id
-            ORDER BY available_at DESC, content_hash) AS v_rn
+            ORDER BY available_at DESC, version_hash) AS v_rn
   FROM bars
   WHERE security_id = :sid
     AND effective_date BETWEEN :start AND :end
@@ -330,14 +334,16 @@ Stage 1 alone returns one row per source; stage 2 yields the single canonical an
 
 ```
 security_id | effective_date | close  | available_at         | content_hash
-AAPL-7f3a   | 2026-06-01     | 195.10 | 2026-06-02T07:00:00Z | a1…
-AAPL-7f3a   | 2026-06-01     | 195.23 | 2026-06-10T07:00:00Z | b2…
+sec_7f3a…   | 2026-06-01     | 195.10 | 2026-06-02T07:00:00Z | a1…
+sec_7f3a…   | 2026-06-01     | 195.23 | 2026-06-10T07:00:00Z | b2…
 ```
 `as_of=2026-06-05 ⇒ 195.10` · `as_of=2026-06-17 ⇒ 195.23`. Overwriting violates I4.
 
 **Backfill:** a bar for `2024-01-05` ingested on `2026-06-17` gets `available_at=2026-06-17`. `as_of=2024-01-06` cannot see it; `as_of=2026-06-17` can. Backfills improve current knowledge; they never rewrite what was historically knowable.
 
 **No-latest-by-default (I12):** research readers require `as_of`; the default is a loud sentinel, not `None` — a separately named `latest_*` path is the only route to unbounded reads.
+
+`latest_*` results are explicitly marked PIT-unsafe (distinct return type or `pit_unsafe=True`) and still apply `available_at <= now()`; they must not silently flow into backtests or research APIs.
 
 ## 12. Corporate actions & adjusted views
 
@@ -400,6 +406,20 @@ ReconciliationDisagreement{
   primary_source_id  secondary_source_id  field
   primary_value  secondary_value  difference  tolerance  severity  available_at }
 ```
+
+Reconciliation disagreements are persisted as an append-only operational dataset parallel to quarantine:
+
+```
+reconciliation_events
+  event_id  dataset_id  natural_key  security_id  effective_date
+  primary_source_id  comparison_source_id  severity
+  observed_at  available_at  ingestion_run_id
+  field_diffs_json  tolerance_id  action  resolution_sla_at  resolved_at
+```
+
+Severity maps to action in configuration: `info` records only, `warn` increments health counters, `error` blocks freshness-green status for the dataset, and `data_halt` blocks canonical promotion for affected natural keys until resolved. Reconciliation disagreements do not halt a valid primary by default (I10), but configured `data_halt` cases do.
+
+**Per-entity ingest outcomes:** multi-entity runs record one outcome per requested entity: `ok`, `empty`, `failed`, or `quarantined`. Run-level policy is partial commit with explicit outcome ledger unless the dataset contract requires all-or-nothing. Health surfaces counts and blocking reasons.
 
 ## 14. Derived technical indicator library
 
@@ -464,7 +484,11 @@ Some indicators can be derived from daily bars but need explicit semantics:
 | Benchmark-relative indicators | Allowed only when the benchmark/index/security is explicitly provided. |
 | Pattern recognition           | Allowed as neutral OHLC geometry, not as predictive labels. |
 
-### 14.4 Optional materialized indicator cache
+### 14.4 Recursive indicator warm-up/lookback
+
+Recursive indicators (EMA, RSI, ATR, KAMA, SMMA/RMA, MACD, ADX, and similar) require history before the requested `start`. Each implementation must either fetch an explicit `available_at`-bounded lookback window before `start` or use a documented deterministic seed convention. `IndicatorResult` metadata records `lookback_bars_requested`, `lookback_bars_used`, `seed_policy`, `input_start`, and `output_start` so values are reproducible and stable regardless of the caller's visible window.
+
+### 14.5 Optional materialized indicator cache
 
 Frequently reused indicators may be cached, but the cache remains rebuildable derived state.
 
@@ -492,7 +516,7 @@ Cache rules:
 4. Cache reads must preserve the same PIT guarantees as normal readers.
 5. Cache misses compute on demand or fail explicitly, depending on caller policy.
 
-### 14.5 Boundary with Alpha-Quant
+### 14.6 Boundary with Alpha-Quant
 
 Alpha-Lake may provide:
 
@@ -549,6 +573,7 @@ to Alpha-Quant or another consumer.
    `input_text_hash`, `source_dataset_version`.
 5. **PIT-bounded** — all derived values satisfy `available_at <= as_of`.
 6. **Rebuildable** — all derived values are reproducible from canonical text datasets.
+7. **Erasure posture** — raw text remains immutable by default, but legally required takedown/erasure requests create a documented tombstone exception: raw bytes may be redacted or removed only through a governed deletion record that preserves lineage, hashes, reason, approver, and affected derived datasets. Derived annotations and caches referencing erased text are invalidated or tombstoned.
 
 ### 15.2 Canonical text datasets
 
@@ -653,6 +678,10 @@ ATTACH 'ducklake:sqlite:data/lake.catalog' AS lake (DATA_PATH 'data/lake/');
 
 **Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
 
+**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month, sort within files by `(security_id, effective_date, available_at)`, and target 128-512 MB Parquet files. The reference stack enables DuckDB Parquet metadata caching against RustFS so PIT reads prune partitions and row groups before scanning object storage.
+
+**Snapshot retention and compaction:** compaction may rewrite physical Parquet files but must preserve the logical snapshot-to-data mapping for any pinned `ingestion_run_id`. A pinned snapshot remains resolvable after compaction until the documented retention horizon expires; expiring a pinned snapshot is a breaking operational event, not a background optimization.
+
 ## 17. Ingestion pipeline — dlt
 
 ```python
@@ -665,7 +694,7 @@ def eodhd():
 #       → DuckLake SCD2 write on knowledge time → snapshot tagged ingestion_run_id
 ```
 
-**SCD2 mapping:** dlt's SCD2 provides the versioning machinery; the bitemporal write keeps `effective_date` as a dimension and uses **`available_at` as the SCD2 validity axis**. The canonical write is an explicit, tested step on top of dlt — not fully delegated. **Schema contracts:** `freeze` on canonical (new fields require a version bump), `evolve` only in raw/staging.
+**dlt ownership boundary:** dlt owns extract mechanics, incremental cursor state, retries, and raw/staging landing only. Alpha-Lake owns the canonical bitemporal MERGE in DuckDB SQL. There is exactly one canonical SCD2 implementation: `effective_date` is the valid-time dimension, `available_at` is the knowledge-time axis, and `version_hash` is semantic version identity. **Schema contracts:** `freeze` on canonical (new fields require a version bump), `evolve` only in raw/staging.
 
 ## 18. Serving API
 
@@ -689,6 +718,8 @@ lake.catalog.datasets(); lake.health(as_of=A)
 
 Readers return typed models / Arrow tables. **Catalog** answers *what exists + is it trustworthy* (schema version, freshness, row/quarantine/reconciliation counts, dataset versions = DuckLake snapshots, lineage) from the DuckLake catalog DB — no separate metadata service. **Remote (deferred):** Arrow Flight SQL / ADBC (zero-copy, not REST); DuckLake read-only HTTPS share for simple cases.
 
+`latest_*` methods are explicitly non-research escape hatches. They return a distinct PIT-unsafe type or carry `pit_unsafe=True`, and still filter to `available_at <= now()`.
+
 ## 19. Orchestration — flow functions, thin shells
 
 Pipeline logic lives once in `flows/`. Shells wrap the same flow functions with no duplicated logic. The **Typer CLI inside the app container is the first operational shell** because it is the simplest way to prove the vertical slice against the real stack. Dagster is added after the core ingestion and PIT reader are correct.
@@ -702,19 +733,21 @@ flowchart LR
 
 **CLI surface:** `bootstrap · ingest · validate · backfill · gap-fill · reparse · rebuild · replay · health · catalog · freeze-fixtures · compact`.
 
+`reparse` with a new `parser_version` mints a new canonical version visible at `available_at = reparse_time`. Snapshots pinned to the old version still see old values; reparse never mutates a prior canonical row or raw archive object.
+
 **Reference execution:** `just up` starts Postgres + RustFS + the app container; `just ingest ...` executes the CLI in the app container against the real stack.
 
 **Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates; dlt's Dagster integration drives extraction. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
 ## 20. Observability — OpenTelemetry
 
-One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the reference stack and **console** in the embedded harness. Spans wrap each flow/asset. Metrics: `ingestion_runs, fetch_{ok,fail}`, `source_latency`, `rows_written`, `quarantine_count`, `reconciliation_count`, `freshness_lag`, `snapshot_count`, `replay_duration`. Health per dataset: `latest_effective_date`, `latest_available_at`, `freshness_status`, `row_count`, `quarantine_count`, `source_status`, `blocking_reason`.
+One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the reference stack and **console** in the embedded harness. The reference collector exports metrics to a queryable backend (Prometheus in the local stack; file exporter acceptable for offline harnesses) and may also keep debug output for development. Spans wrap each flow/asset. Metrics: `ingestion_runs, fetch_{ok,fail}`, `source_latency`, `rows_written`, `quarantine_count`, `reconciliation_count`, `freshness_lag`, `snapshot_count`, `replay_duration`. Health per dataset: `latest_effective_date`, `latest_available_at`, `freshness_status`, `row_count`, `quarantine_count`, `reconciliation_count`, `ingest_outcome_counts`, `source_status`, `blocking_reason`.
 
 ## 21. Determinism & replay
 
 **Contract:** `canonical = f(raw, parser_version, schema_version, config, security_master_snapshot)`. **Replay/rebuild use the recorded `available_at` from the manifest, never wall-clock** (I7) — else re-ingest is nondeterministic.
 
-**Pinned reproducibility:** a consumer pins a DuckLake snapshot (`ingestion_run_id`) + `fixture_version` to reproduce an exact historical view.
+**Pinned reproducibility:** a consumer pins a DuckLake snapshot (`ingestion_run_id`) + `fixture_version` to reproduce an exact historical view. Compaction must preserve the logical snapshot mapping for pinned runs; snapshot retention policy is an explicit operational contract.
 
 **Fixture bundle** (`freeze-fixtures`) freezes: raw payloads · canonical rows · `available_at` values · dataset versions · security-master snapshot · corporate actions · schema/parser versions · content hashes · quarantine + reconciliation events.
 
@@ -803,8 +836,8 @@ alpha-lake/
 ├── config/
 │   ├── stack.toml                                      # Postgres + RustFS default
 │   ├── embedded.toml                                   # tests / replay only
-│   └── config-schema.json
-├── contracts/                                          # dataset contract YAML
+│   └── settings schema generated from Pydantic models
+├── contracts/                                          # dataset contract YAML, e.g. bars.v1.yaml
 ├── vendor/{wheelhouse,images,bin}/                     # offline deps
 ├── .stack/{rustfs,postgres,dagster,otel}/              # pinned service configs
 ├── src/alpha_lake/
@@ -820,9 +853,11 @@ alpha-lake/
 
 ## 25. CI, contracts, versioning
 
-**Dataset contracts:** `contracts/<name>.vN.yaml` — PK, partition key, required/nullable fields, point-in-time columns, freshness SLA, allowed quality statuses, backward-compat rules. CI validates live data against the contract.
+**Dataset contracts:** `contracts/<name>.vN.yaml` — PK, partition key, required/nullable fields, point-in-time columns, freshness SLA, allowed quality statuses, backward-compat rules. CI validates live data against the contract. Phase 1 ships `contracts/bars.v1.yaml` plus the contract schema.
 
-**Required checks:** ruff · ty · unit · connector-contract (recorded fixtures) · golden replay (raw→canonical hash) · bitemporal-visibility · adjusted-price leakage · `security_id` resolution · idempotency/duplicate · fixture-hash stability · `import-linter` boundary (incl. no-strategy rule).
+**Configuration schema:** config loading uses Pydantic Settings models and validates `[source_datasets.<dataset>.<source>]` nesting at boot.
+
+**Required checks:** ruff · ty · unit · connector-contract (recorded fixtures) · golden replay (raw→canonical hash) · bitemporal-visibility · property-based temporal invariants · adjusted-price leakage · `security_id` resolution · idempotency/duplicate · fixture-hash stability · `import-linter` boundary (incl. no-strategy rule).
 
 **SemVer ↔ schema:** a breaking schema major forces a package major; consumers pin a range. **Distribution (air-gapped):** publish wheels to an internal index/mirror or vendor a pinned wheel; `uv build` yields a self-contained wheel.
 
@@ -840,35 +875,17 @@ alpha-lake/
 - **I6** Adjusted views apply only corp actions known at `as_of`.
 - **I7** Replay is deterministic; uses recorded `available_at`, never wall-clock.
 - **I8** Canonical keyed by `security_id`; `symbol` resolved point-in-time.
-- **I9** Same content hash ⇒ idempotent; new hash ⇒ new version.
+- **I9** Raw `content_hash` proves archive integrity; canonical `version_hash` drives semantic idempotency and restatement identity.
 - **I10** A reconciliation disagreement never halts a valid primary.
 - **I11** Quarantined rows retain full raw-archive traceability.
 - **I12** Serving exposes no "latest" default to research callers.
 - **I13** The repo runs end-to-end offline from vendored dependencies.
 - **I14** The reference runtime is stack-first Compose; embedded mode is only for tests, debugging, fixture generation, and golden replay.
+- **I15** Dates are exchange-session dates resolved via the pinned trading calendar; all instants are stored UTC.
 
 ## 27. ADR log
 
-```
-0001 DuckLake as table format + catalog (Parquet data, SQL-catalog metadata)
-0002 Postgres catalog as reference path; SQLite only for embedded replay/tests
-0003 RustFS (Apache-2.0, single binary) as S3 object store; single-node until GA
-0004 Tri-temporal model: valid+knowledge as columns, system time as snapshots
-0005 security_id (security master) as canonical key from v1
-0006 Raw-only bars; adjustment as read-time, PIT-bounded view
-0007 dlt + SCD2 for ingestion; raw archived before normalize
-0019 Polars + Patito: unified model/schema/validator
-0009 Fact store + transform library, never a feature store
-0010 Flow functions; Typer app-container CLI first, Dagster optional shell later
-0011 OpenTelemetry: OTLP collector in stack, console exporter in embedded harness
-0012 Stack-first Compose reference runtime; all deps vendored in-repo
-0013 Nix flake as the hermetic reproducibility ceiling
-0014 Source registry as data; precedence/freshness/retry not hardcoded
-0015 Embedded mode demoted to test/debug/fixture/golden-replay harness
-0016 Kubernetes is a future deployment target, not the v0.1 development substrate
-0017 Derived technical indicator library (§14)
-0018 Text-derived analytics layer (§15)
-```
+`docs/adr/README.md` is the single source of truth for ADR numbering, titles, and statuses. This design document links to ADRs by section where relevant but does not maintain a second numbered ADR table.
 
 ## 28. Build plan (from scratch, stack-first, vertical-slice, oracle-gated)
 
@@ -888,7 +905,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 
 | Concern | Choice |
 |---|---|
-| Language / packaging | Python 3.14 · uv (lockfile + offline wheelhouse) |
+| Language / packaging | Python ≥3.12 · uv (lockfile + offline wheelhouse); development currently targets 3.14 |
 | Reference runtime | Docker Compose / Podman Compose, driven by `just` |
 | Lakehouse | DuckLake 1.0 (Parquet + SQL catalog) |
 | Catalog DB | PostgreSQL reference path; SQLite embedded harness only |

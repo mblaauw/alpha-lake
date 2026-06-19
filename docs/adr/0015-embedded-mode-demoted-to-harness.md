@@ -1,6 +1,6 @@
 # ADR-0015: Embedded mode demoted to test/debug/golden-replay harness
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** Early designs considered embedded mode as a first-class runtime. This creates two code paths that must both work, multiplying maintenance burden.
 

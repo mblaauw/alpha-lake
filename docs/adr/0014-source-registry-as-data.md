@@ -1,6 +1,6 @@
 # ADR-0014: Source registry as data; precedence/freshness not hardcoded
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** Source behavior (retry policy, rate limits, precedence, freshness SLA, parser version) must be configurable without code changes. Precedence and freshness are dataset-specific: a supplier can be primary for one dataset and secondary or validation-only for another.
 

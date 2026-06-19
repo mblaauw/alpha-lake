@@ -4,7 +4,7 @@
 
 **Context:** Compose + uv provides practical reproducibility. A Nix flake provides the maximal hermetic ceiling, pinning every tool at the OS level.
 
-**Decision:** Provide `flake.nix` as the hermetic reproducibility ceiling alongside the pragmatic Compose + uv defaults. Not required for daily development.
+**Decision:** Provide `flake.nix` as the hermetic reproducibility ceiling alongside the pragmatic Compose + uv defaults. Not required for daily development. The flake pins the chosen development interpreter while the package metadata keeps the runtime floor at Python >=3.12 for wheel availability.
 
 **Consequences:**
 - Positive: Maximal reproducibility for CI and deployment
@@ -13,6 +13,6 @@
 - Negative: Nix learning curve for contributors
 
 **References:**
-- DESIGN.md §23
+- DESIGN.md §23, §29
 
 **Date:** 2026-06-18

@@ -14,6 +14,7 @@ We now need a comprehensive, library-grade indicator system that:
 - Enforces PIT boundaries automatically: every indicator value is bounded by `as_of`.
 - Allows an optional materialized cache for performance, without compromising the canonical-truth principle.
 - Draws a clean boundary: neutral measurements vs strategy interpretation.
+- Handles recursive indicator warm-up deterministically so values do not depend on the caller's visible query window.
 
 **Decision:**
 
@@ -24,6 +25,7 @@ Alpha-Lake ships a comprehensive technical indicator library that is:
 3. **Neutral** — no buy/sell/bullish/bearish/rank/score/signal outputs. Only mechanically derivable values.
 4. **Derived** — outputs are not canonical facts. They are rebuildable views or cache entries.
 5. **Cacheable** — an optional `technical_indicator_cache` table may store frequently-used results. Cache entries are not canonical truth, must be reproducible, and are invalidated on input changes.
+6. **Warm-up explicit** — recursive indicators fetch an `available_at`-bounded lookback window before `start` or use a documented deterministic seed convention. `IndicatorResult` records realized lookback and seed metadata.
 
 The indicator library is exposed via `lake.indicators.*` and returns `IndicatorResult` objects with metadata (parameters, code version, input snapshot).
 
@@ -43,6 +45,7 @@ A materialized cache is permitted but follows strict rules:
 - Negative: Maintaining 60+ indicators requires ongoing test coverage and documentation.
 - Negative: The cache adds storage and invalidation logic complexity.
 - Negative: The cache must be explicitly designed so it cannot be mistaken for canonical truth — documentation, naming, and access patterns must reinforce this.
+- Negative: Recursive indicators need extra input history or explicit seed semantics, adding implementation and testing complexity.
 
 **References:**
 

@@ -1,6 +1,6 @@
 # ADR-0007: Embedded SQLite/local-fs harness for testing
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:**
 Tests must run quickly and hermetically without Docker or network access. The full Postgres + RustFS stack is too heavy for unit and integration tests.
@@ -20,6 +20,6 @@ The harness is a pytest fixture that sets up and tears down the environment per 
 - Negative: Not suitable for performance or scale testing
 
 **References:**
-- DESIGN.md §8.1
+- DESIGN.md §2, §21, §28
 
 **Date:** 2026-06-18

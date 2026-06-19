@@ -1,6 +1,6 @@
 # ADR-0016: Kubernetes is future target, not v0.1 development substrate
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** Kubernetes adds significant complexity for a v0.1 project. The primary development and deployment target should be simpler.
 

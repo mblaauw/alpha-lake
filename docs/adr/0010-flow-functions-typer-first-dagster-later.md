@@ -1,6 +1,6 @@
 # ADR-0010: Flow functions; Typer CLI first, Dagster optional later
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** Pipeline logic should be callable from CLI, test harness, and Dagster without duplication.
 
