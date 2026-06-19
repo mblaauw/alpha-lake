@@ -19,6 +19,7 @@ dependencies = [
     "opentelemetry-sdk>=1.30",
     "opentelemetry-exporter-otlp-proto-grpc>=1.30",
     "toml>=0.10",
+    "exchange-calendars>=4.0",
 ]
 
 [project.optional-dependencies]
