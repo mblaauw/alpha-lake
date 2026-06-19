@@ -27,8 +27,10 @@ Full spec: `@docs/DESIGN.md`. Decisions: `@docs/adr/`.
 - **Each epic closes with a cross-functional refinement gate** before the next epic starts.
   Gate checklists live in `@docs/gates/`. Load the relevant gate document and tick items
   as part of the epic-closing PR.
-- **Update issue status and project board** after every merged PR. Closed issues that remain on the
-  board should reflect "Done" or "Review".
+- **Review → Done lifecycle:** After closing an issue via PR, set its status on the project board to
+  "Review". Periodically (or before closing an epic), check each "Review" issue's acceptance criteria
+  against the code. If all ACs are met, move the issue to "Done". This should be part of every
+  epic-closing PR.
 - **When closing any issue, always check the full project board** for other closed issues not yet in
   "Review"/"Done" status — not just issues from the current epic. Use:
   ```bash
