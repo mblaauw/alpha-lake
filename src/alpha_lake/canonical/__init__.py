@@ -110,3 +110,55 @@ def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
     count = con.execute("SELECT COUNT(*) FROM staging_bars").fetchone()[0]
     con.execute("DROP TABLE IF EXISTS staging_bars")
     return count
+
+
+def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
+    df = compute_version_hash(df)
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS corp_actions (
+            id VARCHAR,
+            security_id VARCHAR NOT NULL,
+            effective_date DATE NOT NULL,
+            available_at TIMESTAMPTZ NOT NULL,
+            source_id VARCHAR NOT NULL,
+            action_type VARCHAR NOT NULL,
+            ratio_numerator DOUBLE,
+            ratio_denominator DOUBLE,
+            dividend_amount DOUBLE,
+            dividend_currency VARCHAR,
+            source_fetch_id VARCHAR,
+            raw_payload_hash VARCHAR,
+            ingestion_run_id VARCHAR,
+            content_hash VARCHAR,
+            version_hash VARCHAR,
+            schema_version INT DEFAULT 1,
+            parser_version INT DEFAULT 1,
+            quality_status VARCHAR DEFAULT 'valid'
+        )
+    """)
+
+    con.execute("DROP TABLE IF EXISTS staging_ca")
+    polars_to_duckdb(con, df, "staging_ca")
+
+    ca_cols = "security_id, effective_date, available_at, source_id, action_type, ratio_numerator, ratio_denominator, dividend_amount, dividend_currency, source_fetch_id, raw_payload_hash, ingestion_run_id, content_hash, version_hash, schema_version, parser_version, quality_status"
+    con.execute(f"""
+        INSERT INTO corp_actions
+        SELECT
+            sha256(concat_ws('|', security_id, action_type, effective_date, source_id, version_hash)) AS id,
+            {ca_cols}
+        FROM staging_ca s
+        WHERE NOT EXISTS (
+            SELECT 1 FROM corp_actions t
+            WHERE t.security_id = s.security_id
+              AND t.action_type = s.action_type
+              AND t.effective_date = s.effective_date
+              AND t.source_id = s.source_id
+              AND t.available_at = s.available_at
+              AND t.version_hash = s.version_hash
+        )
+    """)
+
+    count = con.execute("SELECT COUNT(*) FROM staging_ca").fetchone()[0]
+    con.execute("DROP TABLE IF EXISTS staging_ca")
+    return count
