@@ -3,8 +3,6 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-tracer = trace.get_tracer(__name__)
-
 
 def setup_otel(endpoint: str | None = None) -> None:
     if endpoint is None:

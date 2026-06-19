@@ -13,14 +13,13 @@ def test_config_imports():
 
 
 def test_obs_imports():
-    from alpha_lake.obs import tracer, setup_otel
-    assert tracer is not None
+    from alpha_lake.obs import setup_otel
     assert setup_otel is not None
 
 
 def test_source_registry():
     from alpha_lake.source_registry import get_source_precedence, get_dataset_sources
-    assert get_source_precedence("bars_daily") == ["eodhd", "tiingo", "alpaca"]
+    assert get_source_precedence("bars_daily") == ["eodhd", "tiingo"]
 
 
 def test_config_reconcile():

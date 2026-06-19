@@ -8,7 +8,7 @@ import pytest
 
 from alpha_lake.canonical import write_bars
 from alpha_lake.harness import EmbeddedHarness
-from alpha_lake.replay import _canonical_hash
+from alpha_lake.replay import canonical_hash
 from alpha_lake.serving import read_bars_asof
 from tests.fixtures import sample_bars_df, sample_bars_restated
 
@@ -42,7 +42,7 @@ def test_hash_changes_on_restatement(harness: EmbeddedHarness):
 
     result = read_bars_asof(harness.conn, ["sec_aap"], datetime(2026, 1, 7, 12, 0, 0))
     rows = json.loads(result.write_json())
-    h_restated = _canonical_hash(rows)
+    h_restated = canonical_hash(rows)
     assert h_restated != h_original, "restated data must produce different hash"
 
 
@@ -65,4 +65,4 @@ def _run_and_hash(harness: EmbeddedHarness) -> str:
     write_bars(harness.conn, bars)
     result = read_bars_asof(harness.conn, ["sec_aap"], datetime(2026, 1, 5, 17, 0, 0))
     rows = json.loads(result.write_json())
-    return _canonical_hash(rows)
+    return canonical_hash(rows)

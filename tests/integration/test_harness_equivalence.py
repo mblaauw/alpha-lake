@@ -43,7 +43,7 @@ def test_harness_cleanup_removes_temp_dir():
 
 def _run_full_pipeline(harness: EmbeddedHarness) -> str:
     import hashlib, json
-    from alpha_lake.replay import _canonical_hash as canonical_hash
+    from alpha_lake.replay import canonical_hash as canonical_hash
 
     df = pl.DataFrame({
         "security_id": ["sec_aap"], "effective_date": [date(2026, 1, 5)],

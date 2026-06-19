@@ -3,7 +3,7 @@ from __future__ import annotations
 from alpha_lake.config import SourceConfig, SourceDatasetConfig, get_config
 
 _SOURCE_PRECEDENCE: dict[str, list[str]] = {
-    "bars_daily": ["eodhd", "tiingo", "alpaca"],
+    "bars_daily": ["eodhd", "tiingo"],
 }
 
 

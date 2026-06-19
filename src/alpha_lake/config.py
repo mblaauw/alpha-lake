@@ -1,20 +1,10 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 import pydantic
 import toml
-
-
-_SECRET_PATTERNS = re.compile(
-    r"(api_key|token|secret|authorization|cookie)=\S+", re.IGNORECASE
-)
-
-
-def redact_secrets(value: str) -> str:
-    return _SECRET_PATTERNS.sub(r"\1=***", value)
 
 
 class SourceConfig(pydantic.BaseModel):

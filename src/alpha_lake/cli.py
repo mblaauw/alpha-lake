@@ -33,6 +33,7 @@ def ingest(
     dataset: str = typer.Option(None, help="Dataset to ingest"),
 ):
     """Ingest market data from sources."""
+    raise NotImplementedError("ingest pipeline not yet wired — see Epic 1")
 
 
 @app.command()
@@ -78,7 +79,7 @@ def _check_rustfs(cfg) -> None:
 @app.command()
 def catalog():
     """List datasets and their status."""
-    typer.echo("Catalog: no datasets yet.")
+    raise NotImplementedError("catalog listing not yet implemented — see Epic 5")
 
 
 @app.command()
@@ -86,6 +87,7 @@ def replay(
     run_id: str = typer.Argument(help="Ingestion run ID to replay"),
 ):
     """Replay an ingestion run from raw archive."""
+    raise NotImplementedError("replay CLI not yet wired — see Epic 2")
 
 
 @app.command(name="freeze-fixtures")
