@@ -41,6 +41,12 @@ class QualityConfig(pydantic.BaseModel):
     halt_on_stale_prices: bool = False
 
 
+class ReconciliationConfig(pydantic.BaseModel):
+    price_diff_pct: float = 1.0
+    volume_diff_pct: float = 5.0
+    cross_source_enabled: bool = False
+
+
 class LakeConfig(pydantic.BaseModel):
     runtime: str = "stack"
     catalog: str = ""
@@ -51,6 +57,7 @@ class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
     s3: S3Config = S3Config()
     quality: dict[str, QualityConfig] = {}
+    reconcile: dict[str, ReconciliationConfig] = {}
     sources: dict[str, SourceConfig] = {}
     source_datasets: dict[str, dict[str, SourceDatasetConfig]] = {}
 

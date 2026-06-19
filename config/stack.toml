@@ -39,6 +39,11 @@ max_staleness_days = 1
 [quality.security_master]
 max_staleness_days = 7
 
+[reconcile.bars]
+price_diff_pct = 0.5
+volume_diff_pct = 5.0
+cross_source_enabled = false
+
 [sources.eodhd]
 base_url = "https://eodhd.com/api"
 rate_limit_per_sec = 10.0
