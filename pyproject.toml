@@ -68,15 +68,15 @@ name = "layer-rules"
 type = "layers"
 containers = "alpha_lake"
 layers = [
-    "models",
-    "ports",
-    "connectors",
-    "canonical",
-    "quality",
-    "catalog",
-    "serving",
-    "flows",
     "cli",
+    "flows",
+    "serving",
+    "catalog",
+    "quality",
+    "canonical",
+    "connectors",
+    "ports",
+    "models",
 ]
 
 [tool.pytest.ini_options]
