@@ -1,10 +1,33 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pydantic
 import toml
+
+
+_SECRET_PATTERNS = re.compile(
+    r"(api_key|token|secret|authorization|cookie)=\S+", re.IGNORECASE
+)
+
+
+def redact_secrets(value: str) -> str:
+    return _SECRET_PATTERNS.sub(r"\1=***", value)
+
+
+class SourceConfig(pydantic.BaseModel):
+    api_key: str = ""
+    base_url: str = ""
+    rate_limit_per_sec: float = 10.0
+    max_retries: int = 3
+
+
+class SourceDatasetConfig(pydantic.BaseModel):
+    enabled: bool = True
+    parser_version: int = 1
+    endpoint_override: str | None = None
 
 
 class S3Config(pydantic.BaseModel):
@@ -28,10 +51,29 @@ class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
     s3: S3Config = S3Config()
     quality: dict[str, QualityConfig] = {}
+    sources: dict[str, SourceConfig] = {}
+    source_datasets: dict[str, dict[str, SourceDatasetConfig]] = {}
+
+
+_config: RootConfig | None = None
 
 
 def load_config(path: str | None = None) -> RootConfig:
+    global _config
     if path is None:
         path = os.environ.get("ALPHA_LAKE_CONFIG", "config/stack.toml")
+
     raw = toml.load(Path(path))
-    return RootConfig.model_validate(raw)
+
+    api_key = os.environ.get("ALPHA_LAKE_EODHD_API_KEY", "")
+    if api_key and "eodhd" not in raw.get("sources", {}):
+        raw.setdefault("sources", {})["eodhd"] = {}
+        raw["sources"]["eodhd"].setdefault("api_key", api_key)
+
+    _config = RootConfig.model_validate(raw)
+    return _config
+
+
+def get_config() -> RootConfig:
+    assert _config is not None, "config not loaded — call load_config() first"
+    return _config
