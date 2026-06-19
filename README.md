@@ -88,6 +88,11 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementat
 
 ## Development
 
+### Workflow
+
+- Every issue requires a PR before closing. No issue moves to Done without an associated pull request.
+- PRs must link to the issue they resolve (e.g. `Closes #N`).
+
 ### opencode skills
 
 Project-local skills live in `.opencode/skills/<name>/SKILL.md`. After creating or editing a skill, restart opencode to pick up the changes.

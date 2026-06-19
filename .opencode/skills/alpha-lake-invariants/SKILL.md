@@ -58,6 +58,12 @@ source_fetch_id, ingestion_run_id, schema_version, parser_version
 - Do not use wall-clock `now()` in canonical/replay decisions; use recorded manifest times.
 - Do not mint random or symbol-prefixed `security_id` values.
 
+## Workflow Rules
+
+- Every issue requires a PR before closing. No issue moves to Done without an associated pull request.
+- PRs must link to the issue they resolve (e.g. `Closes #N` in the description).
+- Do not close issues directly; always close via merged PR.
+
 ## Stronger-Model Gate
 
 Route to a stronger model or reviewer for PIT reader logic, deterministic `security_id`, semantic `version_hash`, and golden replay determinism.
