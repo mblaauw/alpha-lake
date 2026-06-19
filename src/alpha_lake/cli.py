@@ -4,6 +4,7 @@ import sys
 import httpx
 import typer
 
+from alpha_lake.catalog import bootstrap as bootstrap_catalog
 from alpha_lake.config import get_config, load_config
 from alpha_lake.obs import setup_otel
 
@@ -20,7 +21,10 @@ def _main():
 @app.command()
 def bootstrap():
     """Initialize the catalog and storage."""
+    cfg = get_config()
     typer.echo("Bootstrapping Alpha-Lake catalog...")
+    bootstrap_catalog(cfg)
+    typer.echo("Catalog bootstrapped.")
 
 
 @app.command()
