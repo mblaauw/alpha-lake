@@ -2,6 +2,7 @@
 runtime = "stack"
 catalog = "ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake"
 data_path = "s3://lake/"
+calendar_version = "4.13.2"
 
 [s3]
 endpoint = "rustfs:9000"

@@ -2,3 +2,4 @@
 runtime = "embedded"
 catalog = "ducklake:sqlite:data/lake.catalog"
 data_path = "data/lake/"
+calendar_version = "4.13.2"

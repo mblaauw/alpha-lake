@@ -41,6 +41,7 @@ class LakeConfig(pydantic.BaseModel):
     runtime: str = "stack"
     catalog: str = ""
     data_path: str = ""
+    calendar_version: str = ""
 
 
 class RootConfig(pydantic.BaseModel):
