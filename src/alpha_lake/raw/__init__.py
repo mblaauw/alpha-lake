@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-import zstd
 from pathlib import Path
+
+import zstd
 
 from alpha_lake.config import get_config
 

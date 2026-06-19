@@ -11,8 +11,10 @@ def test_ensure_extensions_runs_without_error():
 
 
 def test_parquet_write_read():
+    import os
+    import tempfile
+
     import polars as pl
-    import tempfile, os
     con = duckdb.connect()
     ensure_extensions(con)
     df = pl.DataFrame({"x": [1, 2, 3]})

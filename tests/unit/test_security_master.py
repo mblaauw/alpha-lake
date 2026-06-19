@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 
@@ -34,7 +34,7 @@ def test_register_and_resolve():
     con = duckdb.connect()
     sid = mint_security_id(figi="BBG000B9XVX7")
     register(con, "AAPL", sid, date(2020, 1, 1),
-             available_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+             available_at=datetime(2020, 1, 1, tzinfo=UTC),
              name="Apple Inc.", exchange="XNAS")
     result = resolve(con, "AAPL")
     assert result == sid
@@ -44,7 +44,7 @@ def test_resolve_pit():
     con = duckdb.connect()
     sid = mint_security_id(figi="BBG000B9XVX7")
     register(con, "AAPL", sid, date(2020, 1, 1),
-             available_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+             available_at=datetime(2020, 1, 1, tzinfo=UTC))
     # Before effective_start → no match
     before = resolve(con, "AAPL", as_of=date(2019, 12, 31))
     assert before is None
@@ -58,9 +58,9 @@ def test_symbol_reuse():
     old_sid = mint_security_id(figi="OLD123")
     new_sid = mint_security_id(figi="NEW456")
     register(con, "TICKER", old_sid, date(2020, 1, 1), effective_end=date(2022, 12, 31),
-             available_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+             available_at=datetime(2020, 1, 1, tzinfo=UTC))
     register(con, "TICKER", new_sid, date(2023, 1, 1),
-             available_at=datetime(2023, 1, 1, tzinfo=timezone.utc))
+             available_at=datetime(2023, 1, 1, tzinfo=UTC))
 
     assert resolve(con, "TICKER", as_of=date(2021, 6, 1)) == old_sid
     assert resolve(con, "TICKER", as_of=date(2023, 6, 1)) == new_sid

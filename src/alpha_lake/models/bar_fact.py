@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 
 import patito as pt
-import polars as pl
 from patito import Field
 
 

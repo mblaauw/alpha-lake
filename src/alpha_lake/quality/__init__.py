@@ -19,6 +19,3 @@ def check_market_sanity(df: pl.DataFrame) -> pl.DataFrame:
         .alias("quality_status")
     )
 
-
-def quarantine(df: pl.DataFrame, reason: str | None = None) -> pl.DataFrame:
-    return check_market_sanity(df)

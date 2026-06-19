@@ -42,7 +42,8 @@ def test_harness_cleanup_removes_temp_dir():
 
 
 def _run_full_pipeline(harness: EmbeddedHarness) -> str:
-    import hashlib, json
+    import json
+
     from alpha_lake.replay import canonical_hash as canonical_hash
 
     df = pl.DataFrame({

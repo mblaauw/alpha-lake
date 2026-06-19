@@ -17,17 +17,17 @@ reset:
 logs:
     docker compose logs -f
 
-# Bootstrap the catalog
+# Bootstrap the catalog (use run --rm: app container exits immediately)
 bootstrap:
-    docker compose exec app alpha-lake bootstrap
+    docker compose run --rm app alpha-lake bootstrap
 
-# Ingest market data
+# Ingest market data (use run --rm: app container exits immediately)
 ingest *args:
-    docker compose exec app alpha-lake ingest {{ args }}
+    docker compose run --rm app alpha-lake ingest {{ args }}
 
-# Run health checks
+# Run health checks (use run --rm: app container exits immediately)
 health:
-    docker compose exec app alpha-lake health
+    docker compose run --rm app alpha-lake health
 
 # Run tests (embedded harness)
 test *args:

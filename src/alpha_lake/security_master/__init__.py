@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date
+from datetime import UTC, date
 from typing import Any
-
-import polars as pl
 
 
 def mint_security_id(figi: str = "", cik: str = "", isin: str = "", composite: str = "") -> str:
@@ -71,8 +69,8 @@ def register(
     exchange: str = "",
 ) -> None:
     """Register a symbol → security_id mapping."""
-    from datetime import datetime, timezone
-    ts = available_at or datetime.now(timezone.utc)
+    from datetime import datetime
+    ts = available_at or datetime.now(datetime.timezone.utc)
 
     con.execute("""
         CREATE TABLE IF NOT EXISTS security_master (

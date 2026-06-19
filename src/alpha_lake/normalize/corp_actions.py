@@ -5,7 +5,6 @@ from typing import Any
 
 import polars as pl
 
-
 _SOURCE_MAP: dict[str, str] = {
     "eodhd_splits": "eodhd",
     "tiingo_splits": "tiingo",

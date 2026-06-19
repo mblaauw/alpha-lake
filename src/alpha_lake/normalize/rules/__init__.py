@@ -23,14 +23,8 @@ PREFERRED_CURRENCIES: list[str] = ["USD", "EUR", "GBP", "JPY"]
 def normalize_value(
     value: float,
     source_currency: str = "USD",
-    source_unit: str = "raw",
-    target_unit: str = "raw",
 ) -> float:
-    """Convert a value to standard normalization.
-
-    Currency is converted to USD equivalent.
-    Units are passed through (no unit conversion implemented yet).
-    """
+    """Convert a value to standard USD normalization."""
     rate = CURRENCY_CONVERSION.get(source_currency.upper(), 1.0)
     return round(value * rate, 6)
 
