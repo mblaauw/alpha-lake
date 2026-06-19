@@ -1,8 +1,8 @@
 # Alpha-Lake — just recipes
 
 # Start the reference stack
-up:
-    docker compose up -d
+up *flags:
+    docker compose up -d {{ flags }}
 
 # Stop the reference stack
 down:
@@ -49,6 +49,8 @@ freeze-fixtures:
 vendor:
     uv export --no-dev --output-file vendor/wheelhouse/requirements.txt
     docker compose pull
+    tar czf vendor/images.tar.gz -C vendor/images .
+    echo "Vendor complete — transfer vendor/ to air-gapped environment"
 
 # Lint and type-check
 lint:

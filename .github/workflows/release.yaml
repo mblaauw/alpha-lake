@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: uv run ruff check src/ tests/
+      - run: uv run ty check --output-format full
+      - run: uv run pytest tests/ -q
+      - run: just vendor
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            vendor/wheelhouse/requirements.txt
+            vendor/images.tar.gz
+          generate_release_notes: true
