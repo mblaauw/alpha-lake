@@ -30,6 +30,31 @@ def test_config_reconcile():
     assert cfg.volume_diff_pct == 5.0
 
 
+def test_canonical_write_bars():
+    from pathlib import Path
+    from datetime import date, datetime
+    import duckdb
+    import polars as pl
+    from alpha_lake.canonical import write_bars
+    Path("data").mkdir(exist_ok=True)
+    con = duckdb.connect()
+    df = pl.DataFrame({
+        "security_id": ["sec_test"], "effective_date": [date(2026, 6, 18)],
+        "available_at": [datetime(2026, 6, 18, 12, 0, 0)],
+        "source_id": ["eodhd"], "open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5],
+        "volume": [10000], "source_fetch_id": [""], "raw_payload_hash": [""], "ingestion_run_id": [""],
+        "content_hash": [""], "version_hash": [""], "schema_version": [1], "parser_version": [1],
+        "quality_status": ["valid"],
+        "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
+    }).with_columns(
+        pl.col("source_published_at").cast(pl.Datetime("us")),
+        pl.col("ingested_at").cast(pl.Datetime("us")),
+        pl.col("validated_at").cast(pl.Datetime("us")),
+    )
+    count = write_bars(con, df)
+    assert count == 1
+
+
 def test_bar_fact():
     from datetime import date, datetime
     from alpha_lake.models.bar_fact import BarFact
