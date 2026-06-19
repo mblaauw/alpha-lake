@@ -5,7 +5,7 @@ import polars as pl
 from alpha_lake.canonical import write_bars
 from alpha_lake.harness import EmbeddedHarness
 from alpha_lake.serving import read_bars_asof
-from tests.fixtures import golden_hash
+from tests.fixtures import golden_hash  # ty: ignore
 
 
 def test_embedded_produces_deterministic_output():

@@ -40,7 +40,8 @@ def test_write_corp_actions():
     df = splits_from_json(raw, "sec_test", "eodhd_splits", "f1", "r1", "c1", ts)
     count = write_corp_actions(con, df)
     assert count == 1
-    result = con.execute("SELECT action_type, ratio_numerator FROM corp_actions").fetchone()
-    assert result[0] == "split"
-    assert result[1] == 2.0
+    _r = con.execute("SELECT action_type, ratio_numerator FROM corp_actions").fetchone()
+    assert _r is not None
+    assert _r[0] == "split"
+    assert _r[1] == 2.0
     con.close()

@@ -7,7 +7,8 @@ def test_system_clock_returns_utc():
     clock = SystemClock()
     now = clock.now()
     assert now.tzinfo is not None
-    assert now.tzinfo.utcoffset(now).total_seconds() == 0
+    offset = now.tzinfo.utcoffset(now)
+    assert offset is not None and offset.total_seconds() == 0
 
 
 def test_fixed_clock_returns_fixed_time():

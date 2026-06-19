@@ -73,6 +73,8 @@ def test_canonical_write_contract():
     )
     count = write_bars(con, df)
     assert count == 1
-    result = con.execute("SELECT close FROM lake_bars WHERE security_id='sec_test'").fetchone()[0]
+    _r = con.execute("SELECT close FROM lake_bars WHERE security_id='sec_test'").fetchone()
+    assert _r is not None
+    result = _r[0]
     assert result == 100.5
     con.close()

@@ -21,7 +21,9 @@ def test_parquet_write_read():
     tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
     tmp.close()
     df.write_parquet(tmp.name)
-    result = con.execute(f"SELECT COUNT(*) FROM read_parquet('{tmp.name}')").fetchone()[0]
+    _r = con.execute(f"SELECT COUNT(*) FROM read_parquet('{tmp.name}')").fetchone()
+    assert _r is not None
+    result = _r[0]
     assert result == 3
     os.unlink(tmp.name)
     con.close()

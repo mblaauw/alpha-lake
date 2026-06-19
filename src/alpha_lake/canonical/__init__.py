@@ -126,7 +126,8 @@ def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
         )
     """)
 
-    count = con.execute("SELECT COUNT(*) FROM staging_ca").fetchone()[0]
+    _r = con.execute("SELECT COUNT(*) FROM staging_ca").fetchone()
+    count = _r[0] if _r else 0
     con.execute("DROP TABLE IF EXISTS staging_ca")
     return count
 
@@ -170,6 +171,7 @@ def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) 
         )
     """)
 
-    count = con.execute("SELECT COUNT(*) FROM _staging").fetchone()[0]
+    _r = con.execute("SELECT COUNT(*) FROM _staging").fetchone()
+    count = _r[0] if _r else 0
     con.execute("DROP TABLE IF EXISTS _staging")
     return count

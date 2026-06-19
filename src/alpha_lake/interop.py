@@ -22,4 +22,6 @@ def duckdb_to_polars(
     query: str,
     params: list | None = None,
 ) -> pl.DataFrame:
-    return pl.from_arrow(con.execute(query, params or []).to_arrow_table())
+    result = pl.from_arrow(con.execute(query, params or []).to_arrow_table())
+    assert isinstance(result, pl.DataFrame)
+    return result

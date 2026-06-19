@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.fixtures import golden_dir
+from tests.fixtures import golden_dir  # ty: ignore
 
 
 @pytest.fixture
