@@ -31,7 +31,7 @@ just health    # check dataset freshness and status
 
 | Epic | Phase | Focus | Priority |
 |------|-------|-------|----------|
-| Epic 0 | Phase 0 | Foundation: stack, CI, OTel, config | P0 |
+| Epic 0 | Phase 0 | Foundation: stack, CI, OTel, config | P0 ✅ |
 | Epic 1 | Phase 1 | Bars vertical slice: connector → PIT read | P0 |
 | Epic 2 | Phase 2 | Testing: replay harness, fixtures, contract tests | P0 |
 | Epic 3 | Phase 3 | Identity: security master, corp actions, adjusted views | P1 |
