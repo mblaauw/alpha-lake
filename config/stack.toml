@@ -93,6 +93,36 @@ parser_version = 1
 enabled = true
 parser_version = 1
 
+
+[source_datasets.eodhd.corp_actions]
+enabled = true
+parser_version = 1
+
+[source_datasets.eodhd.fundamentals]
+enabled = true
+parser_version = 1
+
+[source_datasets.tiingo.corp_actions]
+enabled = true
+parser_version = 1
+
+[source_datasets.tiingo.fundamentals]
+enabled = true
+parser_version = 1
+
+[source_datasets.sec]
+[source_datasets.sec.fundamentals]
+enabled = true
+parser_version = 1
+[source_datasets.sec.insider_tx]
+enabled = true
+parser_version = 1
+
+[source_datasets.reddit]
+[source_datasets.reddit.social_posts]
+enabled = true
+parser_version = 1
+
 [source_datasets.alpaca]
 [source_datasets.alpaca.bars_daily]
 enabled = false
