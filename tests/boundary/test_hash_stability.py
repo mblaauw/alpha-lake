@@ -9,7 +9,7 @@ from alpha_lake.canonical import write_bars
 from alpha_lake.harness import EmbeddedHarness
 from alpha_lake.replay import canonical_hash
 from alpha_lake.serving import read_bars_asof
-from tests.fixtures import sample_bars_df, sample_bars_restated
+from tests.fixtures import sample_bars_df, sample_bars_restated  # ty: ignore
 
 
 def _visibility_hash(df: pl.DataFrame) -> str:

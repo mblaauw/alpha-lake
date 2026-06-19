@@ -15,7 +15,7 @@ from alpha_lake.models.dataset_models import (
 from alpha_lake.normalize.rules import normalize_value, standardize_line_item
 
 
-def _make(name: str) -> pl.DataFrame:
+def _make(name: str) -> list[str]:
     """Create a DataFrame with default nulls for all optional fields."""
     cols = {
         "FundamentalFact": ["security_id", "effective_date", "available_at", "source_id", "fiscal_period",

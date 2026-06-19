@@ -83,7 +83,9 @@ def test_write_datasets():
     for table, kw in cases:
         df = _mk(table, **kw)
         count = write_dataset(con, table, df)
-        row = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        _r = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+        assert _r is not None
+        row = _r[0]
         assert count == 1
         assert row == 1, f"{table}: expected 1 row, got {row}"
 

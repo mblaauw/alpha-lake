@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import zstd
+import zstd  # ty: ignore
 
 from alpha_lake.config import get_config
 

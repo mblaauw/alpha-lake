@@ -69,8 +69,8 @@ def register(
     exchange: str = "",
 ) -> None:
     """Register a symbol → security_id mapping."""
-    from datetime import datetime
-    ts = available_at or datetime.now(datetime.timezone.utc)
+    from datetime import datetime, timezone
+    ts = available_at or datetime.now(timezone.utc)
 
     con.execute("""
         CREATE TABLE IF NOT EXISTS security_master (

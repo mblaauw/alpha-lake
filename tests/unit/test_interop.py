@@ -26,6 +26,8 @@ def test_lazyframe_supported():
     con = duckdb.connect()
     lf = pl.LazyFrame({"a": [10, 20]})
     polars_to_duckdb(con, lf, "lazy_t")
-    result = con.execute("SELECT SUM(a) FROM lazy_t").fetchone()[0]
+    _r = con.execute("SELECT SUM(a) FROM lazy_t").fetchone()
+    assert _r is not None
+    result = _r[0]
     assert result == 30
     con.close()
