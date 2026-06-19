@@ -19,6 +19,7 @@ dependencies = [
     "opentelemetry-sdk>=1.30",
     "opentelemetry-exporter-otlp-proto-grpc>=1.30",
     "toml>=0.10",
+    "dlt>=1.0",
     "exchange-calendars>=4.0",
 ]
 
@@ -29,7 +30,6 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "import-linter>=2.0",
-    "dlt>=1.0",
 ]
 
 [tool.ruff]
