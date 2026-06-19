@@ -18,6 +18,13 @@ def test_obs_imports():
     assert setup_otel is not None
 
 
+def test_config_reconcile():
+    from alpha_lake.config import ReconciliationConfig
+    cfg = ReconciliationConfig(price_diff_pct=0.5)
+    assert cfg.price_diff_pct == 0.5
+    assert cfg.volume_diff_pct == 5.0
+
+
 def test_calendar_imports():
     from alpha_lake.calendar_ import is_trading_day, previous_trading_day
     from datetime import date
