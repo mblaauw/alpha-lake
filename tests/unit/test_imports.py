@@ -18,6 +18,11 @@ def test_obs_imports():
     assert setup_otel is not None
 
 
+def test_source_registry():
+    from alpha_lake.source_registry import get_source_precedence, get_dataset_sources
+    assert get_source_precedence("bars_daily") == ["eodhd", "tiingo", "alpaca"]
+
+
 def test_config_reconcile():
     from alpha_lake.config import ReconciliationConfig
     cfg = ReconciliationConfig(price_diff_pct=0.5)
