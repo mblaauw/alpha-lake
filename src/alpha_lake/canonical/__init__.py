@@ -8,20 +8,63 @@ import polars as pl
 
 from alpha_lake.interop import polars_to_duckdb
 
+NORMALIZATION_VERSION: int = 1
+"""Bump when the canonical serialization recipe changes.
+
+Every bump invalidates all prior golden replay fixtures.
+"""
+
 
 def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
+    """Compute semantic version_hash per row.
+
+    Recipe (pinned at normalization_version=1):
+    1. Sort column keys alphabetically (exclude version_hash itself).
+    2. Serialize with `json.dumps(sort_keys=True, default=str, separators=(",",":"))`.
+    3. Pinned float precision via `round(val, 10)`.
+    4. Dates serialized as ISO strings via `default=str`.
+    5. Stable null representation: Python `None` → JSON `null`.
+    6. SHA-256 of the canonical JSON bytes.
+    """
     row_hashes = []
     for row in df.iter_rows(named=True):
-        canonical = {k: row[k] for k in sorted(row.keys()) if k not in ("version_hash",)}
-        raw = json.dumps(canonical, sort_keys=True, default=str)
+        canonical: dict[str, object] = {}
+        for k in sorted(row.keys()):
+            if k == "version_hash":
+                continue
+            v = row[k]
+            if isinstance(v, float):
+                v = round(v, 10)
+            canonical[k] = v
+        raw = json.dumps(
+            canonical,
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        )
         row_hashes.append(hashlib.sha256(raw.encode()).hexdigest())
-    return df.with_columns(pl.Series("version_hash", row_hashes))
+    return df.with_columns(
+        pl.Series("version_hash", row_hashes),
+        pl.lit(NORMALIZATION_VERSION).alias("normalization_version"),
+    )
+
+
+_COLUMNS = [
+    "security_id", "effective_date", "available_at", "source_id",
+    "open", "high", "low", "close", "volume",
+    "source_fetch_id", "raw_payload_hash", "ingestion_run_id",
+    "content_hash", "version_hash",
+    "schema_version", "parser_version", "quality_status",
+    "source_published_at", "ingested_at", "validated_at",
+    "normalization_version",
+]
+"""Column order for lake_bars INSERT. Must match Polars output order."""
 
 
 def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
     df = compute_version_hash(df)
 
-    con.execute("""
+    con.execute(f"""
         CREATE TABLE IF NOT EXISTS lake_bars (
             security_id VARCHAR NOT NULL,
             effective_date DATE NOT NULL,
@@ -40,6 +83,7 @@ def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
             ingestion_run_id VARCHAR,
             content_hash VARCHAR,
             version_hash VARCHAR,
+            normalization_version INT DEFAULT {NORMALIZATION_VERSION},
             schema_version INT DEFAULT 1,
             parser_version INT DEFAULT 1,
             quality_status VARCHAR DEFAULT 'valid'
@@ -48,23 +92,19 @@ def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
 
     polars_to_duckdb(con, df, "staging_bars")
 
-    con.execute("""
-        INSERT INTO lake_bars
-        SELECT
-            s.security_id, s.effective_date, s.available_at, s.source_id,
-            s.source_published_at, s.ingested_at, s.validated_at,
-            s.open, s.high, s.low, s.close, s.volume,
-            s.source_fetch_id, s.raw_payload_hash, s.ingestion_run_id,
-            s.content_hash, s.version_hash,
-            s.schema_version, s.parser_version, s.quality_status
+    cols = ", ".join(_COLUMNS)
+    con.execute(f"""
+        INSERT INTO lake_bars ({cols})
+        SELECT {cols}
         FROM staging_bars s
-        LEFT JOIN lake_bars t
-            ON t.security_id = s.security_id
-           AND t.effective_date = s.effective_date
-           AND t.source_id = s.source_id
-           AND t.available_at = s.available_at
-           AND t.version_hash = s.version_hash
-        WHERE t.security_id IS NULL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM lake_bars t
+            WHERE t.security_id = s.security_id
+              AND t.effective_date = s.effective_date
+              AND t.source_id = s.source_id
+              AND t.available_at = s.available_at
+              AND t.version_hash = s.version_hash
+        )
     """)
 
     count = con.execute("SELECT COUNT(*) FROM staging_bars").fetchone()[0]
