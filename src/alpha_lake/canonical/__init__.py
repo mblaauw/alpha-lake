@@ -155,6 +155,8 @@ def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) 
     natural_keys = _DATASET_KEYS.get(table, ["id"])
     cols = ", ".join(df.columns)
 
+    con.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df WHERE 1=0")
+
     con.execute("DROP TABLE IF EXISTS _staging")
     polars_to_duckdb(con, df, "_staging")
 

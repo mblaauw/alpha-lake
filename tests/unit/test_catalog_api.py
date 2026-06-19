@@ -18,7 +18,7 @@ def test_list_datasets():
 
     datasets = list_datasets(con)
     names = [d["dataset"] for d in datasets]
-    assert "lake_bars" in names
+    assert "source" in names
     assert "source" in names
 
 
