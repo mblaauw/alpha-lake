@@ -23,9 +23,17 @@ def decompress(data: bytes) -> bytes:
     return zstd.decompress(data)
 
 
+def exists(hash_val: str) -> bool:
+    cfg = get_config()
+    path = _store_path(hash_val)
+    return (Path(cfg.lake.data_path) / path).exists()
+
+
 def archive(data: bytes) -> str:
     cfg = get_config()
     h = content_hash(data)
+    if exists(h):
+        return h
     path = _store_path(h)
     compressed = compress(data)
 
