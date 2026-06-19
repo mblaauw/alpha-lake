@@ -21,6 +21,7 @@ dependencies = [
     "toml>=0.10",
     "dlt>=1.0",
     "exchange-calendars>=4.0",
+    "zstd>=1.5",
 ]
 
 [project.optional-dependencies]
