@@ -144,5 +144,77 @@ def read_bars_latest(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> pl.DataFrame:
-    """PIT-unsafe: returns newest data available as of now()."""
+    """PIT-unsafe: returns newest data available as of now().
+
+    This is an explicit non-research path. Research reads must use
+    read_bars_asof() with an explicit as_of parameter.
+    """
     return read_bars_asof(con, security_ids, get_clock().now(), start_date, end_date)
+
+
+def read_panel(
+    con: duckdb.DuckDBPyConnection,
+    spine: pl.DataFrame,
+    as_of: datetime,
+    dataset: str = "lake_bars",
+) -> pl.DataFrame:
+    """Panel/spine reader: for each (security_id, effective_date) in the spine,
+    return the newest version with available_at <= as_of.
+
+    The spine must have columns 'security_id' and 'effective_date'.
+    """
+    con.execute("DROP VIEW IF EXISTS _spine")
+    con.register("_spine", spine.to_arrow())
+    query = f"""
+        SELECT s.security_id, s.effective_date,
+               b.available_at, b.source_id,
+               b.open, b.high, b.low, b.close, b.volume
+        FROM _spine s
+        ASOF LEFT JOIN {dataset} b
+            ON s.security_id = b.security_id
+           AND s.effective_date >= b.effective_date
+           AND ? >= b.available_at
+        WHERE b.effective_date <= ?
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY s.security_id, s.effective_date
+            ORDER BY b.available_at DESC
+        ) = 1
+    """
+    result = duckdb_to_polars(con, query, [as_of, as_of.date()])
+    con.execute("DROP VIEW IF EXISTS _spine")
+    return result
+
+
+def read_asof_join(
+    con: duckdb.DuckDBPyConnection,
+    spine: pl.DataFrame,
+    dataset: str = "lake_bars",
+) -> pl.DataFrame:
+    """Per-row PIT join: the spine must have 'security_id', 'effective_date',
+    and 'as_of' columns. Each row gets its own PIT boundary."""
+    con.execute("DROP VIEW IF EXISTS _spine")
+    con.register("_spine", spine.to_arrow())
+    query = f"""
+        WITH joined AS (
+            SELECT s.security_id, s.effective_date, s.as_of,
+                   b.available_at, b.source_id,
+                   b.open, b.high, b.low, b.close, b.volume,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY s.security_id, s.effective_date, s.as_of
+                       ORDER BY b.available_at DESC
+                   ) AS rn
+            FROM _spine s
+            LEFT JOIN {dataset} b
+                ON s.security_id = b.security_id
+               AND b.effective_date <= s.effective_date
+               AND b.available_at <= s.as_of
+        )
+        SELECT security_id, effective_date, as_of,
+               available_at, source_id,
+               open, high, low, close, volume
+        FROM joined
+        WHERE rn = 1
+    """
+    result = duckdb_to_polars(con, query, [])
+    con.execute("DROP VIEW IF EXISTS _spine")
+    return result
