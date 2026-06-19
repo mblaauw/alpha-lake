@@ -30,6 +30,20 @@ def test_config_reconcile():
     assert cfg.volume_diff_pct == 5.0
 
 
+def test_quality_market_sanity():
+    from datetime import date
+    import polars as pl
+    from alpha_lake.quality import check_market_sanity
+    df = pl.DataFrame({
+        "security_id": ["sec_ok", "sec_bad"], "effective_date": [date(2026, 6, 18), date(2026, 6, 18)],
+        "open": [100.0, 50.0], "high": [101.0, 100.0], "low": [99.0, 60.0], "close": [100.5, 55.0],
+        "volume": [10000, 5000], "quality_status": ["valid", "valid"],
+    })
+    result = check_market_sanity(df)
+    assert result["quality_status"][0] == "valid"
+    assert result["quality_status"][1] == "quarantined"
+
+
 def test_canonical_write_bars():
     from pathlib import Path
     from datetime import date, datetime
