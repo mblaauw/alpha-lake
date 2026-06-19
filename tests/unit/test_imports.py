@@ -16,3 +16,10 @@ def test_obs_imports():
     from alpha_lake.obs import tracer, setup_otel
     assert tracer is not None
     assert setup_otel is not None
+
+
+def test_calendar_imports():
+    from alpha_lake.calendar_ import is_trading_day, previous_trading_day
+    from datetime import date
+    assert is_trading_day(date(2026, 6, 18)) is True
+    assert previous_trading_day(date(2026, 6, 19)) == date(2026, 6, 18)
