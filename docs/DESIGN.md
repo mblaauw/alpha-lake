@@ -678,7 +678,7 @@ ATTACH 'ducklake:sqlite:data/lake.catalog' AS lake (DATA_PATH 'data/lake/');
 
 **Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
 
-**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month, sort within files by `(security_id, effective_date, available_at)`, and target 128-512 MB Parquet files. The reference stack enables DuckDB Parquet metadata caching against RustFS so PIT reads prune partitions and row groups before scanning object storage.
+**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month, sort within files by `(security_id, effective_date, available_at)`, and target 128-512 MB Parquet files. Implemented in `catalog/schema.sql` (`lake_bars` table) and `canonical/__init__.py` (SCD2 write). The reference stack enables DuckDB Parquet metadata caching against RustFS so PIT reads prune partitions and row groups before scanning object storage.
 
 **Snapshot retention and compaction:** compaction may rewrite physical Parquet files but must preserve the logical snapshot-to-data mapping for any pinned `ingestion_run_id`. A pinned snapshot remains resolvable after compaction until the documented retention horizon expires; expiring a pinned snapshot is a breaking operational event, not a background optimization.
 
