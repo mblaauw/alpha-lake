@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS lake_bars (
     ingestion_run_id VARCHAR,
     content_hash VARCHAR,
     version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1,
     parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
