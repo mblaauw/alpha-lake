@@ -38,3 +38,56 @@ max_staleness_days = 1
 
 [quality.security_master]
 max_staleness_days = 7
+
+[sources.eodhd]
+base_url = "https://eodhd.com/api"
+rate_limit_per_sec = 10.0
+max_retries = 3
+
+[sources.tiingo]
+base_url = "https://api.tiingo.com"
+rate_limit_per_sec = 5.0
+max_retries = 3
+
+[sources.alpaca]
+base_url = "https://data.alpaca.markets"
+rate_limit_per_sec = 20.0
+max_retries = 3
+
+[sources.sec]
+base_url = "https://www.sec.gov"
+rate_limit_per_sec = 10.0
+max_retries = 5
+
+[sources.openfigi]
+base_url = "https://api.openfigi.com/v3"
+rate_limit_per_sec = 10.0
+max_retries = 3
+
+[sources.reddit]
+base_url = "https://oauth.reddit.com"
+rate_limit_per_sec = 1.0
+max_retries = 3
+
+[source_datasets.eodhd]
+[source_datasets.eodhd.bars_daily]
+enabled = true
+parser_version = 1
+
+[source_datasets.eodhd.earnings_calendar]
+enabled = true
+parser_version = 1
+
+[source_datasets.tiingo]
+[source_datasets.tiingo.bars_daily]
+enabled = true
+parser_version = 1
+
+[source_datasets.tiingo.news_articles]
+enabled = true
+parser_version = 1
+
+[source_datasets.alpaca]
+[source_datasets.alpaca.bars_daily]
+enabled = false
+parser_version = 1

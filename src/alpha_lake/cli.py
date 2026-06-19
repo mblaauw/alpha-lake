@@ -1,6 +1,13 @@
 import typer
 
+from alpha_lake.config import load_config
+
 app = typer.Typer(name="alpha-lake")
+
+
+@app.callback()
+def _main():
+    load_config()
 
 
 @app.command()
