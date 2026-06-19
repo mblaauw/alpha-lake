@@ -5,6 +5,7 @@ from patito import Field
 
 
 class FundamentalFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -26,6 +27,7 @@ class FundamentalFact(pt.Model):
 
 
 class InsiderTxFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -47,6 +49,7 @@ class InsiderTxFact(pt.Model):
 
 
 class NewsArticleFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     article_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -68,6 +71,7 @@ class NewsArticleFact(pt.Model):
 
 
 class SocialPostFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     post_id_hash: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -89,6 +93,7 @@ class SocialPostFact(pt.Model):
 
 
 class EarningsEventFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -106,6 +111,7 @@ class EarningsEventFact(pt.Model):
 
 
 class EntityMentionFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     mention_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -127,6 +133,7 @@ class EntityMentionFact(pt.Model):
 
 
 class SentimentAnnotationFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     annotation_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
@@ -150,6 +157,7 @@ class SentimentAnnotationFact(pt.Model):
 
 
 class AttentionMetricFact(pt.Model):
+    model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime

@@ -49,21 +49,7 @@ def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-_COLUMNS = [
-    "security_id", "effective_date", "available_at", "source_id",
-    "open", "high", "low", "close", "volume",
-    "source_fetch_id", "raw_payload_hash", "ingestion_run_id",
-    "content_hash", "version_hash",
-    "schema_version", "parser_version", "quality_status",
-    "source_published_at", "ingested_at", "validated_at",
-    "normalization_version",
-]
-"""Column order for lake_bars INSERT. Must match Polars output order."""
-
-
 def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
-    df = compute_version_hash(df)
-
     con.execute(f"""
         CREATE TABLE IF NOT EXISTS lake_bars (
             security_id VARCHAR NOT NULL,
@@ -90,26 +76,7 @@ def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
         )
     """)
 
-    polars_to_duckdb(con, df, "staging_bars")
-
-    cols = ", ".join(_COLUMNS)
-    con.execute(f"""
-        INSERT INTO lake_bars ({cols})
-        SELECT {cols}
-        FROM staging_bars s
-        WHERE NOT EXISTS (
-            SELECT 1 FROM lake_bars t
-            WHERE t.security_id = s.security_id
-              AND t.effective_date = s.effective_date
-              AND t.source_id = s.source_id
-              AND t.available_at = s.available_at
-              AND t.version_hash = s.version_hash
-        )
-    """)
-
-    count = con.execute("SELECT COUNT(*) FROM staging_bars").fetchone()[0]
-    con.execute("DROP TABLE IF EXISTS staging_bars")
-    return count
+    return write_dataset(con, "lake_bars", df)
 
 
 def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
@@ -165,6 +132,7 @@ def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
 
 
 _DATASET_KEYS: dict[str, list[str]] = {
+    "lake_bars": ["security_id", "effective_date", "source_id"],
     "fundamentals": ["security_id", "fiscal_period", "statement_type", "line_item", "source_id"],
     "insider_tx": ["security_id", "filer_cik", "issuer_cik", "transaction_code", "effective_date", "source_id"],
     "earnings_calendar": ["security_id", "report_date", "source_id"],
@@ -184,18 +152,15 @@ def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) 
     df = compute_version_hash(df)
 
     natural_keys = _DATASET_KEYS.get(table, ["id"])
-
-    df_no_nv = df.drop("normalization_version")
-    staging_cols = ", ".join(df_no_nv.columns)
-    staging_placeholders = ", ".join(f"s.{c}" for c in df_no_nv.columns)
+    cols = ", ".join(df.columns)
 
     con.execute("DROP TABLE IF EXISTS _staging")
-    polars_to_duckdb(con, df_no_nv, "_staging")
+    polars_to_duckdb(con, df, "_staging")
 
     join_on = " AND ".join(f"t.{k} = s.{k}" for k in natural_keys)
     con.execute(f"""
-        INSERT INTO {table} ({staging_cols})
-        SELECT {staging_placeholders}
+        INSERT INTO {table} ({cols})
+        SELECT {cols}
         FROM _staging s
         WHERE NOT EXISTS (
             SELECT 1 FROM {table} t

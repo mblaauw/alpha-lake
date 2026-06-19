@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS fundamentals (
     currency VARCHAR DEFAULT 'USD', unit VARCHAR DEFAULT 'raw',
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -143,6 +144,7 @@ CREATE TABLE IF NOT EXISTS insider_tx (
     transaction_code VARCHAR NOT NULL, shares DOUBLE, price DOUBLE, value DOUBLE,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -153,6 +155,7 @@ CREATE TABLE IF NOT EXISTS earnings_calendar (
     report_date DATE NOT NULL, session VARCHAR DEFAULT 'regular',
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -164,6 +167,7 @@ CREATE TABLE IF NOT EXISTS news_articles (
     published_at TIMESTAMPTZ, source_name VARCHAR,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -175,6 +179,7 @@ CREATE TABLE IF NOT EXISTS social_posts (
     text_hash VARCHAR, published_at TIMESTAMPTZ, engagement_json VARCHAR,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -187,6 +192,7 @@ CREATE TABLE IF NOT EXISTS entity_mentions (
     match_method VARCHAR,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -200,6 +206,7 @@ CREATE TABLE IF NOT EXISTS sentiment_annotations (
     input_text_hash VARCHAR, source_dataset_version VARCHAR,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
@@ -215,6 +222,7 @@ CREATE TABLE IF NOT EXISTS attention_metrics (
     velocity_score DOUBLE,
     source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
     content_hash VARCHAR, version_hash VARCHAR,
+    normalization_version INT DEFAULT 1,
     schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
     quality_status VARCHAR DEFAULT 'valid'
 );
