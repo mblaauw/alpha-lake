@@ -66,4 +66,4 @@ visibility set: primary key + available_at + version_hash + source_id
 
 ## Stronger-Model Gate
 
-Use stronger model or reviewer for replay determinism, `security_id`, `version_hash`, and Hypothesis temporal properties.
+Use stronger model or cross-check with `alpha-lake-invariants` skill for replay determinism, `security_id`, `version_hash`, and Hypothesis temporal properties.

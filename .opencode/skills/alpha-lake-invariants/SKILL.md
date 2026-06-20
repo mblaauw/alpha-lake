@@ -66,4 +66,4 @@ source_fetch_id, ingestion_run_id, schema_version, parser_version
 
 ## Stronger-Model Gate
 
-Route to a stronger model or reviewer for PIT reader logic, deterministic `security_id`, semantic `version_hash`, and golden replay determinism.
+Route to a stronger model or cross-check with invariants for PIT reader logic, deterministic `security_id`, semantic `version_hash`, and golden replay determinism.

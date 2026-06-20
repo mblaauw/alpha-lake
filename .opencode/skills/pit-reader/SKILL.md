@@ -5,7 +5,7 @@ description: Alpha-Lake point-in-time reader and ASOF JOIN template. Use when im
 
 # PIT Reader
 
-This is invariant-dense. Prefer stronger model or reviewer gate for substantive changes.
+This is invariant-dense. Prefer stronger model or cross-check with `alpha-lake-invariants` skill for substantive changes.
 
 ## Rules
 
