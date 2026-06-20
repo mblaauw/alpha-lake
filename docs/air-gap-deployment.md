@@ -1,6 +1,11 @@
-# Air-Gap Deployment
+# Air-Gap Deployment (Experimental)
 
-Alpha-Lake can be fully deployed in air-gapped (offline) environments by transferring pre-built vendor artifacts.
+> **⚠️ Experimental — not yet verified end-to-end on a network-isolated host.**
+> The `just vendor` recipe and the offline `just up --offline` path are structurally
+> in place but have not been tested in a true air-gapped environment. Report issues
+> if you try it and hit a blocker.
+
+Alpha-Lake can be deployed in air-gapped (offline) environments by transferring pre-built vendor artifacts.
 
 ## Prerequisites
 

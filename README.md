@@ -9,9 +9,25 @@ Stack-first, bitemporal market-data lakehouse. Ingests, archives, validates, and
 ```bash
 just up        # start the reference stack (Postgres + RustFS + OTel)
 just bootstrap # initialize the catalog
-just ingest    # ingest market data
+just ingest    # ingest market data (synthetic by default — see below)
 just health    # check dataset freshness and status
 ```
+
+**`just ingest` produces synthetic bars by default.** No API keys are needed. The synthetic
+pipeline generates deterministic market-data samples that pass all validation gates and
+let you exercise the full ingest → PIT-read path. To ingest **live** market data, set the
+corresponding `*_API_KEY` environment variables for your sources (see [Data suppliers](#datasets--data-suppliers))
+and the connector is activated automatically. Only sources with configured API keys are
+exercised end-to-end against real endpoints.
+
+### Live ingestion
+
+| Source | Env var |
+|--------|---------|
+| EODHD | `ALPHA_LAKE_EODHD_API_KEY` |
+| Tiingo | `ALPHA_LAKE_TIINGO_API_KEY` |
+| Alpaca | `ALPHA_LAKE_ALPACA_API_KEY` |
+| Reddit | `ALPHA_LAKE_REDDIT_CLIENT_ID`, `ALPHA_LAKE_REDDIT_CLIENT_SECRET` |
 
 ## Datasets & data suppliers
 
@@ -27,7 +43,7 @@ just health    # check dataset freshness and status
 | Corporate actions | EODHD / Tiingo splits-dividends | SEC filings (validation) |
 | Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
 
-## Build plan (9 epics)
+## Completed epics
 
 | Epic | Phase | Focus | Priority |
 |------|-------|-------|----------|
@@ -41,8 +57,7 @@ just health    # check dataset freshness and status
 | Epic 5 | Phase 5 | Serving: panel, PIT joins, catalog, health, latest_* | P1 ✅ |
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 ✅ |
 | Epic 7 | Phase 7 | Cloud-native hardening: secrets, snapshot pinning, observability, docs | P2 ✅ |
-| Epic 8 | Phase 8 | Hardening: contracts, SQLMesh, Arrow Flight, K8s | P2 |
-| Epic 300 | Storage Collapse | Unified blob store, Patito-derived DDL, mode-parity guard | P0 |
+| Epic 300 | Storage Collapse | Unified blob store, Patito-derived DDL, mode-parity guard | P0 ✅ |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
 
@@ -75,7 +90,7 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0005 | Security master PIT resolution | Accepted |
 | 0006 | Read-time adjusted price computation | Accepted |
 | 0007 | Embedded SQLite/local-fs harness for testing | Accepted |
-| 0008 | dlt for ingestion framework with idempotency | Accepted |
+| 0008 | dlt for ingestion framework with idempotency | Superseded |
 | 0009 | Fact store + transform library, never a feature store | Refined by 0017 |
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
@@ -90,6 +105,7 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0020 | Trading calendar and timezone policy | Accepted |
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
 | 0022 | Blob store — unified raw archive interface | Accepted |
+| 0023 | Dataset descriptor for unified canonical write | Accepted |
 
 ## Development
 

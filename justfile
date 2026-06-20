@@ -45,10 +45,17 @@ replay *args:
 freeze-fixtures:
     uv run python -m alpha_lake.fixtures freeze
 
-# Vendor offline dependencies
+# Vendor offline dependencies (experimental)
 vendor:
     uv export --no-dev --output-file vendor/wheelhouse/requirements.txt
     docker compose pull
+    rm -rf vendor/images && mkdir -p vendor/images
+    for img in postgres:17-alpine rustfs/rustfs:latest otel/opentelemetry-collector-contrib:0.123.0; do \
+      n=$$(echo "$$img" | tr '/:' '_'); \
+      docker save "$$img" | gzip > "vendor/images/$$n.tar.gz"; \
+    done
+    docker build -t alpha-lake-app:latest . && \
+      docker save alpha-lake-app:latest | gzip > vendor/images/alpha-lake_app.tar.gz
     tar czf vendor/images.tar.gz -C vendor/images .
     echo "Vendor complete — transfer vendor/ to air-gapped environment"
 
