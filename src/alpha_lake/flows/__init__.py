@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 import duckdb
 
 from alpha_lake.canonical import DATASETS, write_bars
+from alpha_lake.clock import get_clock
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
@@ -33,25 +34,25 @@ def ingest_bars(
     if not src:
         raise ValueError("No source configured for bars_daily")
 
-    run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"run_{get_clock().now().strftime('%Y%m%d_%H%M%S')}"
     total = 0
 
     for sid in security_ids:
-        raw_content = f'{{"date":"{from_date or to_date or date.today().isoformat()}","open":100,"high":101,"low":99,"close":100.5,"volume":10000}}'
+        raw_content = f'{{"date":"{from_date or to_date or get_clock().today().isoformat()}","open":100,"high":101,"low":99,"close":100.5,"volume":10000}}'
         raw_bytes = raw_content.encode()
 
         content_hash = archive(raw_bytes)
 
         df = bars_from_json(
-            raw=[{"date": from_date or date.today().isoformat(),
+            raw=[{"date": from_date or get_clock().today().isoformat(),
                    "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 10000}],
             security_id=sid,
             source_id=src,
             source_fetch_id=f"fetch_{sid}",
             ingestion_run_id=run_id,
             content_hash=content_hash,
-            available_at=datetime.now(UTC),
-            ingested_at=datetime.now(UTC),
+            available_at=get_clock().now(),
+            ingested_at=get_clock().now(),
         )
 
         df = check_market_sanity(df)
@@ -100,7 +101,7 @@ def reparse_bars(
     from alpha_lake.normalize import bars_from_json
     from alpha_lake.quality import check_market_sanity
     from alpha_lake.raw import read_raw
-    reparse_ts = datetime.now(UTC)
+    reparse_ts = get_clock().now()
     total = 0
     for sid in security_ids:
         if effective_date:
@@ -134,11 +135,10 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
     Uses window-function dedup for portability across DuckDB, Postgres, and SQLite.
     """
     ds = DATASETS.get(table)
-    if ds is None:
-        raise ValueError(f"No dataset descriptor for {table}")
-    keys = ds.natural_keys
+    if not ds:
+        raise ValueError(f"No dataset registered for {table}, cannot compact")
 
-    key_cols = ", ".join(keys)
+    key_cols = ", ".join(ds.natural_keys)
     stg = f"_compact_{table}"
 
     con.execute(f"""
