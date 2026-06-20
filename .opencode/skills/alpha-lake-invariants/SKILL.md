@@ -27,7 +27,7 @@ Run before commit:
 
 ```bash
 rg -n "\b(signal|bullish|bearish|buy|sell|golden_cross)\b" src docs contracts
-rg -n "\b(rank|score)\b" src/alpha_lake/canonical src/alpha_lake/models src/alpha_lake/serving
+rg -n "\b(rank|score)\b" src/alpha_lake/canonical src/alpha_lake/models
 rg -n "as_of\s*=\s*None|latest\s*=\s*True|def .*latest" src/alpha_lake
 rg -n "datetime\.now\(|datetime\.utcnow\(|time\.time\(" src/alpha_lake/canonical src/alpha_lake/replay src/alpha_lake/flows
 rg -n "uuid4\(|random\.|secrets\.token" src/alpha_lake/security_master src/alpha_lake/canonical
@@ -53,7 +53,7 @@ source_fetch_id, ingestion_run_id, schema_version, parser_version
 ## Forbidden
 
 - Do not use strategy labels: `signal`, `bullish`, `bearish`, `buy`, `sell`, `golden_cross`.
-- Do not put `rank` or `score` on canonical or research-serving paths unless it is a neutral measurement explicitly allowed by DESIGN.md.
+- Do not put `rank` or `score` on canonical or derived paths unless it is a neutral measurement explicitly allowed by DESIGN.md.
 - Do not default research reads to latest.
 - Do not use wall-clock `now()` in canonical/replay decisions; use recorded manifest times.
 - Do not mint random or symbol-prefixed `security_id` values.

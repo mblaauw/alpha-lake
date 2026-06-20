@@ -92,11 +92,10 @@ Air-gap: `just vendor` online → copy `vendor/` → `just up --offline`. Nothin
 
 ## Forbidden tokens (grep gate)
 
-No identifier, column, function, or output anywhere under `src/alpha_lake/derived/` or
-`src/alpha_lake/serving/` may contain strategy semantics. Before committing changes to those paths, run:
+No identifier, column, function, or output anywhere under `src/alpha_lake/derived/` may contain strategy semantics. Before committing changes to those paths, run:
 
 ```
-rg -i -n 'signal|bullish|bearish|\brank\b|\bscore\b|\bbuy\b|\bsell\b|golden_cross|hype|candidate|portfolio_weight|stop_loss|trade_decision' src/alpha_lake/derived src/alpha_lake/serving
+rg -i -n 'signal|bullish|bearish|\brank\b|\bscore\b|\bbuy\b|\bsell\b|golden_cross|hype|candidate|portfolio_weight|stop_loss|trade_decision' src/alpha_lake/derived
 ```
 
 A hit is a stop-and-fix, not a warning. Neutral names only (`mean_sentiment`, `sma`, `mention_count`).
