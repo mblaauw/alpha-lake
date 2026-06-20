@@ -20,7 +20,7 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Accepted |
-| 0013 | Nix flake as hermetic reproducibility ceiling | Proposed |
+| 0013 | Nix flake as hermetic reproducibility ceiling | Superseded |
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Accepted |
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Accepted |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Accepted |

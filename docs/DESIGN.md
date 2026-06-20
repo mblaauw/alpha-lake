@@ -846,7 +846,7 @@ flowchart TB
     IMG[vendor/images/*.tar — digest-pinned containers]
     BIN[vendor/bin/rustfs — optional static binary]
     CFG[.stack/ — service configs]
-    NIX[flake.nix — hermetic ceiling]
+    NIX[flake.nix — devShell]
   end
   J --> CR
   CR --> IMG
@@ -855,7 +855,7 @@ flowchart TB
 - **Python:** `uv.lock` committed; `uv export` → `vendor/wheelhouse/` for offline `uv sync --offline` inside the app image or embedded harness.
 - **App container:** the Alpha-Lake CLI runs inside a pinned app image so developers do not install Postgres, RustFS, DuckDB extensions, or service dependencies on the host.
 - **Services:** `compose.yaml` pins **image digests** for Postgres, RustFS, the Alpha-Lake app, and optional Dagster/OTel collector. `just vendor` runs `docker save`/`podman save` into `vendor/images/` for air-gap transfer + load into an internal registry. RustFS may instead be the vendored static binary in `vendor/bin/`.
-- **Hermetic option:** `flake.nix` pins Python, RustFS, Postgres, DuckDB, and CLI tooling together (`nix develop` / `nix run`). Maximal reproducibility; Compose + uv remains the pragmatic default.
+- **Developer convenience (devShell):** `flake.nix` provides a `nix develop` shell with Python 3.14 and uv pre-configured. It is a development convenience, not the reproducibility guarantee — the OCI image + uv.lock + vendored wheelhouse serve that role. Compose + uv remains the pragmatic default.
 
 **Air-gapped workflow:** `just vendor` (online) → copy `vendor/` → `just up --offline` (air-gapped). Nothing reaches the internet at run time.
 
