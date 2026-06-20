@@ -18,7 +18,7 @@ Use Polars as the DataFrame library and Patito as the validation layer:
 
 The pipeline boundary is:
 ```
-dlt fetch → raw archive → Polars parse → Patito validate → DuckLake bitemporal write → DuckDB serve
+connector fetch → raw archive → Polars parse → Patito validate → DuckLake bitemporal write → DuckDB serve
 ```
 
 Patito models inherit from Pydantic `BaseModel`, so existing Pydantic patterns (field types, validators, `model_config`) apply directly. A `BarFact` dataframe model carries both the column schema and per-row validation logic in one class.
@@ -30,7 +30,7 @@ Patito models inherit from Pydantic `BaseModel`, so existing Pydantic patterns (
 - Positive: Patito provides descriptive validation errors with per-column summaries, aiding debugging and observability.
 - Negative: Patito has a small community and slower release cadence than Polars; may lag on Polars or Pydantic upgrades.
 - Negative: Two data-processing paradigms (Polars expressions, DuckDB SQL) in the same project; requires discipline to enforce the "never both for the same job" rule.
-- Negative: Streaming ingestion sources that produce Arrow natively (some dlt sources) can bypass Polars entirely, making Patito validation an extra pass.
+- Negative: Streaming ingestion sources that produce Arrow natively can bypass Polars entirely, making Patito validation an extra pass.
 
 **References:**
 - DESIGN.md §6, §17, §28 (build plan, Phase 1), §29 (tech stack table)
