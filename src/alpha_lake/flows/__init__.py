@@ -1,15 +1,94 @@
 from __future__ import annotations
 
-from datetime import date
+import asyncio
+from datetime import date, datetime
 
 import duckdb
 
 from alpha_lake.canonical import DATASETS, write_bars
 from alpha_lake.clock import get_clock
+from alpha_lake.connectors import ConnectorFn, get_connector, has_api_key
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
 from alpha_lake.source_registry import get_primary_source
+
+
+def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime) -> bytes:
+    """Generate synthetic raw payload for offline/CI mode."""
+    import json
+    return json.dumps([{
+        "date": from_date or to_date or clock_now.date().isoformat(),
+        "open": 100.0,
+        "high": 101.0,
+        "low": 99.0,
+        "close": 100.5,
+        "volume": 10000,
+    }]).encode()
+
+
+async def _fetch_and_ingest(
+    con: duckdb.DuckDBPyConnection,
+    connector: ConnectorFn,
+    sid: str,
+    src: str,
+    from_date: str,
+    to_date: str,
+    run_id: str,
+    clock_now: datetime,
+) -> int:
+    """Fetch from connector, archive, normalize, write."""
+    raw_fetch = await connector(symbol=sid, from_date=from_date, to_date=to_date)
+    raw_bytes = raw_fetch.body
+    content_hash = archive(raw_bytes)
+
+    import json
+    raw_data = json.loads(raw_bytes)
+    records = raw_data if isinstance(raw_data, list) else [raw_data]
+
+    df = bars_from_json(
+        raw=records,
+        security_id=sid,
+        source_id=src,
+        source_fetch_id=raw_fetch.manifest.get("request_params_hash", f"fetch_{sid}"),
+        ingestion_run_id=run_id,
+        content_hash=content_hash,
+        available_at=clock_now,
+        ingested_at=clock_now,
+    )
+    df = check_market_sanity(df)
+    return write_bars(con, df)
+
+
+def _ingest_synthetic(
+    con: duckdb.DuckDBPyConnection,
+    sid: str,
+    src: str,
+    from_date: str,
+    to_date: str,
+    run_id: str,
+    clock_now: datetime,
+) -> int:
+    """Synthetic data path for offline/CI mode."""
+    raw_bytes = _synthetic_payload(from_date, to_date, clock_now)
+    content_hash = archive(raw_bytes)
+
+    import json
+    raw_data = json.loads(raw_bytes)
+    records = raw_data if isinstance(raw_data, list) else [raw_data]
+
+    df = bars_from_json(
+        raw=records,
+        security_id=sid,
+        source_id=src,
+        source_fetch_id=f"fetch_{sid}",
+        ingestion_run_id=run_id,
+        content_hash=content_hash,
+        available_at=clock_now,
+        ingested_at=clock_now,
+    )
+    df = check_market_sanity(df)
+    return write_bars(con, df)
 
 
 def ingest_bars(
@@ -19,12 +98,12 @@ def ingest_bars(
     to_date: str = "",
     source_id: str | None = None,
 ) -> int:
-    """Run the full bars ingestion pipeline for a list of security IDs.
+    """Run the full bars ingestion pipeline.
 
-    NOTE: Currently uses synthetic sample data. Real API fetch will be
-    wired in a future update when connector API keys are available in CI.
+    Tries the connector layer first (online); falls back to synthetic
+    data when no API credentials are available (offline/CI).
 
-    1. Generate synthetic raw data
+    1. Fetch raw data (connector or synthetic)
     2. Archive raw bytes
     3. Normalize to Polars DataFrame
     4. Validate with market sanity checks
@@ -34,29 +113,24 @@ def ingest_bars(
     if not src:
         raise ValueError("No source configured for bars_daily")
 
-    run_id = f"run_{get_clock().now().strftime('%Y%m%d_%H%M%S')}"
+    connector = get_connector(src, "bars_daily")
+    creds = has_api_key(src)
+    clock_now = get_clock().now()
+    run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
     total = 0
 
-    for sid in security_ids:
-        raw_content = f'{{"date":"{from_date or to_date or get_clock().today().isoformat()}","open":100,"high":101,"low":99,"close":100.5,"volume":10000}}'
-        raw_bytes = raw_content.encode()
-
-        content_hash = archive(raw_bytes)
-
-        df = bars_from_json(
-            raw=[{"date": from_date or get_clock().today().isoformat(),
-                   "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 10000}],
-            security_id=sid,
-            source_id=src,
-            source_fetch_id=f"fetch_{sid}",
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=get_clock().now(),
-            ingested_at=get_clock().now(),
-        )
-
-        df = check_market_sanity(df)
-        total += write_bars(con, df)
+    if connector and creds:
+        async def _run_all():
+            t = 0
+            for sid in security_ids:
+                t += await _fetch_and_ingest(
+                    con, connector, sid, src, from_date, to_date, run_id, clock_now,
+                )
+            return t
+        total = asyncio.run(_run_all())
+    else:
+        for sid in security_ids:
+            total += _ingest_synthetic(con, sid, src, from_date, to_date, run_id, clock_now)
 
     return total
 
