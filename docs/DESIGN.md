@@ -57,7 +57,7 @@ flowchart LR
   end
   subgraph LAKE[Alpha-Lake]
     direction TB
-    ING[dlt ingestion]
+    ING[httpx connectors]
     RAW[(Raw archive<br/>immutable)]
     CAN[(DuckLake canonical<br/>bitemporal)]
     SRV[Serving<br/>readers · panel · catalog · health]
@@ -73,15 +73,14 @@ flowchart LR
   CAN -. parquet .-> OBJ
 ```
 
-The domain core (`models/`, `ports/`) has no I/O. Adapters implement ports; the serving layer is the only thing consumers import.
+The domain core (`models/`) has no I/O. Adapters implement the serving contracts; the serving layer is the only thing consumers import.
 
 ### 2.2 Layer rules (CI-enforced by `import-linter`, §17)
 
 | Layer | May import | May not import |
 |---|---|---|
 | `models/` | stdlib, polars, patito | everything else |
-| `ports/` | `models/` | adapters, storage |
-| adapters (`connectors`, `canonical`, `quality`, `catalog`, `serving`) | `models/`, `ports/`, `storage/` | orchestration |
+| adapters (`connectors`, `canonical`, `quality`, `catalog`, `serving`) | `models/`, `storage/` | orchestration |
 | `flows/`, `cli` | all above | — |
 
 ## 3. Runtime model & self-containment
@@ -150,7 +149,7 @@ The lake's market models describe **facts**; operational datasets describe pipel
 
 ```mermaid
 flowchart LR
-  E[fetch · dlt] --> R[(archive raw)] --> N[parse · Polars]
+  E[fetch · connector] --> R[(archive raw)] --> N[parse · Polars]
   N --> V[validate · Patito] --> Q{ok?}
   Q -- yes --> C[(canonicalize · DuckLake · bitemporal SCD2)]
   Q -- no --> X[(quarantine · lineage)]
@@ -214,7 +213,7 @@ Each connector is modeled as one issue per (dataset, supplier) pair on the proje
 
 ## 8. Connectors & raw archive
 
-**Connectors** (dlt sources + custom `httpx`/`tenacity` resources) build requests, enforce rate limits, apply retry, archive the raw response **before any parse**, emit fetch events, return fetch metadata. They must not interpret, write canonical, or hide partial failure.
+**Connectors** (custom `httpx`/`tenacity` functions, dispatched via `get_connector()` registry) build requests, enforce rate limits, apply retry, archive the raw response **before any parse**, emit fetch events, return fetch metadata. They must not interpret, write canonical, or hide partial failure.
 
 **Raw archive** — immutable, content-addressed:
 
@@ -695,19 +694,35 @@ The factory `get_blob_store(uri: str) -> BlobStore` selects the backend by URI s
 
 **Snapshot retention and compaction:** DuckLake provides built-in maintenance operations: `CALL lake_catalog.merge_files(...)`, `CALL lake_catalog.expire_snapshots(...)`, and `CALL lake_catalog.checkpoint(...)`. Compaction may rewrite physical Parquet files but preserves snapshot-to-data mappings. Retention is configurable per snapshot. See [ADR-0021](docs/adr/0021-snapshot-retention-compaction-reproducibility.md) for the full retention and compaction policy. See [operations.md](docs/operations.md) for monitoring thresholds and growth expectations.
 
-## 17. Ingestion pipeline — dlt
+## 17. Ingestion pipeline — connector dispatch
+
+Connectors are registered per source in the connector registry (`src/alpha_lake/connectors/__init__.py`), then dispatched at runtime by `ingest_bars()` in `flows/__init__.py`:
 
 ```python
-@dlt.source
-def eodhd():
-    @dlt.resource(write_disposition="merge", primary_key=BARS_NATURAL_KEY)
-    def bars(): ...     # rest_api/httpx → yields Polars/Arrow
+connector = get_connector(src, "bars_daily")
+creds = has_api_key(src)
+clock_now = get_clock().now()
 
-# flow: extract → archive raw (pre-parse) → Polars normalize → Patito validate
+if connector and creds:
+    async def _run_all():
+        for sid in security_ids:
+            total += await _fetch_and_ingest(
+                con, connector, sid, src, from_date, to_date, run_id, clock_now,
+            )
+    total = asyncio.run(_run_all())
+else:
+    for sid in security_ids:
+        total += _ingest_synthetic(con, sid, src, from_date, to_date, run_id, clock_now)
+
+# flow: connector fetch → archive raw (pre-parse) → Polars normalize → Patito validate
 #       → DuckLake SCD2 write on knowledge time → snapshot tagged ingestion_run_id
 ```
 
-**dlt ownership boundary:** dlt owns extract mechanics, incremental cursor state, retries, and raw/staging landing only. Alpha-Lake owns the canonical bitemporal MERGE in DuckDB SQL. There is exactly one canonical SCD2 implementation: `effective_date` is the valid-time dimension, `available_at` is the knowledge-time axis, and `version_hash` is semantic version identity. **Schema contracts:** `freeze` on canonical (new fields require a version bump), `evolve` only in raw/staging.
+**Connector contract:** connectors fetch and archive. They return a `RawFetch` with body + manifest metadata. They must not parse, validate, write canonical, or hide partial failure. Per-entity outcomes (`ok`, `empty`, `failed`, `quarantined`) are recorded as an outcome ledger, not dlt incremental state.
+
+**Synthetic fallback:** when no API credentials are available (CI, offline), `_ingest_synthetic()` generates deterministic sample data that passes market sanity checks. This preserves end-to-end test coverage without live API access.
+
+**Registry data drives behavior:** per-source auth type, rate limit, retry policy, and parser version come from `source_registry` data — not hardcoded in connector code. See `src/alpha_lake/source_registry.py`, `config/stack.toml`.
 
 ## 18. Serving API
 
@@ -750,7 +765,7 @@ flowchart LR
 
 **Reference execution:** `just up` starts Postgres + RustFS + the app container; `just ingest ...` executes the CLI in the app container against the real stack.
 
-**Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates; dlt's Dagster integration drives extraction. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
+**Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
 ## 20. Observability — OpenTelemetry
 
@@ -860,7 +875,7 @@ alpha-lake/
 ├── vendor/{wheelhouse,images,bin}/                     # offline deps
 ├── .stack/{rustfs,postgres,dagster,otel}/              # pinned service configs
 ├── src/alpha_lake/
-│   ├── models/ ports/                                  # pure core
+│   ├── models/                                         # pure core
 │   ├── connectors/ raw/ normalize/ quality/ canonical/ # ingest path
 │   ├── security_master/ corp_actions/ derived/         # facts
 │   ├── catalog/ storage/ serving/ replay/ fixtures/
@@ -910,8 +925,8 @@ alpha-lake/
 
 Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/RustFS object storage + app-container execution — are exercised immediately.
 
-- **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, RustFS object store, Alpha-Lake app container, config loading, DuckLake attach, `models/` + `ports/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
-- **Phase 1 — bars vertical slice against the real stack.** dlt source → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
+- **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, RustFS object store, Alpha-Lake app container, config loading, DuckLake attach, `models/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
+- **Phase 1 — bars vertical slice against the real stack.** Connector fetch → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
 - **Phase 2 — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
 - **Phase 3 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
 - **Phase 4 — remaining datasets.** fundamentals → insider → news_articles + social_posts → entity_mentions + sentiment_annotations + attention_metrics → earnings_calendar, each repeating the Phase-1 vertical pattern.
@@ -930,7 +945,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Catalog DB | PostgreSQL reference path; SQLite embedded harness only |
 | Object store | RustFS S3-compatible reference path; local FS embedded harness only |
 | Engine | DuckDB |
-| Ingestion | dlt (incremental, SCD2, contracts, REST toolkit) |
+| Ingestion | httpx + tenacity (per-source connector registry + synthetic fallback) |
 | Dataframes + models + validation | Polars + Patito |
 | Transform | DuckDB SQL ▸ SQLMesh |
 | Orchestration | Typer CLI in app container first; Dagster optional over `flows/` |
@@ -949,7 +964,7 @@ Strategy logic; materialized features; intraday/streaming; distributed compute; 
 
 ```mermaid
 flowchart LR
-  A[fetch · dlt] --> B[archive raw] --> C[parse · Polars] --> D[validate · Patito]
+  A[fetch · connector] --> B[archive raw] --> C[parse · Polars] --> D[validate · Patito]
   D --> E[reconcile] --> F[(canonicalize · DuckLake · bitemporal)] --> G[serve · DuckDB/Arrow · PIT]
 ```
 
