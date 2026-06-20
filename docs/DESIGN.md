@@ -695,7 +695,7 @@ alpha-lake/
 
 Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/RustFS object storage + app-container execution — are exercised immediately.
 
-Each phase ships only when the golden replay hash is stable and boundary tests are green. See [`docs/adr/README.md`](docs/adr/README.md) and the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the current phase and completed milestones. The build order is: stack skeleton → bars vertical slice → embedded replay harness → identity & actions → remaining datasets → serving surface → orchestration hardening → packaging & air-gap → hardening.
+Each phase ships only when the golden replay hash is stable and boundary tests are green. See [`docs/adr/README.md`](docs/adr/README.md) and the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the current phase and completed milestones. The build order is: stack skeleton → bars vertical slice → embedded replay harness → identity & actions → remaining datasets → serving surface → orchestration → packaging & air-gap.
 
 ## 29. Tech stack
 
