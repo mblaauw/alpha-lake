@@ -49,14 +49,12 @@ def _mk(table: str, **kw) -> pl.DataFrame:
 
 
 def test_write_datasets():
-    from pathlib import Path
     con = duckdb.connect()
     con.execute("SET timezone = 'UTC'")
-    schema_sql = Path("src/alpha_lake/catalog/schema.sql").read_text()
-    for stmt in schema_sql.split(";"):
-        s = stmt.strip()
-        if s:
-            con.execute(s)
+    con.execute("INSTALL ducklake")
+    con.execute("LOAD ducklake")
+    con.execute("INSTALL sqlite")
+    con.execute("LOAD sqlite")
 
     cases = [
         ("fundamentals", dict(security_id="sec_t", source_id="sec",

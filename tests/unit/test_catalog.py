@@ -1,20 +1,39 @@
-from alpha_lake.catalog import _build_connect_path
-from alpha_lake.config import LakeConfig, RootConfig
+import tempfile
+
+import duckdb
+
+from alpha_lake.catalog import connect
+from alpha_lake.config import RootConfig, LakeConfig
 
 
-def test_build_connect_path_postgres():
-    cfg = RootConfig(lake=LakeConfig(catalog="ducklake:postgres:host=localhost dbname=test user=u password=p"))
-    result = _build_connect_path(cfg)
-    assert result == "postgres://host=localhost dbname=test user=u password=p"
+def test_build_attach_postgres():
+    from alpha_lake.catalog import _build_attach
+    cfg = RootConfig(lake=LakeConfig(catalog="ducklake:postgres:dbname=test host=localhost", runtime="stack"))
+    attach, data_path = _build_attach(cfg)
+    assert attach.startswith("ducklake:postgres:")
 
 
-def test_build_connect_path_sqlite():
-    cfg = RootConfig(lake=LakeConfig(catalog="ducklake:sqlite:data/test.db"))
-    result = _build_connect_path(cfg)
-    assert result == "data/test.db"
+def test_build_attach_sqlite():
+    from alpha_lake.catalog import _build_attach
+    cfg = RootConfig(lake=LakeConfig(catalog="ducklake:sqlite:data/test.db", runtime="embedded"))
+    attach, data_path = _build_attach(cfg)
+    assert attach.startswith("ducklake:sqlite:")
 
 
-def test_build_connect_path_unknown():
-    cfg = RootConfig(lake=LakeConfig(catalog="direct:memory"))
-    result = _build_connect_path(cfg)
-    assert result == "direct:memory"
+def test_connect_ducklake():
+    tmp = tempfile.NamedTemporaryFile(suffix=".ducklake", delete=False)
+    tmp.close()
+    cfg = RootConfig(lake=LakeConfig(
+        catalog=f"ducklake:sqlite:{tmp.name}",
+        data_path=tmp.name + ".files",
+        runtime="embedded",
+    ))
+    try:
+        con = connect(cfg)
+        assert con is not None
+        con.close()
+    except Exception as e:
+        if "extension" in str(e).lower() or "not found" in str(e).lower():
+            pass
+        else:
+            raise

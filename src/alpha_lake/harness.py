@@ -6,7 +6,6 @@ from pathlib import Path
 
 import duckdb
 
-from alpha_lake.duckdb_ext import ensure_extensions
 
 
 class EmbeddedHarness:
@@ -41,13 +40,10 @@ class EmbeddedHarness:
 
         self._conn = duckdb.connect(self._db_path or ":memory:")
         self._conn.execute("SET timezone = 'UTC'")
-        ensure_extensions(self._conn)
-
-        schema_sql = (Path(__file__).parent / "catalog" / "schema.sql").read_text()
-        for statement in schema_sql.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                self._conn.execute(stmt)
+        self._conn.execute("INSTALL ducklake")
+        self._conn.execute("LOAD ducklake")
+        self._conn.execute("CREATE SCHEMA IF NOT EXISTS lake_catalog")
+        self._conn.execute("USE lake_catalog")
 
     def stop(self) -> None:
         if self._conn:

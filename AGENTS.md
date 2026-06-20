@@ -15,7 +15,7 @@ context on **every** turn. Detail lives in skills (pull) and `@`-referenced file
 Alpha-Lake is a stack-first, bitemporal, replayable **market-data lakehouse**. It ingests, archives,
 validates, and serves **point-in-time-correct** market facts. It owns facts; it knows nothing about strategy.
 
-Stack: Python 3.14 · uv · DuckLake 1.0 (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
+Stack: Python 3.14 · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · MinIO (S3) ·
 dlt ingestion · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose.
 
 Full spec: `@docs/DESIGN.md`. Decisions: `@docs/adr/`.

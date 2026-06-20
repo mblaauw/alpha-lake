@@ -87,7 +87,6 @@ layers = [
     "config",
     "obs",
     "calendar_",
-    "duckdb_ext",
     "interop",
     "ports",
     "models",
