@@ -44,18 +44,58 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
         con.execute("INSTALL postgres")
         con.execute("LOAD postgres")
 
+        s3 = cfg.s3
+        con.execute("SET s3_endpoint = ?", [s3.endpoint])
+        con.execute("SET s3_access_key_id = ?", [s3.access_key])
+        con.execute("SET s3_secret_access_key = ?", [s3.secret_key])
+        con.execute("SET s3_region = 'us-east-1'")
+        con.execute("SET s3_use_ssl = ?", ["false" if not s3.use_ssl else "true"])
+        if s3.url_style:
+            con.execute("SET s3_url_style = ?", [s3.url_style])
+
     attach_str, data_path = _build_attach(cfg)
     con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
     con.execute("USE lake_catalog")
     return con
 
 
+def _ensure_bucket(cfg: RootConfig) -> None:
+    """Create the S3 data bucket if it doesn't already exist."""
+    import subprocess
+    import re
+
+    data_path = cfg.lake.data_path
+    if not data_path.startswith("s3://"):
+        return
+    bucket = data_path.removeprefix("s3://").split("/")[0]
+    s3 = cfg.s3
+    mc_alias = "lake"
+    subprocess.run(
+        ["mc", "alias", "set", mc_alias,
+         f"http://{s3.endpoint}", s3.access_key, s3.secret_key,
+         "--api", "S3v4"],
+        capture_output=True, check=False,
+    )
+    result = subprocess.run(
+        ["mc", "ls", f"{mc_alias}/{bucket}"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        subprocess.run(
+            ["mc", "mb", f"{mc_alias}/{bucket}"],
+            capture_output=True, check=False,
+        )
+
+
 def bootstrap(cfg: RootConfig) -> None:
     """Initialize the DuckLake catalog.
 
+    Creates the S3 data bucket if needed, then attaches the DuckLake catalog.
     DuckLake creates the catalog database and metadata tables automatically
-    on ATTACH. No additional DDL is needed for the lake infrastructure.
+    on ATTACH.
     """
+    if cfg.lake.runtime == "stack":
+        _ensure_bucket(cfg)
     con = connect(cfg)
     con.close()
 

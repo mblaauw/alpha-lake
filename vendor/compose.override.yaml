@@ -4,6 +4,6 @@ services:
   postgres:
     image: postgres:17-alpine
   rustfs:
-    image: ghcr.io/rustfs/rustfs:latest
+    image: rustfs/rustfs:latest
   otel:
     image: otel/opentelemetry-collector-contrib:latest
