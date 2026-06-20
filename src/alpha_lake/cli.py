@@ -172,20 +172,14 @@ def _check_postgres(return_bool: bool = False) -> bool:
 
 
 def _check_rustfs(return_bool: bool = False) -> bool:
-    from alpha_lake.config import get_config as _get_cfg
-    cfg = _get_cfg()
+    host = "rustfs"
+    port = 9000
     try:
-        r = httpx.get(f"http://{cfg.s3.endpoint}/minio/health/live", timeout=5.0)
-        if r.status_code == 200:
-            _output("rustfs: ok")
+        with socket.create_connection((host, port), timeout=5.0):
+            _output(f"{host}: ok")
             return True
-        else:
-            _output(f"rustfs: unexpected status {r.status_code}")
-            if not return_bool:
-                sys.exit(1)
-            return False
     except Exception as e:
-        _output(f"rustfs: unreachable — {e}")
+        _output(f"{host}: unreachable — {e}")
         if not return_bool:
             sys.exit(1)
         return False
