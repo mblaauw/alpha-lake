@@ -61,7 +61,7 @@ immediately (its entrypoint prints CLI help and returns). Do **not** use `docker
 — there is no long-running container to exec into. Use:
 
 ```
-docker compose run --rm app alpha-lake <subcommand> [args]
+docker compose run --rm app <subcommand> [args]
 ```
 
 **Config changes require rebuild.** When you modify `config/stack.toml` or `src/` files, run

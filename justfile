@@ -2,7 +2,7 @@
 
 # Start the reference stack
 up *flags:
-    docker compose up -d {{ flags }}
+    docker compose up -d postgres minio otel {{ flags }}
 
 # Stop the reference stack
 down:
@@ -19,15 +19,15 @@ logs:
 
 # Bootstrap the catalog (use run --rm: app container exits immediately)
 bootstrap:
-    docker compose run --rm app alpha-lake bootstrap
+    docker compose run --rm app bootstrap
 
 # Ingest market data (use run --rm: app container exits immediately)
 ingest *args:
-    docker compose run --rm app alpha-lake ingest {{ args }}
+    docker compose run --rm app ingest {{ args }}
 
 # Run health checks (use run --rm: app container exits immediately)
 health:
-    docker compose run --rm app alpha-lake health
+    docker compose run --rm app health
 
 # Run tests (embedded harness)
 test *args:
