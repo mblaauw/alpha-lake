@@ -60,7 +60,8 @@ All work is tracked on the [Alpha-Lake Project Board](https://github.com/users/m
 
 ## Design
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).
+See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).  
+See [docs/operations.md](docs/operations.md) for operations guidance, memory sizing, and monitoring thresholds.
 
 ## Architecture Decision Records
 
@@ -78,7 +79,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementat
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Accepted |
-| 0013 | Nix flake as hermetic reproducibility ceiling | Superseded |
+| 0013 | Nix flake as hermetic reproducibility ceiling | Superseded by ADR-0012 |
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Accepted |
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Accepted |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Accepted |

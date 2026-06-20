@@ -97,13 +97,43 @@ def compact(table: str = typer.Option(..., help="Table to compact")):
 
 
 @app.command()
+def validate():
+    """Validate dataset integrity and freshness (not yet implemented)."""
+    _output("validate: not yet implemented — use `just test` for validation checks.")
+
+
+@app.command()
+def gap_fill(
+    security_id: str = typer.Option(..., help="Security ID"),
+    start: str = typer.Option(..., help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., help="End date (YYYY-MM-DD)"),
+):
+    """Gap-fill missing dates for a security (not yet implemented)."""
+    _output(f"gap-fill: not yet implemented for {security_id} {start}–{end}.")
+
+
+@app.command()
+def rebuild(
+    table: str = typer.Option(..., help="Table to rebuild"),
+):
+    """Rebuild a canonical table from raw archives (not yet implemented)."""
+    _output(f"rebuild: not yet implemented for {table}.")
+
+
+@app.command()
+def replay():
+    """Run golden replay against frozen fixtures."""
+    _output("replay: use `just replay` to run golden replay via pytest.")
+
+
+@app.command()
 def health():
     """Check dataset freshness and system health."""
     cfg = get_config()
     checks: dict = {"runtime": cfg.lake.runtime, "datasets": {}}
     if cfg.lake.runtime == "stack":
         checks["postgres"] = _check_postgres(return_bool=True)
-        checks["rustfs"] = _check_rustfs(return_bool=True)
+        checks["minio"] = _check_minio(return_bool=True)
     else:
         checks["runtime_check"] = "embedded"
     _output(f"Runtime: {cfg.lake.runtime}", data={"runtime": cfg.lake.runtime})
@@ -141,21 +171,21 @@ def _check_postgres(return_bool: bool = False) -> bool:
         return False
 
 
-def _check_rustfs(return_bool: bool = False) -> bool:
+def _check_minio(return_bool: bool = False) -> bool:
     from alpha_lake.config import get_config as _get_cfg
     cfg = _get_cfg()
     try:
         r = httpx.get(f"http://{cfg.s3.endpoint}/minio/health/live", timeout=5.0)
         if r.status_code == 200:
-            _output("rustfs: ok")
+            _output("minio: ok")
             return True
         else:
-            _output(f"rustfs: unexpected status {r.status_code}")
+            _output(f"minio: unexpected status {r.status_code}")
             if not return_bool:
                 sys.exit(1)
             return False
     except Exception as e:
-        _output(f"rustfs: unreachable — {e}")
+        _output(f"minio: unreachable — {e}")
         if not return_bool:
             sys.exit(1)
         return False

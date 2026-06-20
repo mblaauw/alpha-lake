@@ -28,7 +28,7 @@
 ## Metrics
 - **102 total tests**
 - **import-linter**: KEPT
-- **All images pinned**: postgres, rustfs, otel
+- **All images pinned**: postgres, minio, otel
 
 ## Sign-off
 

@@ -4,11 +4,11 @@
 
 | Function | Description | PIT-safe |
 |----------|-------------|----------|
-| `read_bars_asof(con, security_ids, as_of, ...)` | Returns newest bars with `available_at <= as_of` | ✅ |
-| `read_bars_adjusted(con, security_ids, as_of, ..., price_mode)` | Like `read_bars_asof` with split adjustment | ✅ |
-| `read_bars_latest(con, security_ids, ...)` | Convenience — calls `read_bars_asof` with `now()` | ⚠️ Non-research |
-| `read_panel(con, spine, as_of, dataset)` | ASOF JOIN from spine (security_id + effective_date) | ✅ |
-| `read_asof_join(con, spine, dataset)` | Per-row PIT join with per-row `as_of` column | ✅ |
+| `read_bars_asof(con, security_ids, as_of, ..., snapshot_id)` | Returns newest bars with `available_at <= as_of`. Optional `snapshot_id` pins DuckLake snapshot for reproducibility. | ✅ |
+| `read_bars_adjusted(con, security_ids, as_of, ..., price_mode, snapshot_id)` | Like `read_bars_asof` with split adjustment | ✅ |
+| `read_bars_latest(con, security_ids, ..., snapshot_id)` | Convenience — calls `read_bars_asof` with `now()` | ⚠️ Non-research |
+| `read_panel(con, spine, as_of, dataset, snapshot_id)` | ASOF JOIN from spine (security_id + effective_date) | ✅ |
+| `read_asof_join(con, spine, dataset, snapshot_id)` | Per-row PIT join with per-row `as_of` column | ✅ |
 
 ## Corporate Actions
 
@@ -35,6 +35,10 @@
 |----------|-------------|
 | `list_datasets(con)` | List all canonical tables with schema version and row count |
 | `dataset_health(con, dataset)` | Per-dataset status, rows, latest date |
+| `catalog_health(con)` | Overall catalog health: snapshot count, latest snapshot ID |
+| `list_snapshots(con)` | List all DuckLake snapshots with timestamp and changes |
+| `set_snapshot(con, snapshot_id)` | Pin reads to a specific DuckLake snapshot for reproducibility |
+| `resolve_ingestion_run(con, run_id)` | Map ingestion_run_id to DuckLake snapshot ID |
 
 ## Dataset Read Pattern
 

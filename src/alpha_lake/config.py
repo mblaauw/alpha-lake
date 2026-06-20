@@ -22,7 +22,7 @@ class SourceDatasetConfig(pydantic.BaseModel):
 
 
 class S3Config(pydantic.BaseModel):
-    endpoint: str = "rustfs:9000"
+    endpoint: str = "minio:9000"
     url_style: str = "path"
     use_ssl: bool = False
 

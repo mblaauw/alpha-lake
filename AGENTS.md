@@ -54,7 +54,7 @@ just up | down | reset | logs        # reference stack lifecycle
 just bootstrap | ingest | health     # operate the lake
 just test *[path]                    # unit + integration (embedded)
 just replay *[path]                  # golden replay (tests/replay/)
-just freeze-fixtures                 # stub — not yet implemented
+just freeze-fixtures                 # freeze golden replay fixtures
 just lint                            # ruff + ty + import-linter
 just vendor                          # offline wheelhouse + images (online step)
 ```

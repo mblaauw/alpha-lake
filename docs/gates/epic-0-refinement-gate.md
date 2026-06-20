@@ -33,9 +33,9 @@ Every item must be ticked or explicitly deferred before Phase 1 work begins.
 | # | Criterion | Status | Evidence | Notes |
 |---|-----------|--------|----------|-------|
 | F1 | CI pipeline passes on `main` (lint, type-check, test, import-linter) | ✅ | `.github/workflows/ci.yaml` runs ruff → ty → import-linter → pytest on every PR and push to main | PR #163 |
-| F2 | Compose stack boots cleanly with `just up` | ⚠️ Needs verification | `docker compose up -d` should start postgres + rustfs + app + otel | Requires running stack; last verified during initial bootstrap |
-| F3 | All three services (postgres, rustfs, app) report healthy | ⚠️ Needs verification | `docker compose ps` should show all 4 services healthy | Healthchecks defined in compose.yaml; actual run needed |
-| F4 | `just health` passes without errors | ✅ | `just health` runs TCP check on postgres:5432 + HTTP check on rustfs:9000, prints dataset quality config | PR #160. Full validation requires stack running |
+| F2 | Compose stack boots cleanly with `just up` | ⚠️ Needs verification | `docker compose up -d` should start postgres + minio + app + otel | Requires running stack; last verified during initial bootstrap |
+| F3 | All three services (postgres, minio, app) report healthy | ⚠️ Needs verification | `docker compose ps` should show all 4 services healthy | Healthchecks defined in compose.yaml; actual run needed |
+| F4 | `just health` passes without errors | ✅ | `just health` runs TCP check on postgres:5432 + HTTP check on minio:9000, prints dataset quality config | PR #160. Full validation requires stack running |
 | F5 | `just bootstrap` initializes catalog schema | ✅ | Creates `source`, `source_dataset`, `ingestion_run`, `manifest` tables | PR #166. Full validation requires stack running |
 | F6 | import-linter enforces layer boundaries | ✅ | `uv run lint-imports`: 55 files, 77 dependencies, layer-rules KEPT | PR #158. Layer order: cli → flows → serving → catalog → quality → canonical → connectors → ports → models |
 
@@ -62,7 +62,7 @@ Every item must be ticked or explicitly deferred before Phase 1 work begins.
 |---|-----------|--------|----------|-------|
 | R1 | `just lint` runs ruff, ty, and import-linter | ✅ | `justfile`: `ruff check`, `ty check`, `lint-imports` | PR #158 |
 | R2 | All dependencies pinned in `uv.lock` | ✅ | `uv.lock` committed; `uv sync --frozen` in Dockerfile ensures exact versions | Lockfile tracked in git |
-| R3 | Docker images are tagged (not `:latest` on all services) | ❌ | `postgres:17-alpine`, `rustfs:latest`, `otel:latest` — no digest pins | ADR-0012 requires digest-pinned images. `vendor/compose.override.yaml` documents but does not pin. Deferred to Phase 7. |
+| R3 | Docker images are tagged (not `:latest` on all services) | ❌ | `postgres:17-alpine`, `minio:latest`, `otel:latest` — no digest pins | ADR-0012 requires digest-pinned images. `vendor/compose.override.yaml` documents but does not pin. Deferred to Phase 7. |
 | R4 | Vendor directory structure exists for air-gap | ✅ | `vendor/wheelhouse/`, `vendor/images/`, `vendor/bin/`, `vendor/compose.override.yaml` | PR #164. Actual artifacts not populated (requires `just vendor`) |
 
 ### Test Infrastructure
