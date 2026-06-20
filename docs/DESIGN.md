@@ -259,24 +259,9 @@ security_id  source_id  schema_version  parser_version
 source_fetch_id  raw_payload_hash  ingestion_run_id  content_hash  version_hash  quality_status
 ```
 
-**Per-dataset business fields & keys:**
-
-| Dataset | Business fields | Natural key | Version identity |
-|---|---|---|---|
-| `bars` | open, high, low, close, volume (**raw only**) | `security_id + effective_date + source_id` | natural + `available_at + version_hash` |
-| `fundamentals` | fiscal_period, statement_type, line_item, value, currency | `… + fiscal_period + statement_type + line_item + source_id` | natural + `available_at + version_hash + parser_version` |
-| `insider_tx` | filer_cik, issuer_cik, transaction_code, shares, price, value | `filer_cik + issuer_cik + transaction_date + transaction_code + shares + price + source_id` | natural + `available_at + version_hash` |
-| `corp_actions` | action_type, ratio/amount, ex_date | `security_id + action_type + effective_date + source_id` | natural + `available_at + version_hash` |
-| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | `article_id + source_id` | natural + `available_at + version_hash` |
-| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | `post_id_hash + source_id` | natural + `available_at + version_hash` |
-| `entity_mentions` | mention_id, text_item_id, text_item_type (news_article / social_post), security_id, entity_name, entity_type, confidence, match_method | `mention_id` | natural + `available_at + version_hash` |
-| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label (positive/neutral/negative), model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | `annotation_id` | natural + `available_at + version_hash + model_version` |
-| `attention_metrics` | security_id, window_start, window_end, window_type (1d/3d/7d), article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | `security_id + window_start + window_end + window_type` | natural + `available_at + version_hash` |
-| `earnings_calendar` | report_date, session | `security_id + report_date + source_id` | natural + `available_at + version_hash` |
+**Natural keys and version identity** are declared per dataset in the `Dataset` descriptor — see the `DATASETS` registry in `src/alpha_lake/canonical/__init__.py` and [ADR-0023](docs/adr/0023-dataset-descriptor-unified-write.md). Every dataset uses `natural_keys + [available_at, version_hash]` as the dedup key.
 
 **Raw-only bars rule:** adjusted prices are *views* (§12), never stored facts; `price_mode` is a serve parameter, never part of identity.
-
-**Hash canonicalization:** `version_hash` and any fallback hash (e.g. insider `normalized_hash` when CIK is absent) use the pinned recipe above or idempotency breaks across parser versions.
 
 ## 10. Security master & resolution
 
@@ -305,29 +290,9 @@ Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the 
 
 ## 11. The point-in-time read (mechanics)
 
-Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source, then source precedence. The preferred implementation for stage 1 is DuckDB's native `ASOF JOIN` against the requested spine (newest version whose `available_at <= as_of`); window-function collapse is acceptable only for small/simpler paths or tests.
+Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source (`QUALIFY row_number() OVER (PARTITION BY ... ORDER BY available_at DESC) = 1`), then source precedence by `source_dataset_registry.priority`. See the PIT reader skill (`pit-reader`) for implementation patterns and leakage-test requirements.
 
 For historical observation datasets such as bars, the valid-time rule is `effective_date <= :as_of`. For known-future event datasets such as earnings calendars or announced corporate actions, readers may return future `event_date`/`effective_date` rows if `available_at <= :as_of`; the fact that an event is scheduled in the future can itself be knowable today.
-
-```sql
-WITH versioned AS (                              -- stage 1: newest version per (fact, source)
-  SELECT *, row_number() OVER (
-            PARTITION BY security_id, effective_date, source_id
-            ORDER BY available_at DESC, version_hash) AS v_rn
-  FROM bars
-  WHERE security_id = :sid
-    AND effective_date BETWEEN :start AND :end
-    AND effective_date <= :as_of
-    AND available_at <= :as_of)
-SELECT * EXCLUDE (v_rn, s_rn) FROM (             -- stage 2: collapse sources by precedence
-  SELECT *, row_number() OVER (
-            PARTITION BY security_id, effective_date
-            ORDER BY dataset_source_priority ASC) AS s_rn
-  FROM versioned WHERE v_rn = 1)
-WHERE s_rn = 1;
-```
-
-Stage 1 alone returns one row per source; stage 2 yields the single canonical answer. Dataset-specific source priority is registry data (§7).
 
 **Restatement (worked example):**
 
@@ -369,56 +334,16 @@ raw price 2025-01-01; split effective 2025-06-01; split available_at 2025-06-02
 
 - *Structural* — required fields, parseable types, valid enums/dates, non-empty PK.
 - *Market sanity* — no zero/negative price; no impossible OHLC (`low ≤ open,close ≤ high`); `|return| > tol` requires a corp-action record; non-negative volume; deterministic dedup.
-- *Freshness (per-dataset SLA)*:
-
-  | Dataset | SLA |
-  |---|---|
-  | attention_metrics | ≤ 1d |
-  | bars | available by next trading day |
-  | earnings_calendar | ≤ 7d |
-  | entity_mentions | ≤ 1d |
-  | fundamentals | ≤ 30d (or source-specific) |
-  | insider_tx | ≤ 3 trading days |
-  | news_articles | ≤ 1d |
-  | security_master | ≤ 7d |
-  | sentiment_annotations | ≤ 2d |
-  | social_posts | ≤ 1d |
-
+- *Freshness* — per-dataset SLA thresholds in `config/stack.toml` under `[quality.<dataset>]`.
 - *Point-in-time* — no research read defaults to "latest".
 
 **Failure levels:** `SOURCE_DEGRADED` (continue) · `DATA_QUARANTINED` (rows rejected, dataset continues) · `DATA_STALE` (SLA violated) · `DATA_HALT` (consumer-blocking, e.g. stale prices) · `SOFTWARE_HALT` (impossible state).
 
-**Quarantine envelope** (a first-class product; every rejected row is replayable, no orphans — I11):
+**Quarantine envelope** (every rejected row is replayable, no orphans — I11): see `src/alpha_lake/quality/` for the quarantine schema and promotion rules.
 
-```
-quarantine_id  dataset  reason_code  severity
-security_id  source_id  effective_date  available_at
-fetch_id  raw_payload_hash  parser_version  schema_version
-record_payload  created_at  repair_status
-```
+**Reconciliation ≠ quarantine (I10).** A valid *primary* is never quarantined because a *secondary* disagrees. Cross-source disagreements are persisted as an append-only `reconciliation_events` dataset with severity→action mapping in config.
 
-**Reconciliation ≠ quarantine (I10).** A valid *primary* is never quarantined because a *secondary* disagrees. Quarantine = intrinsic defects (negative price, `high<low`, bad date, missing PK). Cross-source disagreement emits:
-
-```
-ReconciliationDisagreement{
-  dataset  security_id  effective_date
-  primary_source_id  secondary_source_id  field
-  primary_value  secondary_value  difference  tolerance  severity  available_at }
-```
-
-Reconciliation disagreements are persisted as an append-only operational dataset parallel to quarantine:
-
-```
-reconciliation_events
-  event_id  dataset_id  natural_key  security_id  effective_date
-  primary_source_id  comparison_source_id  severity
-  observed_at  available_at  ingestion_run_id
-  field_diffs_json  tolerance_id  action  resolution_sla_at  resolved_at
-```
-
-Severity maps to action in configuration: `info` records only, `warn` increments health counters, `error` blocks freshness-green status for the dataset, and `data_halt` blocks canonical promotion for affected natural keys until resolved. Reconciliation disagreements do not halt a valid primary by default (I10), but configured `data_halt` cases do.
-
-**Per-entity ingest outcomes:** multi-entity runs record one outcome per requested entity: `ok`, `empty`, `failed`, or `quarantined`. Run-level policy is partial commit with explicit outcome ledger unless the dataset contract requires all-or-nothing. Health surfaces counts and blocking reasons.
+**Per-entity ingest outcomes:** multi-entity runs record one outcome per requested entity (`ok`, `empty`, `failed`, `quarantined`) as an explicit outcome ledger — see `src/alpha_lake/quality/` and the connector skill.
 
 ## 14. Derived technical indicator library
 
@@ -450,70 +375,13 @@ lake.indicators.bollinger(symbol="AAPL", window=20, stddev=2.0, as_of=A)
 
 ### 14.2 Indicator categories
 
-Alpha-Lake may provide the following indicator families because they are mechanically derivable from daily OHLCV bars.
-
-| Category                   | Examples |
-| -------------------------- | -------- |
-| Price transforms           | close, adjusted close view, typical price, median price, weighted close, OHLC average |
-| Returns                    | simple return, log return, cumulative return, rolling return, gap return, overnight/intraday proxy return |
-| Moving averages            | SMA, EMA, WMA, VWMA, SMMA/RMA, DEMA, TEMA, HMA, KAMA, ALMA, ZLEMA |
-| Trend                      | MACD, PPO, ADX, DMI, Aroon, DPO, TRIX, Mass Index, Vortex Indicator |
-| Momentum                   | RSI, Stochastic Oscillator, Stochastic RSI, ROC, Momentum, Williams %R, CCI, TSI, Ultimate Oscillator, KST |
-| Volatility                 | True Range, ATR, NATR, rolling standard deviation, historical volatility, Parkinson volatility, Garman-Klass volatility, Rogers-Satchell volatility |
-| Bands/channels             | Bollinger Bands, Keltner Channels, Donchian Channels, Price Channels, STARC Bands |
-| Volume                     | volume SMA/EMA, volume z-score, OBV, Volume Price Trend, Accumulation/Distribution Line, Chaikin Money Flow, Chaikin Oscillator, Money Flow Index, Force Index, Ease of Movement, Negative/Positive Volume Index |
-| Range/breakout             | rolling high/low, highest high, lowest low, breakout distance, channel position, close location value |
-| Risk/statistics            | rolling beta, rolling correlation, rolling covariance, rolling Sharpe-like ratio, rolling drawdown, max drawdown, downside deviation, skew, kurtosis |
-| Support/resistance helpers | pivot points, rolling support/resistance levels, distance to rolling high/low |
-| Candlestick facts          | candle body, upper/lower wick, range, doji-like shape, engulfing-like shape, hammer-like shape |
-| Relative strength          | relative return versus benchmark, ratio series, rolling relative momentum, rolling beta-adjusted return |
-| Calendar/bar metadata      | trading-day index, month/quarter/year flags, day-of-week, month-end, quarter-end |
+Alpha-Lake may provide any indicator that is mechanically derivable from daily OHLCV bars and described by a neutral parameter set (window, smoothing, price mode). Categories include: price transforms, returns, moving averages, trend, momentum, volatility, bands/channels, volume, range/breakout, risk/statistics, support/resistance helpers, candlestick facts, relative strength, and calendar/bar metadata. See `src/alpha_lake/derived/indicators/` for the full catalog.
 
 Candlestick pattern helpers are allowed only as neutral structural descriptions of OHLC shapes. They must not be named or exposed as trading advice.
 
-### 14.3 Indicators that require caution
+### 14.3 Semantics and caching
 
-Some indicators can be derived from daily bars but need explicit semantics:
-
-| Indicator type                | Rule |
-| ----------------------------- | ---- |
-| VWAP                          | Daily OHLCV cannot produce true intraday VWAP. Alpha-Lake may expose only an approximate period VWAP using typical price × volume. |
-| Anchored VWAP                 | Allowed only when the anchor date is provided explicitly by the consumer. |
-| Total-return indicators       | Allowed only when `price_mode="total_return_adjusted"` is explicitly requested. |
-| Benchmark-relative indicators | Allowed only when the benchmark/index/security is explicitly provided. |
-| Pattern recognition           | Allowed as neutral OHLC geometry, not as predictive labels. |
-
-### 14.4 Recursive indicator warm-up/lookback
-
-Recursive indicators (EMA, RSI, ATR, KAMA, SMMA/RMA, MACD, ADX, and similar) require history before the requested `start`. Each implementation must either fetch an explicit `available_at`-bounded lookback window before `start` or use a documented deterministic seed convention. `IndicatorResult` metadata records `lookback_bars_requested`, `lookback_bars_used`, `seed_policy`, `input_start`, and `output_start` so values are reproducible and stable regardless of the caller's visible window.
-
-### 14.5 Optional materialized indicator cache
-
-Frequently reused indicators may be cached, but the cache remains rebuildable derived state.
-
-```
-technical_indicator_cache
-  security_id
-  effective_date
-  as_of
-  price_mode
-  indicator_name
-  parameters_hash
-  parameters_json
-  value_json
-  input_dataset_version
-  input_snapshot_id
-  code_version
-  created_at
-```
-
-Cache rules:
-
-1. Cache entries are invalidated when input bars, corporate actions, security master mappings, code version, or parameter definitions change.
-2. Cache entries are not canonical truth.
-3. Cache entries must be reproducible from canonical inputs.
-4. Cache reads must preserve the same PIT guarantees as normal readers.
-5. Cache misses compute on demand or fail explicitly, depending on caller policy.
+Indicators that need explicit semantics (anchored VWAP, total-return, benchmark-relative) require the caller to supply the relevant parameters — the library does not assume defaults. Recursive indicators (EMA, RSI, ATR, etc.) require an `available_at`-bounded lookback window before `start` or a documented deterministic seed. A materialized indicator cache (`technical_indicator_cache`) may be used for frequently reused outputs; it remains rebuildable derived state with explicit invalidation rules.
 
 ### 14.6 Boundary with Alpha-Quant
 
@@ -576,123 +444,25 @@ to Alpha-Quant or another consumer.
 
 ### 15.2 Canonical text datasets
 
-| Dataset | Content | Grounding |
-|---------|---------|-----------|
-| `news_articles` | article_id, title, description, url, text_hash, published_at, source_name | Source-provided metadata; raw payload archived |
-| `social_posts` | platform, venue, post_id_hash, parent_id_hash, text_hash, published_at, engagement_json | Source-provided metadata; raw payload archived |
-| `entity_mentions` | mention_id, text_item_id, text_item_type, security_id, entity_name, entity_type, confidence, match_method | Versioned derived linkage via NLP + security master; confidence recorded |
-| `sentiment_annotations` | annotation_id, text_item_id, text_item_type, sentiment_score, sentiment_label, model_version, prompt_version, taxonomy_version, input_text_hash, source_dataset_version | Versioned derived ML/vendor annotation; model/prompt/taxonomy pinned |
-| `attention_metrics` | security_id, window_start, window_end, window_type, article_count, mention_count, unique_source_count, unique_author_count, mean_sentiment, sentiment_std, positive_share, neutral_share, negative_share, velocity_score | Rebuildable derived metrics from news_articles + social_posts + sentiment_annotations |
+Five canonical datasets cover text: `news_articles`, `social_posts` (source-grounded facts), `entity_mentions`, `sentiment_annotations`, `attention_metrics` (versioned derived annotations/metrics). See `src/alpha_lake/models/` for the Patito schemas.
 
 ### 15.3 Derived metric categories
 
-| Category | Examples |
-|----------|----------|
-| Volume | article count, mention count, unique source count, unique author count |
-| Velocity | 1d/3d/7d mention change, news acceleration, abnormal volume z-score |
-| Sentiment | mean sentiment, sentiment distribution, positive/neutral/negative share |
-| Entity linkage | ticker mentions, company-name mentions, CIK/entity match confidence |
-| Topic / event | topic labels, event clusters, earnings-related / news-related classification |
-| Novelty | duplicate detection, first-seen story, repeated-story count |
-| Engagement | Reddit score, comments, upvote ratio, engagement velocity |
-| Source quality | source category, publisher reliability tier, official/company/regulatory/news/social |
-| Co-mentions | company-company co-mentions, company-sector co-mentions |
-| Text features | embeddings, keyword hits, named entities, summary, language |
+Categories include: volume, velocity, sentiment, entity linkage, topic/event, novelty, engagement, source quality, co-mentions, and text features (embeddings, summaries). See `src/alpha_lake/derived/text/` for the full catalog.
 
-### 15.4 Annotation recording rules
+### 15.4 Annotation versioning
 
-Every derived text annotation row must include:
-
-```
-model_version      pinned model identifier (e.g. "finbert-v2")
-prompt_version     pinned prompt/recipe identifier (e.g. "sentiment-v3")
-taxonomy_version   pinned label taxonomy version (e.g. "entity-taxonomy-v1")
-input_text_hash    sha256 of the text string or canonical content_hash of the source row
-source_dataset_version  version of the canonical dataset at time of annotation
-as_of              PIT boundary that governed the computation
-```
-
-### 15.5 Boundary with Alpha-Quant
-
-Alpha-Lake may provide:
-
-```text
-mention_count(AAPL, 2026-06-01, 2026-06-07)
-mean_sentiment(AAPL, 2026-06-01, 2026-06-07)
-article_velocity(AAPL, 7d)
-unique_sources(AAPL, 2026-06-01, 2026-06-07)
-entity_mentions(AAPL, "AAPL", "ticker")
-topic_labels(article_id, "earnings")
-novelty_score(article_id, 0.92)
-engagement_velocity(post_id, 3d)
-```
-
-Alpha-Lake must not provide:
-
-```text
-bullish_news_signal
-reddit_hype_score
-buy_pressure_score
-trade_candidate_rank
-negative_catalyst_action
-sentiment_signal = "bearish"
-risk_flag = "avoid"
-```
-
-The lake measures attention and sentiment. It never decides what they mean.
-
-### 15.6 Optional materialized text analytics cache
-
-Frequently reused NLP outputs or aggregated metrics may be cached in a table analogous
-to the indicator cache (§14.4). Cache rules are identical:
-
-1. Cache entries are invalidated when source canonical text data, model version, prompt
-   version, or taxonomy version change.
-2. Cache entries are not canonical truth.
-3. Cache entries must be reproducible from canonical inputs.
-4. Cache reads must preserve the same PIT guarantees as normal readers.
-5. Cache misses compute on demand or fail explicitly, depending on caller policy.
+Every derived text annotation records `model_version`, `prompt_version`, `taxonomy_version`, `input_text_hash`, `source_dataset_version`, and the `as_of` boundary that governed computation.
 
 ## 16. Storage — DuckLake + RustFS
 
-**DuckLake v1.0** (`ducklake` DuckDB extension): the official DuckDB extension for the DuckLake lakehouse format. It manages ACID transactions, snapshots, time travel, schema evolution, and partitioning natively. Connection is a single ATTACH statement — the extension handles extension loading (httpfs, parquet, postgres, sqlite), catalog management, and S3 configuration internally.
+**DuckLake v1.0** is the lakehouse format: ACID transactions, snapshots, time travel, schema evolution, and native DuckDB extension. The reference attach path is Postgres catalog + RustFS/S3 data; SQLite/local-FS is for embedded tests only.
 
-The **reference attach path is stack-first**: Postgres catalog + RustFS/S3 data. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
+**Patito-derived DDL** (`_generate_ddl` in `src/alpha_lake/canonical/__init__.py`) reads Patito model annotations and generates DuckDB-compatible `CREATE TABLE` — the model is the single schema source of truth.
 
-DuckLake's ATTACH is preceded by explicit `INSTALL httpfs; LOAD httpfs` to ensure the HTTP/S3 filesystem extension is available before DuckLake loads data from S3. While DuckLake theoretically auto-loads httpfs, explicit loading eliminates race conditions during extension initialization.
+**Blob store abstraction (raw archive):** A `BlobStore` ABC (`src/alpha_lake/storage/__init__.py`) with `_LocalBlobStore` (local FS) and `_S3BlobStore` (S3-compatible object store) backends, dispatched by `get_blob_store(uri)`. See [ADR-0022](docs/adr/0022-blob-store.md) for the full decision.
 
-```sql
--- attach (reference stack) — Postgres catalog + RustFS/S3 data
-INSTALL ducklake; LOAD ducklake; INSTALL postgres; LOAD postgres;
-INSTALL httpfs; LOAD httpfs;
-ATTACH 'ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake'
-    AS lake_catalog (DATA_PATH 's3://lake/');
-USE lake_catalog;
-
--- attach (embedded harness only) — tests / replay / debugging
-INSTALL ducklake; LOAD ducklake; INSTALL sqlite; LOAD sqlite;
-ATTACH 'ducklake:sqlite:data/lake.catalog'
-    AS lake_catalog (DATA_PATH 'data/lake/');
-USE lake_catalog;
-```
-
-**Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — every committed transaction creates a snapshot, tagged by `snapshot_id`, giving audit trail + pinnable reproducibility (§21).
-
-**Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
-
-**Patito-derived DDL — single source of schema truth:** Table definitions are no longer hardcoded SQL strings. Instead, `_generate_ddl(model_class, table_name)` reads Patito model annotations and generates DuckDB-compatible `CREATE TABLE` DDL. Each dataset is registered as a `Dataset` descriptor (`table`, `model`, `natural_keys`) in a `DATASETS` registry — no more parallel `_DATASET_KEYS` or `key_map` dictionaries. A single `write(con, dataset, df)` function handles all datasets (bars, corp_actions, fundamentals, insider, news, social, earnings, entity mentions, sentiment annotations, attention metrics), while backward-compatible `write_bars`, `write_corp_actions`, and `write_dataset` wrappers keep callers unchanged. See `src/alpha_lake/canonical/__init__.py`.
-
-**Blob store abstraction (raw archive):** The raw archive subsystem uses a `BlobStore` ABC (`src/alpha_lake/storage/__init__.py`) instead of direct path/URI access. Two backends are registered:
-- **`_LocalBlobStore`** — wraps `pathlib.Path` for local filesystem access (embedded harness).
-- **`_S3BlobStore`** — wraps `s3fs.S3FileSystem` for S3-compatible object storage (reference stack).
-
-The factory `get_blob_store(uri: str) -> BlobStore` selects the backend by URI scheme (`s3://` → S3, everything else → local). This eliminates the storage split-brain where stack-mode raw archive writes went to the container's ephemeral disk instead of RustFS. See [ADR-0022](docs/adr/0022-blob-store.md) for the full decision.
-
-**Config split:** The old single `data_path` key is replaced by `canonical_data_path` (for DuckLake data) and `raw_archive_uri` (for the raw archive blob store), making the two storage domains explicit in both code and configuration.
-
-**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month via `ALTER TABLE lake_bars SET PARTITIONED BY (year(effective_date), month(effective_date))`. Target 128-512 MB Parquet files per data file. DuckLake's file-level zone maps enable partition pruning during PIT reads.
-
-**Snapshot retention and compaction:** DuckLake provides built-in maintenance operations: `CALL lake_catalog.merge_files(...)`, `CALL lake_catalog.expire_snapshots(...)`, and `CALL lake_catalog.checkpoint(...)`. Compaction may rewrite physical Parquet files but preserves snapshot-to-data mappings. Retention is configurable per snapshot. See [ADR-0021](docs/adr/0021-snapshot-retention-compaction-reproducibility.md) for the full retention and compaction policy. See [operations.md](docs/operations.md) for monitoring thresholds and growth expectations.
+**Additional storage details:** snapshot retention and compaction [ADR-0021](docs/adr/0021-snapshot-retention-compaction-reproducibility.md), canonical Parquet partitioning and monitoring thresholds [operations.md](docs/operations.md).
 
 ## 17. Ingestion pipeline — connector dispatch
 
@@ -925,15 +695,7 @@ alpha-lake/
 
 Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/RustFS object storage + app-container execution — are exercised immediately.
 
-- **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, RustFS object store, Alpha-Lake app container, config loading, DuckLake attach, `models/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
-- **Phase 1 — bars vertical slice against the real stack.** Connector fetch → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
-- **Phase 2 — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
-- **Phase 3 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
-- **Phase 4 — remaining datasets.** fundamentals → insider → news_articles + social_posts → entity_mentions + sentiment_annotations + attention_metrics → earnings_calendar, each repeating the Phase-1 vertical pattern.
-- **Phase 5 — serving surface.** as-of panel / spine join; catalog; health; explicit `latest_*` non-research paths; technical indicator library serving (§14); text analytics serving (§15).
-- **Phase 6 — orchestration hardening.** Add Dagster assets over the already-proven `flows/`; asset checks wrap Patito gates; date partitions improve backfill UX. Dagster is not allowed to own business logic.
-- **Phase 7 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, optional `vendor/bin/rustfs`, offline `just up --offline`, fixture bundles, and reproducibility docs.
-- **Phase 8 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; RustFS clustering only when GA and genuinely needed.
+Each phase ships only when the golden replay hash is stable and boundary tests are green. See [`docs/adr/README.md`](docs/adr/README.md) and the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the current phase and completed milestones. The build order is: stack skeleton → bars vertical slice → embedded replay harness → identity & actions → remaining datasets → serving surface → orchestration hardening → packaging & air-gap → hardening.
 
 ## 29. Tech stack
 

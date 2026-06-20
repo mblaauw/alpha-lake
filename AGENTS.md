@@ -125,7 +125,7 @@ If a task spans several rows, load `add-dataset` first — it orchestrates the o
 ## Model routing — these tasks need extra care
 
 The following are invariant-dense and easy to get subtly wrong. Prefer a stronger model, work in small
-steps, and always gate behind the `reviewer` agent + property tests. If unsure, stop and ask rather than guess:
+steps, and always gate behind property tests + cross-check with the `alpha-lake-invariants` skill. If unsure, stop and ask rather than guess:
 
 - the PIT reader / `ASOF JOIN` knowledge-time resolution,
 - deterministic `security_id` minting,
