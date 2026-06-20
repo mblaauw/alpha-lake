@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 
-from alpha_lake.canonical import write_bars
+from alpha_lake.canonical import DATASETS, write_bars
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
@@ -133,14 +133,10 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
     Keeps only the newest available_at per (natural_key + version_hash).
     Uses window-function dedup for portability across DuckDB, Postgres, and SQLite.
     """
-    key_map = {
-        "lake_bars": ["security_id", "effective_date", "source_id"],
-        "fundamentals": ["security_id", "fiscal_period", "statement_type", "line_item", "source_id"],
-        "corp_actions": ["security_id", "action_type", "effective_date", "source_id"],
-    }
-    keys = key_map.get(table)
-    if not keys:
-        raise ValueError(f"No key map for {table}")
+    ds = DATASETS.get(table)
+    if ds is None:
+        raise ValueError(f"No dataset descriptor for {table}")
+    keys = ds.natural_keys
 
     key_cols = ", ".join(keys)
     stg = f"_compact_{table}"

@@ -133,7 +133,7 @@ steps, and always gate behind the `reviewer` agent + property tests. If unsure, 
 - the semantic `version_hash` recipe,
 - golden-replay determinism (business output **and** bitemporal row visibility),
 - storage blob-store backend selection (`_LocalBlobStore` vs `_S3BlobStore`) and the `get_blob_store()` factory,
-- Patito-derived DDL generation (`model_to_ddl()` schema ↔ database sync).
+- Patito-derived DDL generation (`_generate_ddl()` schema ↔ database sync) and the `Dataset`/`DATASETS` registry,
 
 ## Conventions
 
