@@ -11,28 +11,19 @@ def sma(series: pl.Series, window: int) -> pl.Series:
 def ema(series: pl.Series, window: int) -> pl.Series:
     """Exponential moving average."""
     alpha = 2.0 / (window + 1)
-    result = [series[0]]
-    for val in series[1:]:
-        result.append(alpha * val + (1 - alpha) * result[-1])
-    return pl.Series(result)
+    return series.ewm_mean(alpha=alpha, adjust=False)
 
 
 def rsi(series: pl.Series, window: int = 14) -> pl.Series:
-    """Relative Strength Index."""
-    delta = series.diff().to_list()
-    avg_gain = [0.0] * len(delta)
-    avg_loss = [0.0] * len(delta)
-    for i in range(1, len(delta)):
-        g = delta[i] if delta[i] > 0 else 0.0
-        l = -delta[i] if delta[i] < 0 else 0.0
-        if i <= window:
-            avg_gain[i] = (avg_gain[i - 1] * (i - 1) + g) / i if i > 1 else g
-            avg_loss[i] = (avg_loss[i - 1] * (i - 1) + l) / i if i > 1 else l
-        else:
-            avg_gain[i] = (avg_gain[i - 1] * (window - 1) + g) / window
-            avg_loss[i] = (avg_loss[i - 1] * (window - 1) + l) / window
-    rs = [avg_gain[i] / avg_loss[i] if avg_loss[i] != 0 else 100 for i in range(len(delta))]
-    return pl.Series([100 - (100 / (1 + r)) for r in rs])
+    """Relative Strength Index (Wilder's smoothing)."""
+    delta = series.diff()
+    gain = delta * (delta > 0).cast(pl.Float64)
+    loss = (-delta) * (delta < 0).cast(pl.Float64)
+    avg_gain = gain.rolling_mean(window_size=window, min_samples=1)
+    avg_loss = loss.rolling_mean(window_size=window, min_samples=1)
+    rs = avg_gain / avg_loss
+    rs = rs.fill_nan(100.0).fill_null(100.0)
+    return 100 - (100 / (1 + rs))
 
 
 def bollinger_bands(series: pl.Series, window: int = 20, num_std: float = 2.0) -> dict[str, pl.Series]:
@@ -48,28 +39,21 @@ def bollinger_bands(series: pl.Series, window: int = 20, num_std: float = 2.0) -
 
 def atr(high: pl.Series, low: pl.Series, close: pl.Series, window: int = 14) -> pl.Series:
     """Average True Range."""
-    tr = pl.Series([
-        max(h - l, abs(h - c_prev), abs(l - c_prev))
-        for h, l, c_prev in zip(high[1:], low[1:], close[:-1])
-    ])
-    result = [0.0] * len(close)
-    for i in range(1, len(close)):
-        tr_val = tr[i - 1] if i - 1 < len(tr) else 0.0
-        result[i] = (result[i - 1] * (window - 1) + tr_val) / window if i > 0 else tr_val
-    return pl.Series(result)
+    tr = pl.DataFrame({
+        "h_l": high - low,
+        "h_c": (high - close.shift(1)).abs(),
+        "l_c": (low - close.shift(1)).abs(),
+    }).select(pl.max_horizontal("h_l", "h_c", "l_c")).to_series()
+    return tr.rolling_mean(window_size=window)
 
 
 def obv(close: pl.Series, volume: pl.Series) -> pl.Series:
     """On-Balance Volume."""
-    result = [volume[0]]
-    for i in range(1, len(close)):
-        if close[i] > close[i - 1]:
-            result.append(result[-1] + volume[i])
-        elif close[i] < close[i - 1]:
-            result.append(result[-1] - volume[i])
-        else:
-            result.append(result[-1])
-    return pl.Series(result)
+    up = close > close.shift(1)
+    down = close < close.shift(1)
+    direction = (volume * up.cast(pl.Float64)) - (volume * down.cast(pl.Float64))
+    direction[0] = volume[0]
+    return direction.cum_sum()
 
 
 def vwap(high: pl.Series, low: pl.Series, close: pl.Series, volume: pl.Series) -> pl.Series:
