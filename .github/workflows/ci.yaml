@@ -34,4 +34,49 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev
-      - run: uv run pytest tests/ -v
+      - run: uv run pytest tests/ -v --ignore=tests/integration/test_mode_parity.py
+
+  stack-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Start reference stack
+        run: docker compose up -d postgres rustfs
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec postgres pg_isready -U lake -d lake_catalog >/dev/null 2>&1 \
+               && curl -sf http://localhost:9001/minio/health/live >/dev/null 2>&1; then
+              echo "Services healthy"
+              break
+            fi
+            echo "Waiting... ($i)"
+            sleep 2
+          done
+
+      - name: Bootstrap catalog
+        run: docker compose run --rm app bootstrap
+
+      - name: Ingest synthetic data
+        run: docker compose run --rm app ingest
+
+      - name: Run mode-parity tests against stack
+        run: uv run pytest tests/integration/test_mode_parity.py -v
+        env:
+          AL_CI_PGHOST: localhost
+          AL_CI_RUSTFS_HOST: localhost
+          RUSTFS_ACCESS_KEY: rustfsadmin
+          RUSTFS_SECRET_KEY: rustfsadmin
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
