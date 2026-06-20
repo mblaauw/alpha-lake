@@ -76,7 +76,7 @@ def _bootstrap_postgres(cfg: RootConfig) -> None:
         sql = _SCHEMA_PATH.read_text()
         for statement in sql.split(";"):
             stmt = statement.strip()
-            if stmt and stmt.upper() not in ("", "CREATE"):
+            if stmt and not stmt.startswith("--"):
                 try:
                     cur.execute(stmt)
                 except Exception as e:
