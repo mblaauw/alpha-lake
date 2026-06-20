@@ -7,7 +7,7 @@ Stack-first, bitemporal market-data lakehouse. Ingests, archives, validates, and
 ## Quick start
 
 ```bash
-just up        # start the reference stack (Postgres + MinIO + OTel)
+just up        # start the reference stack (Postgres + RustFS + OTel)
 just bootstrap # initialize the catalog
 just ingest    # ingest market data
 just health    # check dataset freshness and status

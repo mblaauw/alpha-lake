@@ -25,6 +25,16 @@ class S3Config(pydantic.BaseModel):
     endpoint: str = "rustfs:9000"
     url_style: str = "path"
     use_ssl: bool = False
+    access_key: str = ""
+    secret_key: str = ""
+
+    @pydantic.model_validator(mode="after")
+    def _fill_from_env(self) -> "S3Config":
+        if not self.access_key:
+            self.access_key = os.environ.get("RUSTFS_ACCESS_KEY", "rustfsadmin")
+        if not self.secret_key:
+            self.secret_key = os.environ.get("RUSTFS_SECRET_KEY", "rustfsadmin")
+        return self
 
 
 class QualityConfig(pydantic.BaseModel):

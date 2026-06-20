@@ -2,7 +2,7 @@
 
 # Start the reference stack
 up *flags:
-    docker compose up -d postgres minio otel {{ flags }}
+    docker compose up -d postgres rustfs otel {{ flags }}
 
 # Stop the reference stack
 down:

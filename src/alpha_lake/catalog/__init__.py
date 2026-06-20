@@ -31,7 +31,7 @@ def _build_attach(cfg: RootConfig) -> tuple[str, str]:
 def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     """Create a DuckDB connection attached to a DuckLake.
 
-    In stack mode: DuckLake + PostgreSQL catalog + S3/MinIO data.
+    In stack mode: DuckLake + PostgreSQL catalog + S3/RustFS data.
     In embedded mode: DuckLake + SQLite catalog + local FS data.
     """
     con = duckdb.connect()
@@ -44,20 +44,58 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
         con.execute("INSTALL postgres")
         con.execute("LOAD postgres")
 
+        s3 = cfg.s3
+        con.execute("SET s3_endpoint = ?", [s3.endpoint])
+        con.execute("SET s3_access_key_id = ?", [s3.access_key])
+        con.execute("SET s3_secret_access_key = ?", [s3.secret_key])
+        con.execute("SET s3_region = 'us-east-1'")
+        con.execute("SET s3_use_ssl = ?", ["false" if not s3.use_ssl else "true"])
+        if s3.url_style:
+            con.execute("SET s3_url_style = ?", [s3.url_style])
+
     attach_str, data_path = _build_attach(cfg)
-    con.execute(
-        f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')"
-    )
+    con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
     con.execute("USE lake_catalog")
     return con
+
+
+def _ensure_bucket(cfg: RootConfig) -> None:
+    """Create the S3 data bucket if it doesn't already exist."""
+    import subprocess
+    import re
+
+    data_path = cfg.lake.data_path
+    if not data_path.startswith("s3://"):
+        return
+    bucket = data_path.removeprefix("s3://").split("/")[0]
+    s3 = cfg.s3
+    mc_alias = "lake"
+    subprocess.run(
+        ["mc", "alias", "set", mc_alias,
+         f"http://{s3.endpoint}", s3.access_key, s3.secret_key,
+         "--api", "S3v4"],
+        capture_output=True, check=False,
+    )
+    result = subprocess.run(
+        ["mc", "ls", f"{mc_alias}/{bucket}"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        subprocess.run(
+            ["mc", "mb", f"{mc_alias}/{bucket}"],
+            capture_output=True, check=False,
+        )
 
 
 def bootstrap(cfg: RootConfig) -> None:
     """Initialize the DuckLake catalog.
 
+    Creates the S3 data bucket if needed, then attaches the DuckLake catalog.
     DuckLake creates the catalog database and metadata tables automatically
-    on ATTACH. No additional DDL is needed for the lake infrastructure.
+    on ATTACH.
     """
+    if cfg.lake.runtime == "stack":
+        _ensure_bucket(cfg)
     con = connect(cfg)
     con.close()
 
@@ -72,9 +110,9 @@ def list_datasets(con: duckdb.DuckDBPyConnection) -> list[dict[str, object]]:
         if any(table.startswith(p) for p in skip):
             continue
         try:
-            ver = con.execute(f"SELECT MAX(schema_version) FROM \"{table}\"").fetchone()
+            ver = con.execute(f'SELECT MAX(schema_version) FROM "{table}"').fetchone()
             version = ver[0] if ver and ver[0] else 0
-            count = con.execute(f"SELECT COUNT(*) FROM \"{table}\"").fetchone()
+            count = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
             row_count = count[0] if count and count[0] else 0
         except Exception:
             version = 0
@@ -106,7 +144,9 @@ def catalog_health(con: duckdb.DuckDBPyConnection) -> dict:
     """Return overall catalog health metrics including snapshot and metadata info."""
     result: dict = {"snapshots": 0, "latest_snapshot_id": None}
     try:
-        r = con.execute("SELECT snapshot_id FROM ducklake_last_committed_snapshot('lake_catalog')").fetchone()
+        r = con.execute(
+            "SELECT snapshot_id FROM ducklake_last_committed_snapshot('lake_catalog')"
+        ).fetchone()
         result["latest_snapshot_id"] = r[0] if r else None
     except Exception:
         pass
@@ -123,10 +163,7 @@ def list_snapshots(con: duckdb.DuckDBPyConnection) -> list[dict]:
     rows = con.execute(
         "SELECT snapshot_id, snapshot_time, changes FROM ducklake_snapshots('lake_catalog')"
     ).fetchall()
-    return [
-        {"snapshot_id": r[0], "timestamp": str(r[1]), "changes": str(r[2])}
-        for r in rows
-    ]
+    return [{"snapshot_id": r[0], "timestamp": str(r[1]), "changes": str(r[2])} for r in rows]
 
 
 def set_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str) -> None:
@@ -147,9 +184,7 @@ def set_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str) -> None:
         ) from e
 
 
-def resolve_ingestion_run(
-    con: duckdb.DuckDBPyConnection, run_id: str
-) -> int | None:
+def resolve_ingestion_run(con: duckdb.DuckDBPyConnection, run_id: str) -> int | None:
     """Map an ingestion_run_id to its DuckLake snapshot ID.
 
     Returns the snapshot_id or None if not found.
