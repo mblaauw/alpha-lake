@@ -23,7 +23,7 @@ import patito as pt
 import polars as pl
 
 
-class BarFact(pt.DataFrameModel):
+class BarFact(pt.Model):
     security_id: str
     effective_date: pl.Date
     available_at: pl.Datetime
@@ -53,10 +53,7 @@ available_at is UTC
 
 ## Gates
 
-```bash
-rg -n "content_hash.*version|version_hash.*raw|uuid4\(|datetime\.now\(" src/alpha_lake/models src/alpha_lake/normalize src/alpha_lake/canonical
-just lint
-```
+Run the full invariant gate in `alpha-lake-invariants` before committing.
 
 ## Forbidden
 

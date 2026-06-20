@@ -1,6 +1,6 @@
 ---
 name: connector
-description: Alpha-Lake connector template for dlt/httpx/tenacity resources. Use when implementing source clients, fetches, raw archive, retries, or ingestion resources.
+description: Alpha-Lake connector template for httpx+tenacity resources. Use when implementing source clients, fetches, raw archive, retries, or ingestion resources.
 ---
 
 # Connector
@@ -11,7 +11,7 @@ Connectors fetch and archive. They do not interpret facts.
 
 - Read auth, rate limit, retry, enabled, and parser version from registry/config.
 - Build deterministic request params and `request_params_hash`.
-- Fetch with `httpx` and `tenacity` or dlt resource mechanics.
+- Fetch with `httpx` and `tenacity`.
 - Archive raw bytes before parse.
 - Emit manifest/fetch metadata.
 - Return raw pointer + metadata to normalize step.
