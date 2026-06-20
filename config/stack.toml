@@ -1,6 +1,6 @@
 [lake]
 runtime = "stack"
-catalog = "ducklake:postgres://lake:lake@postgres:5432/lake_catalog"
+catalog = "ducklake:postgres:dbname=lake_catalog host=postgres port=5432 user=lake password=lake"
 data_path = "s3://lake/"
 calendar_version = "4.13.2"
 

@@ -1,141 +1,69 @@
 from __future__ import annotations
 
-import pathlib
-
 import duckdb
 
 from alpha_lake.config import RootConfig
-from alpha_lake.duckdb_ext import configure_s3, ensure_extensions
-
-_SCHEMA_PATH = pathlib.Path(__file__).parent / "schema.sql"
 
 
-def _build_connect_path(cfg: RootConfig) -> str:
+def _build_attach(cfg: RootConfig) -> tuple[str, str]:
+    """Build the DuckLake ATTACH parameters from config.
+
+    Returns (attach_string, data_path).
+    """
     raw = cfg.lake.catalog
-    if raw.startswith("ducklake:postgres:") and "://" in raw:
-        return raw.removeprefix("ducklake:")
-    if raw.startswith("ducklake:postgres:"):
-        conn_str = raw.removeprefix("ducklake:postgres:")
-        return f"postgres://{conn_str}"
-    if raw.startswith("ducklake:sqlite:"):
-        return raw.removeprefix("ducklake:sqlite:")
-    return raw
+    runtime = cfg.lake.runtime
+
+    if raw.startswith("ducklake:postgres"):
+        conn = raw.removeprefix("ducklake:")
+        attach = f"ducklake:{conn}"
+    elif raw.startswith("ducklake:sqlite:"):
+        conn = raw.removeprefix("ducklake:sqlite:")
+        attach = f"ducklake:sqlite:{conn}"
+    elif runtime == "stack":
+        attach = raw
+    else:
+        attach = f"ducklake:sqlite:{raw}"
+
+    data_path = cfg.lake.data_path
+    return attach, data_path
 
 
 def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
+    """Create a DuckDB connection attached to a DuckLake.
+
+    In stack mode: DuckLake + PostgreSQL catalog + S3/MinIO data.
+    In embedded mode: DuckLake + SQLite catalog + local FS data.
+    """
     con = duckdb.connect()
     con.execute("SET timezone = 'UTC'")
 
-    if cfg.lake.runtime == "stack":
-        ensure_extensions(con)
-        configure_s3(
-            con,
-            endpoint=cfg.s3.endpoint,
-            use_ssl=cfg.s3.use_ssl,
-            url_style=cfg.s3.url_style,
-        )
-        con.execute(f"CALL postgres_attach('{_build_connect_path(cfg)}')")
-    else:
-        db_path = _build_connect_path(cfg)
-        con.execute(f"ATTACH '{db_path}' AS lake_catalog (TYPE sqlite)")
+    con.execute("INSTALL ducklake")
+    con.execute("LOAD ducklake")
 
+    if cfg.lake.runtime == "stack":
+        con.execute("INSTALL postgres")
+        con.execute("LOAD postgres")
+
+    attach_str, data_path = _build_attach(cfg)
+    con.execute(
+        f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')"
+    )
+    con.execute("USE lake_catalog")
     return con
 
 
 def bootstrap(cfg: RootConfig) -> None:
-    if cfg.lake.runtime == "stack":
-        _bootstrap_postgres(cfg)
+    """Initialize the DuckLake catalog.
+
+    DuckLake creates the catalog database and metadata tables automatically
+    on ATTACH. No additional DDL is needed for the lake infrastructure.
+    """
     con = connect(cfg)
-    if _SCHEMA_PATH.exists():
-        sql = _SCHEMA_PATH.read_text()
-        for statement in sql.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                try:
-                    con.execute(stmt)
-                except Exception as e:
-                    import sys; print(f"  warning: {e}", file=sys.stderr)
-    else:
-        _create_default_schema(con)
     con.close()
 
 
-def _bootstrap_postgres(cfg: RootConfig) -> None:
-    """Run catalog schema directly against Postgres."""
-    import psycopg2
-    raw = cfg.lake.catalog
-    if raw.startswith("ducklake:postgres://"):
-        conn_str = raw.removeprefix("ducklake:")
-    elif raw.startswith("ducklake:postgres:"):
-        conn_str = "postgresql" + raw.removeprefix("ducklake")
-    else:
-        return
-    conn = psycopg2.connect(conn_str)
-    cur = conn.cursor()
-    if _SCHEMA_PATH.exists():
-        sql = _SCHEMA_PATH.read_text()
-        for statement in sql.split(";"):
-            stmt = statement.strip()
-            if stmt and not stmt.startswith("--"):
-                try:
-                    cur.execute(stmt)
-                except Exception as e:
-                    import sys; print(f"  warning: {e}", file=sys.stderr)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
-def _create_default_schema(con: duckdb.DuckDBPyConnection) -> None:
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS source (
-            source_id VARCHAR PRIMARY KEY,
-            name VARCHAR NOT NULL,
-            description VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS source_dataset (
-            source_id VARCHAR NOT NULL,
-            dataset VARCHAR NOT NULL,
-            enabled BOOLEAN DEFAULT TRUE,
-            parser_version INT DEFAULT 1,
-            PRIMARY KEY (source_id, dataset)
-        )
-    """)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS ingestion_run (
-            run_id VARCHAR PRIMARY KEY,
-            source_id VARCHAR NOT NULL,
-            dataset VARCHAR NOT NULL,
-            status VARCHAR NOT NULL DEFAULT 'pending',
-            started_at TIMESTAMP,
-            completed_at TIMESTAMP,
-            rows_ingested INT DEFAULT 0,
-            error_count INT DEFAULT 0
-        )
-    """)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS manifest (
-            fetch_id VARCHAR PRIMARY KEY,
-            source_id VARCHAR NOT NULL,
-            endpoint VARCHAR NOT NULL,
-            ingest_ts TIMESTAMP NOT NULL,
-            http_status INT,
-            content_hash VARCHAR NOT NULL,
-            content_type VARCHAR,
-            byte_size INT,
-            parser_version_intended INT
-        )
-    """)
-
-
 def list_datasets(con: duckdb.DuckDBPyConnection) -> list[dict[str, object]]:
-    """List all dataset tables and their schema version.
-
-    Uses DuckDB SHOW TABLES which works with both local and attached tables.
-    """
+    """List all tables in the DuckLake catalog."""
     rows = con.execute("SHOW TABLES").fetchall()
     skip = {"pg_", "_staging", "staging_bars", "staging_ca", "sqlite_"}
     result = []
@@ -164,20 +92,11 @@ def dataset_health(con: duckdb.DuckDBPyConnection, dataset: str) -> dict:
     except Exception:
         info["status"] = "error"
         return info
-
     try:
-        if dataset in ("lake_bars", "corp_actions", "fundamentals", "insider_tx",
-                       "earnings_calendar", "attention_metrics"):
-            col = "effective_date"
-        elif dataset in ("news_articles", "social_posts", "entity_mentions",
-                         "sentiment_annotations"):
-            col = "effective_date"
-        else:
-            col = "effective_date"
+        col = "effective_date"
         latest = con.execute(f"SELECT MAX({col}) FROM {dataset}").fetchone()
         info["latest_date"] = str(latest[0]) if latest and latest[0] else None
     except Exception:
         pass
-
     info["status"] = "ok" if info["rows"] > 0 else "empty"
     return info

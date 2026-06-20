@@ -654,33 +654,33 @@ to the indicator cache (§14.4). Cache rules are identical:
 4. Cache reads must preserve the same PIT guarantees as normal readers.
 5. Cache misses compute on demand or fail explicitly, depending on caller policy.
 
-## 16. Storage — DuckLake + RustFS
+## 16. Storage — DuckLake + MinIO
 
-**DuckLake 1.0**: open Parquet data + all metadata in a SQL catalog; ACID, time-travel snapshots, schema evolution as catalog transactions.
+**DuckLake v1.0** (`ducklake` DuckDB extension): the official DuckDB extension for the DuckLake lakehouse format. It manages ACID transactions, snapshots, time travel, schema evolution, and partitioning natively. Connection is a single ATTACH statement — the extension handles extension loading (httpfs, parquet, postgres, sqlite), catalog management, and S3 configuration internally.
 
-The **reference attach path is stack-first**: Postgres catalog + RustFS data over S3. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
+The **reference attach path is stack-first**: Postgres catalog + MinIO/S3 data. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
 
-```python
-# attach (reference stack) — Postgres catalog + RustFS data over S3
-ATTACH 'ducklake:postgres:host=pg dbname=lake_catalog' AS lake
-       (DATA_PATH 's3://lake/');
-SET s3_endpoint='rustfs:9000'; SET s3_url_style='path'; SET s3_use_ssl=false;
+```sql
+-- attach (reference stack) — Postgres catalog + MinIO/S3 data
+INSTALL ducklake; LOAD ducklake; INSTALL postgres; LOAD postgres;
+ATTACH 'ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake'
+    AS lake_catalog (DATA_PATH 's3://lake/');
+USE lake_catalog;
 
-# attach (embedded harness only) — tests / replay / debugging
-ATTACH 'ducklake:sqlite:data/lake.catalog' AS lake (DATA_PATH 'data/lake/');
+-- attach (embedded harness only) — tests / replay / debugging
+INSTALL ducklake; LOAD ducklake; INSTALL sqlite; LOAD sqlite;
+ATTACH 'ducklake:sqlite:data/lake.catalog'
+    AS lake_catalog (DATA_PATH 'data/lake/');
+USE lake_catalog;
 ```
 
-**RustFS** (object store): Apache-2.0, S3-compatible drop-in, single static binary, no external DB, built-in console. DuckLake writes Parquet over S3; DuckDB `httpfs` targets the RustFS endpoint.
-
-> **Maturity:** RustFS is Beta (GA mid-2026); distributed mode not yet GA — run **single-node** in the reference stack. The embedded harness avoids object storage entirely by using local filesystem fixtures. The lake binds to the S3 *interface*, not to RustFS — SeaweedFS/Garage are endpoint-swap fallbacks.
-
-**Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — one snapshot per ingestion run, tagged `ingestion_run_id`, giving audit trail + pinnable reproducibility (§21).
+**Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — every committed transaction creates a snapshot, tagged by `snapshot_id`, giving audit trail + pinnable reproducibility (§21).
 
 **Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
 
-**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month, sort within files by `(security_id, effective_date, available_at)`, and target 128-512 MB Parquet files. Implemented in `catalog/schema.sql` (`lake_bars` table) and `canonical/__init__.py` (SCD2 write). The reference stack enables DuckDB Parquet metadata caching against RustFS so PIT reads prune partitions and row groups before scanning object storage.
+**Canonical Parquet layout:** canonical bars partition by `effective_date` year/month via `ALTER TABLE lake_bars SET PARTITIONED BY (year(effective_date), month(effective_date))`. Target 128-512 MB Parquet files per data file. DuckLake's file-level zone maps enable partition pruning during PIT reads.
 
-**Snapshot retention and compaction:** compaction may rewrite physical Parquet files but must preserve the logical snapshot-to-data mapping for any pinned `ingestion_run_id`. A pinned snapshot remains resolvable after compaction until the documented retention horizon expires; expiring a pinned snapshot is a breaking operational event, not a background optimization.
+**Snapshot retention and compaction:** DuckLake provides built-in maintenance operations: `CALL lake_catalog.merge_files(...)`, `CALL lake_catalog.expire_snapshots(...)`, and `CALL lake_catalog.checkpoint(...)`. Compaction may rewrite physical Parquet files but preserves snapshot-to-data mappings. Retention is configurable per snapshot.
 
 ## 17. Ingestion pipeline — dlt
 

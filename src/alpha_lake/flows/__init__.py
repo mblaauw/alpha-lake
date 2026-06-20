@@ -9,7 +9,6 @@ import polars as pl
 from alpha_lake.canonical import write_bars, write_dataset
 from alpha_lake.catalog import bootstrap, connect
 from alpha_lake.config import get_config
-from alpha_lake.duckdb_ext import ensure_extensions
 from alpha_lake.interop import polars_to_duckdb
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
