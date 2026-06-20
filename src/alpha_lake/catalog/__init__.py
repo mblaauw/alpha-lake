@@ -185,20 +185,4 @@ def set_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str) -> None:
         ) from e
 
 
-def resolve_ingestion_run(con: duckdb.DuckDBPyConnection, run_id: str) -> int | None:
-    """Map an ingestion_run_id to its DuckLake snapshot ID.
 
-    Returns the snapshot_id or None if not found.
-    """
-    catalog = "lake_catalog"
-    run_id_ts = run_id.removeprefix("run_").split("_")[0]
-    row = con.execute(
-        f"""
-        SELECT snapshot_id FROM ducklake_snapshots('{catalog}')
-        WHERE changes::VARCHAR LIKE '%' || ? || '%'
-        ORDER BY snapshot_id DESC
-        LIMIT 1
-        """,
-        [run_id_ts],
-    ).fetchone()
-    return row[0] if row else None
