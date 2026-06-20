@@ -140,20 +140,17 @@ def _generate_ddl(model_class: type[pt.Model], table_name: str) -> str:
 
 
 def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
-    row_hashes = []
-    for row in df.iter_rows(named=True):
-        canonical: dict[str, object] = {}
-        for k in sorted(row.keys()):
-            if k == "version_hash":
-                continue
-            v = row[k]
-            if isinstance(v, float):
-                v = round(v, 10)
-            canonical[k] = v
-        raw = json.dumps(canonical, sort_keys=True, default=str, separators=(",", ":"))
-        row_hashes.append(hashlib.sha256(raw.encode()).hexdigest())
+    float_cols = [c for c in df.columns if c != "version_hash" and df[c].dtype in (pl.Float32, pl.Float64)]
+    hash_input = df.with_columns(pl.col(float_cols).round(10))
+    hash_input = hash_input.select([c for c in hash_input.columns if c != "version_hash"])
+    hash_expr = pl.struct(hash_input.columns).map_elements(
+        lambda row: hashlib.sha256(
+            json.dumps(row, sort_keys=True, default=str, separators=(",", ":")).encode()
+        ).hexdigest(),
+        return_dtype=pl.String,
+    )
     return df.with_columns(
-        pl.Series("version_hash", row_hashes),
+        hash_expr.alias("version_hash"),
         pl.lit(NORMALIZATION_VERSION).alias("normalization_version"),
     )
 
