@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
 import zstd  # ty: ignore
 
 from alpha_lake.config import get_config
+from alpha_lake.storage import get_blob_store
 
 
 def content_hash(data: bytes) -> str:
@@ -27,7 +27,8 @@ def decompress(data: bytes) -> bytes:
 def exists(hash_val: str) -> bool:
     cfg = get_config()
     path = _store_path(hash_val)
-    return (Path(cfg.lake.data_path) / path).exists()
+    store = get_blob_store(cfg.lake.raw_archive_uri)
+    return store.exists(path)
 
 
 def archive(data: bytes) -> str:
@@ -38,16 +39,14 @@ def archive(data: bytes) -> str:
     path = _store_path(h)
     compressed = compress(data)
 
-    base = Path(cfg.lake.data_path)
-    full_path = base / path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-    full_path.write_bytes(compressed)
+    store = get_blob_store(cfg.lake.raw_archive_uri)
+    store.write_bytes(path, compressed)
     return h
 
 
 def read_raw(hash_val: str) -> bytes:
     cfg = get_config()
     path = _store_path(hash_val)
-    base = Path(cfg.lake.data_path)
-    compressed = (base / path).read_bytes()
+    store = get_blob_store(cfg.lake.raw_archive_uri)
+    compressed = store.read_bytes(path)
     return decompress(compressed)

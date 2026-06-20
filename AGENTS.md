@@ -131,7 +131,9 @@ steps, and always gate behind the `reviewer` agent + property tests. If unsure, 
 - the PIT reader / `ASOF JOIN` knowledge-time resolution,
 - deterministic `security_id` minting,
 - the semantic `version_hash` recipe,
-- golden-replay determinism (business output **and** bitemporal row visibility).
+- golden-replay determinism (business output **and** bitemporal row visibility),
+- storage blob-store backend selection (`_LocalBlobStore` vs `_S3BlobStore`) and the `get_blob_store()` factory,
+- Patito-derived DDL generation (`model_to_ddl()` schema ↔ database sync).
 
 ## Conventions
 

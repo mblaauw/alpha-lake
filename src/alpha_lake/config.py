@@ -29,7 +29,7 @@ class S3Config(pydantic.BaseModel):
     secret_key: str = ""
 
     @pydantic.model_validator(mode="after")
-    def _fill_from_env(self) -> "S3Config":
+    def _fill_from_env(self) -> S3Config:
         if not self.access_key:
             self.access_key = os.environ.get("RUSTFS_ACCESS_KEY", "rustfsadmin")
         if not self.secret_key:
@@ -51,7 +51,8 @@ class ReconciliationConfig(pydantic.BaseModel):
 class LakeConfig(pydantic.BaseModel):
     runtime: str = "stack"
     catalog: str = ""
-    data_path: str = ""
+    canonical_data_path: str = ""
+    raw_archive_uri: str = ""
     calendar_version: str = ""
 
 

@@ -40,7 +40,11 @@ def _mk(table: str, **kw) -> pl.DataFrame:
         elif col in defaults:
             data[col] = [defaults[col]]
         else:
-            data[col] = [None]
+            field_info = model.model_fields.get(col)
+            if field_info is not None and not field_info.is_required():
+                data[col] = [field_info.default]
+            else:
+                data[col] = [None]
     df = pl.DataFrame(data)
     for c in df.columns:
         if df[c].dtype == pl.Null:

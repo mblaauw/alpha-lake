@@ -42,6 +42,7 @@ just health    # check dataset freshness and status
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 ✅ |
 | Epic 7 | Phase 7 | Cloud-native hardening: secrets, snapshot pinning, observability, docs | P2 ✅ |
 | Epic 8 | Phase 8 | Hardening: contracts, SQLMesh, Arrow Flight, K8s | P2 |
+| Epic 300 | Storage Collapse | Unified blob store, Patito-derived DDL, mode-parity guard | P0 |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
 
@@ -88,6 +89,7 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0019 | Polars + Patito for DataFrame processing and model validation | Accepted |
 | 0020 | Trading calendar and timezone policy | Accepted |
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
+| 0022 | Blob store — unified raw archive interface | Accepted |
 
 ## Development
 

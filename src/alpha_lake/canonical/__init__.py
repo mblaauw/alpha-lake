@@ -1,14 +1,122 @@
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
+import types
+from typing import Annotated, Union, get_args, get_origin
 
 import duckdb
+import patito as pt
 import polars as pl
 
 from alpha_lake.interop import polars_to_duckdb
+from alpha_lake.models.bar_fact import BarFact
+from alpha_lake.models.corp_action_fact import CorpActionFact
+from alpha_lake.models.dataset_models import (
+    AttentionMetricFact,
+    EarningsEventFact,
+    EntityMentionFact,
+    FundamentalFact,
+    InsiderTxFact,
+    NewsArticleFact,
+    SentimentAnnotationFact,
+    SocialPostFact,
+)
 
 NORMALIZATION_VERSION: int = 1
+
+_TABLE_MODELS: dict[str, type[pt.Model]] = {
+    "lake_bars": BarFact,
+    "corp_actions": CorpActionFact,
+    "fundamentals": FundamentalFact,
+    "insider_tx": InsiderTxFact,
+    "news_articles": NewsArticleFact,
+    "social_posts": SocialPostFact,
+    "earnings_calendar": EarningsEventFact,
+    "entity_mentions": EntityMentionFact,
+    "sentiment_annotations": SentimentAnnotationFact,
+    "attention_metrics": AttentionMetricFact,
+}
+
+_AUDIT_COLUMNS: list[str] = [
+    '"normalization_version" INT DEFAULT 1',
+]
+
+
+def _get_base_type(annotation: object) -> object:
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        return get_args(annotation)[0]
+    return annotation
+
+
+def _is_nullable(annotation: object) -> bool:
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        args = get_args(annotation)
+        return type(None) in args
+    return False
+
+
+def _type_to_duckdb(annotation: object) -> str:
+    base = _get_base_type(annotation)
+    origin = get_origin(base)
+    if origin is Union or origin is types.UnionType:
+        non_none = [a for a in get_args(base) if a is not type(None)]
+        if len(non_none) == 1:
+            return _type_to_duckdb(non_none[0])
+    if base is str:
+        return "VARCHAR"
+    if base is int:
+        return "BIGINT"
+    if base is float:
+        return "DOUBLE"
+    if base is bool:
+        return "BOOLEAN"
+    if base is datetime.date:
+        return "DATE"
+    if base is datetime.datetime:
+        return "TIMESTAMPTZ"
+    return "VARCHAR"
+
+
+def _format_default(value: object) -> str:
+    if isinstance(value, str):
+        return f"'{value}'"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, datetime.date):
+        return f"'{value.isoformat()}'::DATE"
+    if isinstance(value, datetime.datetime):
+        return f"'{value.isoformat()}'::TIMESTAMPTZ"
+    return str(value)
+
+
+def _generate_ddl(model_class: type[pt.Model], table_name: str) -> str:
+    fields: list[str] = []
+    for field_name, field_info in model_class.model_fields.items():
+        duckdb_type = _type_to_duckdb(field_info.annotation)
+        nullable = _is_nullable(field_info.annotation)
+        has_default = not field_info.is_required()
+        raw_default = field_info.default
+
+        col_def = f'"{field_name}" {duckdb_type}'
+        if not nullable:
+            col_def += " NOT NULL"
+        if has_default and raw_default is not None:
+            col_def += f" DEFAULT {_format_default(raw_default)}"
+        fields.append(col_def)
+
+    existing_names = {f.split('"')[1] for f in fields}
+    for col in _AUDIT_COLUMNS:
+        name = col.split('"')[1]
+        if name not in existing_names:
+            fields.append(col)
+
+    return f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(fields)})"
 
 
 def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
@@ -30,34 +138,9 @@ def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-_BARS_DDL = """
-    security_id VARCHAR NOT NULL,
-    effective_date DATE NOT NULL,
-    available_at TIMESTAMPTZ NOT NULL,
-    source_id VARCHAR NOT NULL,
-    source_published_at TIMESTAMPTZ,
-    ingested_at TIMESTAMPTZ,
-    validated_at TIMESTAMPTZ,
-    open DOUBLE NOT NULL,
-    high DOUBLE NOT NULL,
-    low DOUBLE NOT NULL,
-    close DOUBLE NOT NULL,
-    volume BIGINT NOT NULL,
-    source_fetch_id VARCHAR,
-    raw_payload_hash VARCHAR,
-    ingestion_run_id VARCHAR,
-    content_hash VARCHAR,
-    version_hash VARCHAR,
-    normalization_version INT DEFAULT 1,
-    schema_version INT DEFAULT 1,
-    parser_version INT DEFAULT 1,
-    quality_status VARCHAR DEFAULT 'valid'
-"""
-
-
 def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
     df = compute_version_hash(df)
-    con.execute(f"CREATE TABLE IF NOT EXISTS lake_bars ({_BARS_DDL})")
+    con.execute(_generate_ddl(BarFact, "lake_bars"))
     return _merge_into(con, "lake_bars",
         ["security_id", "effective_date", "source_id", "available_at", "version_hash"],
         df)
@@ -65,27 +148,18 @@ def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
 
 def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
     df = compute_version_hash(df)
-    con.execute(f"""
-        CREATE TABLE IF NOT EXISTS corp_actions (
-            security_id VARCHAR NOT NULL, effective_date DATE NOT NULL,
-            available_at TIMESTAMPTZ NOT NULL, source_id VARCHAR NOT NULL,
-            action_type VARCHAR NOT NULL, ratio_numerator DOUBLE,
-            ratio_denominator DOUBLE, dividend_amount DOUBLE, dividend_currency VARCHAR,
-            source_fetch_id VARCHAR, raw_payload_hash VARCHAR, ingestion_run_id VARCHAR,
-            content_hash VARCHAR, version_hash VARCHAR,
-            normalization_version INT DEFAULT 1,
-            schema_version INT DEFAULT 1, parser_version INT DEFAULT 1,
-            quality_status VARCHAR DEFAULT 'valid'
-        )""")
+    con.execute(_generate_ddl(CorpActionFact, "corp_actions"))
     return _merge_into(con, "corp_actions",
-        ["security_id", "action_type", "effective_date", "source_id", "available_at", "version_hash"],
+        ["security_id", "action_type", "effective_date",
+         "source_id", "available_at", "version_hash"],
         df)
 
 
 _DATASET_KEYS: dict[str, list[str]] = {
     "lake_bars": ["security_id", "effective_date", "source_id"],
     "fundamentals": ["security_id", "fiscal_period", "statement_type", "line_item", "source_id"],
-    "insider_tx": ["security_id", "filer_cik", "issuer_cik", "transaction_code", "effective_date", "source_id"],
+    "insider_tx": ["security_id", "filer_cik", "issuer_cik",
+                     "transaction_code", "effective_date", "source_id"],
     "earnings_calendar": ["security_id", "report_date", "source_id"],
     "news_articles": ["article_id", "source_id"],
     "social_posts": ["post_id_hash", "source_id"],
@@ -97,7 +171,6 @@ _DATASET_KEYS: dict[str, list[str]] = {
 
 
 def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) -> int:
-    """Generic canonical write for any dataset table using MERGE INTO."""
     df = compute_version_hash(df)
     natural_keys = _DATASET_KEYS.get(table, ["id"])
     return _merge_into(con, table, natural_keys + ["available_at", "version_hash"], df)
@@ -109,14 +182,18 @@ def _merge_into(
     dedup_keys: list[str],
     df: pl.DataFrame,
 ) -> int:
-    """Upsert data using MERGE INTO. Dedups on (dedup_keys)."""
     cols = ", ".join(df.columns)
 
     con.execute("DROP TABLE IF EXISTS _staging")
     polars_to_duckdb(con, df, "_staging")
 
-    col_defs = ", ".join(f'"{c}" VARCHAR' for c in df.columns)
-    con.execute(f"CREATE TABLE IF NOT EXISTS {table} ({col_defs})")
+    model = _TABLE_MODELS.get(table)
+    if model is not None:
+        ddl = _generate_ddl(model, table)
+    else:
+        col_defs = ", ".join(f'"{c}" VARCHAR' for c in df.columns)
+        ddl = f"CREATE TABLE IF NOT EXISTS {table} ({col_defs})"
+    con.execute(ddl)
 
     join_on = " AND ".join(f"target.{k} = source.{k}" for k in dedup_keys)
     con.execute(f"""

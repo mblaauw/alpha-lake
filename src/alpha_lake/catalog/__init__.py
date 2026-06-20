@@ -24,7 +24,7 @@ def _build_attach(cfg: RootConfig) -> tuple[str, str]:
     else:
         attach = f"ducklake:sqlite:{raw}"
 
-    data_path = cfg.lake.data_path
+    data_path = cfg.lake.canonical_data_path
     return attach, data_path
 
 
@@ -43,6 +43,8 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     if cfg.lake.runtime == "stack":
         con.execute("INSTALL postgres")
         con.execute("LOAD postgres")
+        con.execute("INSTALL httpfs")
+        con.execute("LOAD httpfs")
 
         s3 = cfg.s3
         con.execute("SET s3_endpoint = ?", [s3.endpoint])
@@ -62,9 +64,8 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
 def _ensure_bucket(cfg: RootConfig) -> None:
     """Create the S3 data bucket if it doesn't already exist."""
     import subprocess
-    import re
 
-    data_path = cfg.lake.data_path
+    data_path = cfg.lake.canonical_data_path
     if not data_path.startswith("s3://"):
         return
     bucket = data_path.removeprefix("s3://").split("/")[0]
