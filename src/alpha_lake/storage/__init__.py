@@ -49,7 +49,7 @@ class _S3BlobStore(BlobStore):
             key=access_key,
             secret=secret_key,
             client_kwargs={"region_name": "us-east-1"},
-            config_kwargs={"s3addressingstyle": url_style},
+            config_kwargs={"s3": {"addressing_style": url_style}},
         )
 
     def _key(self, path: str) -> str:
