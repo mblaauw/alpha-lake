@@ -8,17 +8,17 @@ Alpha-Lake needs a lakehouse format that supports ACID transactions, time travel
 **Decision:**
 Use **DuckLake v1.0** (`ducklake` DuckDB extension) as the native lakehouse format. This replaces the earlier custom implementation that manually called `postgres_attach`, loaded httpfs/parquet extensions, and configured S3 settings. The official DuckLake extension handles catalog management, extension loading, S3 configuration, ACID transactions, snapshots, time travel, and partitioning natively.
 
-Connection is now a single ATTACH statement:
+Connection is now a single ATTACH statement. In the reference stack, explicit `INSTALL httpfs; LOAD httpfs` is added before ATTACH to ensure the HTTP/S3 extension is available (the storage collapse PR made this explicit to eliminate extension initialization race conditions):
 
 ```sql
-INSTALL ducklake;
-LOAD ducklake;
+INSTALL ducklake; LOAD ducklake;
+INSTALL httpfs;   LOAD httpfs;
 ATTACH 'ducklake:postgres:dbname=lake_catalog host=postgres'
     AS lake_catalog (DATA_PATH 's3://lake/');
 USE lake_catalog;
 ```
 
-For embedded mode:
+For embedded mode (no httpfs needed):
 
 ```sql
 ATTACH 'ducklake:sqlite:data/lake.catalog'

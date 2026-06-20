@@ -660,9 +660,12 @@ to the indicator cache (§14.4). Cache rules are identical:
 
 The **reference attach path is stack-first**: Postgres catalog + RustFS/S3 data. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
 
+DuckLake's ATTACH is preceded by explicit `INSTALL httpfs; LOAD httpfs` to ensure the HTTP/S3 filesystem extension is available before DuckLake loads data from S3. While DuckLake theoretically auto-loads httpfs, explicit loading eliminates race conditions during extension initialization.
+
 ```sql
 -- attach (reference stack) — Postgres catalog + RustFS/S3 data
 INSTALL ducklake; LOAD ducklake; INSTALL postgres; LOAD postgres;
+INSTALL httpfs; LOAD httpfs;
 ATTACH 'ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake'
     AS lake_catalog (DATA_PATH 's3://lake/');
 USE lake_catalog;
@@ -677,6 +680,16 @@ USE lake_catalog;
 **Tri-temporal mapping:** valid + knowledge time are *columns*; system time is the *DuckLake snapshot* — every committed transaction creates a snapshot, tagged by `snapshot_id`, giving audit trail + pinnable reproducibility (§21).
 
 **Schema evolution:** additive (nullable columns) within a major via DuckLake; required-field/meaning/PK changes mint a new major (`bars.v2` coexists with `v1`); consumers declare supported versions.
+
+**Patito-derived DDL — single source of schema truth:** Table definitions are no longer hardcoded SQL strings. Instead, `model_to_ddl(fact_model: type[patito.DataFrameModel]) -> str` reads Patito model annotations and generates DuckDB-compatible `CREATE TABLE` or `MERGE INTO` DDL. The `_TABLE_MODELS` registry maps table names to Patito models for all 10 datasets. This guarantees that the database schema always matches the validated model schema — they are the same source of truth. When no model is registered for a table, the system falls back to a safe `VARCHAR`-only schema. See `src/alpha_lake/canonical/__init__.py`.
+
+**Blob store abstraction (raw archive):** The raw archive subsystem uses a `BlobStore` ABC (`src/alpha_lake/storage/__init__.py`) instead of direct path/URI access. Two backends are registered:
+- **`_LocalBlobStore`** — wraps `pathlib.Path` for local filesystem access (embedded harness).
+- **`_S3BlobStore`** — wraps `s3fs.S3FileSystem` for S3-compatible object storage (reference stack).
+
+The factory `get_blob_store(uri: str) -> BlobStore` selects the backend by URI scheme (`s3://` → S3, everything else → local). This eliminates the storage split-brain where stack-mode raw archive writes went to the container's ephemeral disk instead of RustFS. See [ADR-0022](docs/adr/0022-blob-store.md) for the full decision.
+
+**Config split:** The old single `data_path` key is replaced by `canonical_data_path` (for DuckLake data) and `raw_archive_uri` (for the raw archive blob store), making the two storage domains explicit in both code and configuration.
 
 **Canonical Parquet layout:** canonical bars partition by `effective_date` year/month via `ALTER TABLE lake_bars SET PARTITIONED BY (year(effective_date), month(effective_date))`. Target 128-512 MB Parquet files per data file. DuckLake's file-level zone maps enable partition pruning during PIT reads.
 
@@ -753,15 +766,20 @@ One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the re
 
 **Golden replay** compares **both** business output **and** bitemporal row visibility — a replay that drops knowledge time is not point-in-time faithful.
 
+**Mode-parity guard:** `tests/integration/test_mode_parity.py` verifies that the embedded and stack runtimes produce identical canonical values after ingesting the same data, and that stack-mode raw archive blobs are *not* present on the local filesystem (they live in RustFS). This test is the structural guard against storage split-brain regressions. It runs only when the Docker stack is available; otherwise it skips.
+
 ## 22. Configuration & secrets
 
 Configuration is explicit about runtime shape. `stack` is the default; `embedded` is accepted only for tests, replay, and debugging.
+
+The `data_path` key is split into `canonical_data_path` (DuckLake canonical storage) and `raw_archive_uri` (raw blob store). This ensures stack-mode raw archive writes reach RustFS instead of going to ephemeral container disk.
 
 ```toml
 [lake]
 runtime   = "stack"                                # stack | embedded
 catalog   = "ducklake:postgres:host=pg dbname=lake_catalog"
-data_path = "s3://lake/"
+canonical_data_path = "s3://lake/"
+raw_archive_uri     = "s3://lake/raw/"
 
 [s3]
 endpoint  = "rustfs:9000"
@@ -791,7 +809,8 @@ Embedded harness override:
 [lake]
 runtime   = "embedded"
 catalog   = "ducklake:sqlite:data/lake.catalog"
-data_path = "data/lake/"
+canonical_data_path = "data/lake/"
+raw_archive_uri     = "data/lake/"
 ```
 
 Secrets via env or git-ignored local config — **never** written to raw, canonical, manifests, events, fixtures, snapshots. Connector logs redact `api_key/token/secret/authorization/cookie`.
@@ -918,6 +937,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Observability | OpenTelemetry (OTLP collector in stack; console in embedded harness) |
 | Remote serving | Arrow Flight SQL / ADBC (deferred) |
 | Lint/format · types · tests · boundaries | ruff · ty · pytest · import-linter |
+| Raw archive blob store | `s3fs` (S3) / `pathlib.Path` (local) via BlobStore ABC |
 
 One dataframe lib (Polars), one SQL engine (DuckDB) — never both for the same job; they share Arrow. All dependencies open-source; no managed service required. Kubernetes remains a later deployment target, not a v0.1 design dependency.
 

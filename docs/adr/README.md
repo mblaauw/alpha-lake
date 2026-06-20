@@ -29,3 +29,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0019 | Polars + Patito for DataFrame processing and model validation | Accepted |
 | 0020 | Trading calendar and timezone policy | Accepted |
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
+| 0022 | Blob store — unified raw archive interface | Accepted |

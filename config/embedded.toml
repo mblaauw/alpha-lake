@@ -1,7 +1,8 @@
 [lake]
 runtime = "embedded"
 catalog = "ducklake:sqlite:data/lake/lake.catalog"
-data_path = "data/lake/"
+canonical_data_path = "data/lake/"
+raw_archive_uri = "data/lake/"
 calendar_version = "4.13.2"
 
 [source_datasets.eodhd]

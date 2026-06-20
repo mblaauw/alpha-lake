@@ -25,7 +25,7 @@ def test_connect_ducklake():
     tmp.close()
     cfg = RootConfig(lake=LakeConfig(
         catalog=f"ducklake:sqlite:{tmp.name}",
-        data_path=tmp.name + ".files",
+        canonical_data_path=tmp.name + ".files",
         runtime="embedded",
     ))
     try:
