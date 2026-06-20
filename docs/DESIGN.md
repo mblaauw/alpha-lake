@@ -654,14 +654,14 @@ to the indicator cache (§14.4). Cache rules are identical:
 4. Cache reads must preserve the same PIT guarantees as normal readers.
 5. Cache misses compute on demand or fail explicitly, depending on caller policy.
 
-## 16. Storage — DuckLake + MinIO
+## 16. Storage — DuckLake + RustFS
 
 **DuckLake v1.0** (`ducklake` DuckDB extension): the official DuckDB extension for the DuckLake lakehouse format. It manages ACID transactions, snapshots, time travel, schema evolution, and partitioning natively. Connection is a single ATTACH statement — the extension handles extension loading (httpfs, parquet, postgres, sqlite), catalog management, and S3 configuration internally.
 
-The **reference attach path is stack-first**: Postgres catalog + MinIO/S3 data. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
+The **reference attach path is stack-first**: Postgres catalog + RustFS/S3 data. The SQLite/local-FS attach path is kept only for embedded tests and golden replay.
 
 ```sql
--- attach (reference stack) — Postgres catalog + MinIO/S3 data
+-- attach (reference stack) — Postgres catalog + RustFS/S3 data
 INSTALL ducklake; LOAD ducklake; INSTALL postgres; LOAD postgres;
 ATTACH 'ducklake:postgres:host=postgres dbname=lake_catalog user=lake password=lake'
     AS lake_catalog (DATA_PATH 's3://lake/');
