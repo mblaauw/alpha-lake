@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import hashlib
 import json
@@ -26,17 +27,36 @@ from alpha_lake.models.dataset_models import (
 
 NORMALIZATION_VERSION: int = 1
 
-_TABLE_MODELS: dict[str, type[pt.Model]] = {
-    "lake_bars": BarFact,
-    "corp_actions": CorpActionFact,
-    "fundamentals": FundamentalFact,
-    "insider_tx": InsiderTxFact,
-    "news_articles": NewsArticleFact,
-    "social_posts": SocialPostFact,
-    "earnings_calendar": EarningsEventFact,
-    "entity_mentions": EntityMentionFact,
-    "sentiment_annotations": SentimentAnnotationFact,
-    "attention_metrics": AttentionMetricFact,
+
+@dataclasses.dataclass(frozen=True)
+class Dataset:
+    table: str
+    model: type[pt.Model]
+    natural_keys: tuple[str, ...]
+
+
+_BARS_KEYS = ("security_id", "effective_date", "source_id")
+_CORP_KEYS = ("security_id", "action_type", "effective_date", "source_id")
+_FUND_KEYS = ("security_id", "fiscal_period", "statement_type", "line_item", "source_id")
+_INSIDER_KEYS = (
+    "security_id", "filer_cik", "issuer_cik",
+    "transaction_code", "effective_date", "source_id",
+)
+_EARN_KEYS = ("security_id", "report_date", "source_id")
+_ATTR_KEYS = ("security_id", "window_start", "window_end", "window_type")
+_SENT_KEYS = ("annotation_id",)
+
+DATASETS: dict[str, Dataset] = {
+    "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
+    "corp_actions": Dataset("corp_actions", CorpActionFact, _CORP_KEYS),
+    "fundamentals": Dataset("fundamentals", FundamentalFact, _FUND_KEYS),
+    "insider_tx": Dataset("insider_tx", InsiderTxFact, _INSIDER_KEYS),
+    "news_articles": Dataset("news_articles", NewsArticleFact, ("article_id", "source_id")),
+    "social_posts": Dataset("social_posts", SocialPostFact, ("post_id_hash", "source_id")),
+    "earnings_calendar": Dataset("earnings_calendar", EarningsEventFact, _EARN_KEYS),
+    "entity_mentions": Dataset("entity_mentions", EntityMentionFact, ("mention_id",)),
+    "sentiment_annotations": Dataset("sentiment_annotations", SentimentAnnotationFact, _SENT_KEYS),
+    "attention_metrics": Dataset("attention_metrics", AttentionMetricFact, _ATTR_KEYS),
 }
 
 _AUDIT_COLUMNS: list[str] = [
@@ -138,42 +158,27 @@ def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
+def ensure_schema(con: duckdb.DuckDBPyConnection, dataset: Dataset) -> None:
+    con.execute(_generate_ddl(dataset.model, dataset.table))
+
+
+def write(con: duckdb.DuckDBPyConnection, dataset: Dataset, df: pl.DataFrame) -> int:
     df = compute_version_hash(df)
-    con.execute(_generate_ddl(BarFact, "lake_bars"))
-    return _merge_into(con, "lake_bars",
-        ["security_id", "effective_date", "source_id", "available_at", "version_hash"],
-        df)
+    ensure_schema(con, dataset)
+    dedup_keys = list(dataset.natural_keys) + ["available_at", "version_hash"]
+    return _merge_into(con, dataset.table, dedup_keys, df)
+
+
+def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
+    return write(con, DATASETS["lake_bars"], df)
 
 
 def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
-    df = compute_version_hash(df)
-    con.execute(_generate_ddl(CorpActionFact, "corp_actions"))
-    return _merge_into(con, "corp_actions",
-        ["security_id", "action_type", "effective_date",
-         "source_id", "available_at", "version_hash"],
-        df)
-
-
-_DATASET_KEYS: dict[str, list[str]] = {
-    "lake_bars": ["security_id", "effective_date", "source_id"],
-    "fundamentals": ["security_id", "fiscal_period", "statement_type", "line_item", "source_id"],
-    "insider_tx": ["security_id", "filer_cik", "issuer_cik",
-                     "transaction_code", "effective_date", "source_id"],
-    "earnings_calendar": ["security_id", "report_date", "source_id"],
-    "news_articles": ["article_id", "source_id"],
-    "social_posts": ["post_id_hash", "source_id"],
-    "entity_mentions": ["mention_id"],
-    "sentiment_annotations": ["annotation_id"],
-    "attention_metrics": ["security_id", "window_start", "window_end", "window_type"],
-    "corp_actions": ["security_id", "action_type", "effective_date", "source_id"],
-}
+    return write(con, DATASETS["corp_actions"], df)
 
 
 def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) -> int:
-    df = compute_version_hash(df)
-    natural_keys = _DATASET_KEYS.get(table, ["id"])
-    return _merge_into(con, table, natural_keys + ["available_at", "version_hash"], df)
+    return write(con, DATASETS[table], df)
 
 
 def _merge_into(
@@ -187,12 +192,7 @@ def _merge_into(
     con.execute("DROP TABLE IF EXISTS _staging")
     polars_to_duckdb(con, df, "_staging")
 
-    model = _TABLE_MODELS.get(table)
-    if model is not None:
-        ddl = _generate_ddl(model, table)
-    else:
-        col_defs = ", ".join(f'"{c}" VARCHAR' for c in df.columns)
-        ddl = f"CREATE TABLE IF NOT EXISTS {table} ({col_defs})"
+    ddl = _generate_ddl(DATASETS[table].model, table)
     con.execute(ddl)
 
     join_on = " AND ".join(f"target.{k} = source.{k}" for k in dedup_keys)
