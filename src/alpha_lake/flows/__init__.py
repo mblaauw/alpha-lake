@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import duckdb
 
@@ -14,17 +14,74 @@ from alpha_lake.raw import archive
 from alpha_lake.source_registry import get_primary_source
 
 
+def _missing_dates(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    sid: str,
+    from_date: str = "",
+    to_date: str = "",
+) -> list[str]:
+    """Return ISO date strings missing from the canonical table for *sid*.
+
+    When the entire requested range is already covered the list is empty —
+    the caller can skip the API call / synthetic generation entirely.
+
+    *from_date* and *to_date* are ISO strings (or empty for unbounded).
+    When both are empty the helper checks for *any* existing data and returns
+    ``['<today>']`` when the table is empty or ``[]`` when data already exists.
+    """
+    try:
+        existing = {
+            r[0]
+            for r in con.execute(
+                f"""SELECT DISTINCT effective_date FROM {table}
+                    WHERE security_id = ?
+                      AND (? = '' OR effective_date >= DATE(?))
+                      AND (? = '' OR effective_date <= DATE(?))""",
+                [sid, from_date, from_date, to_date, to_date],
+            ).fetchall()
+        }
+    except duckdb.CatalogException:
+        existing = set()
+
+    f = date.fromisoformat(from_date) if from_date else None
+    t = date.fromisoformat(to_date) if to_date else None
+
+    if f is None and t is None:
+        if existing:
+            return []
+        return [date.today().isoformat()]
+
+    if f is None:
+        f = min(existing, default=date.today())
+    if t is None:
+        t = max(existing, default=date.today())
+
+    missing: list[str] = []
+    d = f
+    while d <= t:
+        if d not in existing:
+            missing.append(d.isoformat())
+        d += timedelta(days=1)
+    return missing
+
+
 def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime) -> bytes:
     """Generate synthetic raw payload for offline/CI mode."""
     import json
-    return json.dumps([{
-        "date": from_date or to_date or clock_now.date().isoformat(),
-        "open": 100.0,
-        "high": 101.0,
-        "low": 99.0,
-        "close": 100.5,
-        "volume": 10000,
-    }]).encode()
+
+    return json.dumps(
+        [
+            {
+                "date": from_date or to_date or clock_now.date().isoformat(),
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 10000,
+            }
+        ]
+    ).encode()
 
 
 async def _fetch_and_ingest(
@@ -43,6 +100,7 @@ async def _fetch_and_ingest(
     content_hash = archive(raw_bytes)
 
     import json
+
     raw_data = json.loads(raw_bytes)
     records = raw_data if isinstance(raw_data, list) else [raw_data]
 
@@ -74,6 +132,7 @@ def _ingest_synthetic(
     content_hash = archive(raw_bytes)
 
     import json
+
     raw_data = json.loads(raw_bytes)
     records = raw_data if isinstance(raw_data, list) else [raw_data]
 
@@ -120,17 +179,32 @@ def ingest_bars(
     total = 0
 
     if connector and creds:
+
         async def _run_all():
             t = 0
             for sid in security_ids:
+                missing = _missing_dates(con, "lake_bars", sid, from_date, to_date)
+                if not missing:
+                    continue
                 t += await _fetch_and_ingest(
-                    con, connector, sid, src, from_date, to_date, run_id, clock_now,
+                    con,
+                    connector,
+                    sid,
+                    src,
+                    missing[0],
+                    missing[-1],
+                    run_id,
+                    clock_now,
                 )
             return t
+
         total = asyncio.run(_run_all())
     else:
         for sid in security_ids:
-            total += _ingest_synthetic(con, sid, src, from_date, to_date, run_id, clock_now)
+            missing = _missing_dates(con, "lake_bars", sid, from_date, to_date)
+            if not missing:
+                continue
+            total += _ingest_synthetic(con, sid, src, missing[0], missing[-1], run_id, clock_now)
 
     return total
 
@@ -147,11 +221,15 @@ def backfill_bars(
     Iterates through each business day and ingests missing data.
     """
     from alpha_lake.calendar_ import trading_days_in_range
+
     total = 0
     days = trading_days_in_range(start_date, end_date)
     for sid in security_ids:
         for dt in days:
-            _r = con.execute("SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?", [sid, dt]).fetchone()
+            _r = con.execute(
+                "SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?",
+                [sid, dt],
+            ).fetchone()
             existing = _r[0] if _r else 0
             if existing == 0:
                 total += ingest_bars(con, [sid], dt.isoformat(), dt.isoformat(), source_id)
@@ -175,6 +253,7 @@ def reparse_bars(
     from alpha_lake.normalize import bars_from_json
     from alpha_lake.quality import check_market_sanity
     from alpha_lake.raw import read_raw
+
     reparse_ts = get_clock().now()
     total = 0
     for sid in security_ids:
@@ -182,13 +261,13 @@ def reparse_bars(
             rows = con.execute(
                 "SELECT content_hash, source_id, source_fetch_id, ingestion_run_id, "
                 "available_at, ingested_at FROM lake_bars WHERE security_id = ? AND effective_date = ?",
-                [sid, effective_date]
+                [sid, effective_date],
             ).fetchall()
         else:
             rows = con.execute(
                 "SELECT DISTINCT content_hash, source_id, source_fetch_id, ingestion_run_id, "
                 "available_at, ingested_at FROM lake_bars WHERE security_id = ?",
-                [sid]
+                [sid],
             ).fetchall()
         for row in rows:
             content_hash, src_id, fetch_id, run_id, avail_at, ingested_at = row
@@ -196,7 +275,9 @@ def reparse_bars(
             raw_data = json.loads(raw.decode())
             if isinstance(raw_data, dict):
                 raw_data = [raw_data]
-            df = bars_from_json(raw_data, sid, src_id, fetch_id, run_id, content_hash, reparse_ts, ingested_at)
+            df = bars_from_json(
+                raw_data, sid, src_id, fetch_id, run_id, content_hash, reparse_ts, ingested_at
+            )
             df = check_market_sanity(df)
             total += write_bars(con, df)
     return total
