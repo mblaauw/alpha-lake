@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date
+from datetime import date
 from typing import Any
+
+from alpha_lake.clock import get_clock
 
 
 def mint_security_id(figi: str = "", cik: str = "", isin: str = "", composite: str = "") -> str:
@@ -69,8 +71,7 @@ def register(
     exchange: str = "",
 ) -> None:
     """Register a symbol → security_id mapping."""
-    from datetime import datetime, timezone
-    ts = available_at or datetime.now(timezone.utc)
+    ts = available_at or get_clock().now()
 
     con.execute("""
         CREATE TABLE IF NOT EXISTS security_master (

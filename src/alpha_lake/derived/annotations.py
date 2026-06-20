@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import re
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import polars as pl
-from datetime import timezone
 
-from alpha_lake.derived.indicators import ema
+from alpha_lake.clock import get_clock
 
 _COMMON_WORDS = {
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
@@ -85,10 +83,10 @@ def compute_attention_metrics(
         subset = df.filter(pl.col("security_id") == sid)
         rows.append({
             "security_id": sid,
-            "effective_date": date.today(),
-            "available_at": datetime.now(timezone.utc),
-            "window_start": date.today() - timedelta(days=window_days),
-            "window_end": date.today(),
+            "effective_date": get_clock().today(),
+            "available_at": get_clock().now(),
+            "window_start": get_clock().today() - timedelta(days=window_days),
+            "window_end": get_clock().today(),
             "window_type": f"{window_days}d",
             "article_count": subset.height,
             "mention_count": subset.height,
