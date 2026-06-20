@@ -30,7 +30,7 @@ Key features provided by the extension:
 - ACID transactions with snapshot isolation
 - Time travel via `FOR SYSTEM_TIME AS OF`
 - Native DuckDB SQL interface
-- S3-compatible storage backend (MinIO, S3, GCS, Azure)
+- S3-compatible storage backend (RustFS, S3, GCS, Azure)
 - SCD2 operations via `MERGE INTO` with append-only semantics
 - Partitioning via `ALTER TABLE ... SET PARTITIONED BY`
 - Concurrent read/write access across multiple DuckDB instances
