@@ -680,7 +680,7 @@ USE lake_catalog;
 
 **Canonical Parquet layout:** canonical bars partition by `effective_date` year/month via `ALTER TABLE lake_bars SET PARTITIONED BY (year(effective_date), month(effective_date))`. Target 128-512 MB Parquet files per data file. DuckLake's file-level zone maps enable partition pruning during PIT reads.
 
-**Snapshot retention and compaction:** DuckLake provides built-in maintenance operations: `CALL lake_catalog.merge_files(...)`, `CALL lake_catalog.expire_snapshots(...)`, and `CALL lake_catalog.checkpoint(...)`. Compaction may rewrite physical Parquet files but preserves snapshot-to-data mappings. Retention is configurable per snapshot.
+**Snapshot retention and compaction:** DuckLake provides built-in maintenance operations: `CALL lake_catalog.merge_files(...)`, `CALL lake_catalog.expire_snapshots(...)`, and `CALL lake_catalog.checkpoint(...)`. Compaction may rewrite physical Parquet files but preserves snapshot-to-data mappings. Retention is configurable per snapshot. See [ADR-0021](docs/adr/0021-snapshot-retention-compaction-reproducibility.md) for the full retention and compaction policy.
 
 ## 17. Ingestion pipeline — dlt
 

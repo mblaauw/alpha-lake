@@ -100,3 +100,69 @@ def dataset_health(con: duckdb.DuckDBPyConnection, dataset: str) -> dict:
         pass
     info["status"] = "ok" if info["rows"] > 0 else "empty"
     return info
+
+
+def catalog_health(con: duckdb.DuckDBPyConnection) -> dict:
+    """Return overall catalog health metrics including snapshot and metadata info."""
+    result: dict = {"snapshots": 0, "latest_snapshot_id": None}
+    try:
+        r = con.execute("SELECT snapshot_id FROM ducklake_last_committed_snapshot('lake_catalog')").fetchone()
+        result["latest_snapshot_id"] = r[0] if r else None
+    except Exception:
+        pass
+    try:
+        r = con.execute("SELECT COUNT(*) FROM ducklake_snapshots('lake_catalog')").fetchone()
+        result["snapshots"] = r[0] if r else 0
+    except Exception:
+        pass
+    return result
+
+
+def list_snapshots(con: duckdb.DuckDBPyConnection) -> list[dict]:
+    """List all DuckLake snapshots with details."""
+    rows = con.execute(
+        "SELECT snapshot_id, snapshot_time, changes FROM ducklake_snapshots('lake_catalog')"
+    ).fetchall()
+    return [
+        {"snapshot_id": r[0], "timestamp": str(r[1]), "changes": str(r[2])}
+        for r in rows
+    ]
+
+
+def set_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str) -> None:
+    """Pin reads to a specific DuckLake snapshot for reproducibility.
+
+    Attempts to use DuckLake's snapshot pinning API when available.
+    Raises NotImplementedError if the DuckLake version doesn't support it.
+    """
+    catalog = "lake_catalog"
+    try:
+        con.execute(
+            f"SELECT * FROM ducklake_set_option('{catalog}', 'snapshot_id', ?)",
+            [snapshot_id],
+        )
+    except Exception as e:
+        raise NotImplementedError(
+            f"Snapshot pinning not supported by this DuckLake version: {e}"
+        ) from e
+
+
+def resolve_ingestion_run(
+    con: duckdb.DuckDBPyConnection, run_id: str
+) -> int | None:
+    """Map an ingestion_run_id to its DuckLake snapshot ID.
+
+    Returns the snapshot_id or None if not found.
+    """
+    catalog = "lake_catalog"
+    run_id_ts = run_id.removeprefix("run_").split("_")[0]
+    row = con.execute(
+        f"""
+        SELECT snapshot_id FROM ducklake_snapshots('{catalog}')
+        WHERE changes::VARCHAR LIKE '%' || ? || '%'
+        ORDER BY snapshot_id DESC
+        LIMIT 1
+        """,
+        [run_id_ts],
+    ).fetchone()
+    return row[0] if row else None

@@ -1,6 +1,6 @@
 # ADR-0013: Nix flake as hermetic reproducibility ceiling
 
-**Status:** Accepted
+**Status:** Superseded — Superseded by OCI image + uv.lock + vendored wheelhouse per ADR-0012. The OCI image is the deploy and reproducibility unit in cloud-native tiers. `flake.nix` remains as a development convenience but is not the reproducibility guarantee.
 
 **Implementation:** `flake.nix` at repo root with Python 3.14, uv, docker-compose in a devShell.
 

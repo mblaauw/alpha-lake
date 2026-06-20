@@ -5,6 +5,8 @@ import tomllib
 
 import pydantic
 
+from alpha_lake.secrets import get_store
+
 
 class SourceConfig(pydantic.BaseModel):
     api_key: str = ""
@@ -63,10 +65,11 @@ def load_config(path: str | None = None) -> RootConfig:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
-    api_key = os.environ.get("ALPHA_LAKE_EODHD_API_KEY", "")
-    if api_key and "eodhd" not in raw.get("sources", {}):
-        raw.setdefault("sources", {})["eodhd"] = {}
-        raw["sources"]["eodhd"].setdefault("api_key", api_key)
+    store = get_store()
+    for source_id in raw.get("sources", {}):
+        stored = store.get(f"{source_id}_api_key")
+        if stored:
+            raw["sources"][source_id].setdefault("api_key", stored)
 
     _config = RootConfig.model_validate(raw)
     return _config

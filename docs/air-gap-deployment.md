@@ -31,6 +31,50 @@ docker load < vendor/images.tar.gz
 just up --offline
 ```
 
+## DuckDB Extension Vendoring
+
+DuckDB extensions (ducklake, httpfs, parquet, postgres, sqlite_scanner) are autoloaded
+from DuckDB's CDN by default. In air-gapped environments, extension files must be
+vendored manually.
+
+### Extension File Locations
+
+Download extension files from DuckDB's extension repository for your platform:
+
+| Platform | Extension directory |
+|----------|-------------------|
+| macOS (arm64) | `~/.duckdb/extensions/{duckdb_version}/osx_arm64/` |
+| Linux (amd64) | `~/.duckdb/extensions/{duckdb_version}/linux_amd64/` |
+| Linux (arm64) | `~/.duckdb/extensions/{duckdb_version}/linux_arm64/` |
+
+### Required Extensions
+
+- `ducklake.duckdb_extension`
+- `httpfs.duckdb_extension`
+- `parquet.duckdb_extension`
+- `postgres_scanner.duckdb_extension`
+- `sqlite_scanner.duckdb_extension`
+
+### Configuration
+
+Set DuckDB's extension directory before loading extensions:
+
+```sql
+SET extension_directory = '/path/to/vendored/extensions';
+```
+
+Or set the environment variable `DUCKDB_EXTENSION_DIRECTORY`.
+
+### Verify Offline Installation
+
+```python
+import duckdb
+con = duckdb.connect()
+con.execute("SET extension_directory = '/path/to/vendored/extensions'")
+con.execute("INSTALL ducklake")   # loads from local dir, not CDN
+con.execute("LOAD ducklake")
+```
+
 ## Verify
 
 ```bash

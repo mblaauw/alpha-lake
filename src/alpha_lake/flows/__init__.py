@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from pathlib import Path
+from datetime import UTC, date, datetime, timezone
 
 import duckdb
-import polars as pl
 
-from alpha_lake.canonical import write_bars, write_dataset
-from alpha_lake.catalog import bootstrap, connect
-from alpha_lake.config import get_config
-from alpha_lake.interop import polars_to_duckdb
+from alpha_lake.canonical import write_bars
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
@@ -38,19 +33,10 @@ def ingest_bars(
     if not src:
         raise ValueError("No source configured for bars_daily")
 
-    run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
     total = 0
 
     for sid in security_ids:
-        manifest_data = {
-            "source_id": src,
-            "endpoint": f"/eod/{sid}",
-            "content_hash": "",
-            "byte_size": 0,
-            "http_status": 0,
-            "parser_version_intended": 1,
-        }
-        ingest_ts = datetime.now(timezone.utc).isoformat()
         raw_content = f'{{"date":"{from_date or to_date or date.today().isoformat()}","open":100,"high":101,"low":99,"close":100.5,"volume":10000}}'
         raw_bytes = raw_content.encode()
 
@@ -64,8 +50,8 @@ def ingest_bars(
             source_fetch_id=f"fetch_{sid}",
             ingestion_run_id=run_id,
             content_hash=content_hash,
-            available_at=datetime.now(timezone.utc),
-            ingested_at=datetime.now(timezone.utc),
+            available_at=datetime.now(UTC),
+            ingested_at=datetime.now(UTC),
         )
 
         df = check_market_sanity(df)
@@ -102,11 +88,19 @@ def reparse_bars(
     security_ids: list[str],
     effective_date: date | None = None,
 ) -> int:
-    """Reparse raw archive data and rewrite canonical rows."""
-    from alpha_lake.raw import read_raw
+    """Reparse raw archive data and rewrite canonical rows.
+
+    Creates a NEW knowledge-time version: the reparsed row gets a new
+    available_at set to reparse time, while preserving content_hash
+    pointing to the original raw archive blobs. Both the original and
+    the new reparse version coexist in the lake.
+    """
+    import json
+
     from alpha_lake.normalize import bars_from_json
     from alpha_lake.quality import check_market_sanity
-    import json
+    from alpha_lake.raw import read_raw
+    reparse_ts = datetime.now(UTC)
     total = 0
     for sid in security_ids:
         if effective_date:
@@ -127,7 +121,7 @@ def reparse_bars(
             raw_data = json.loads(raw.decode())
             if isinstance(raw_data, dict):
                 raw_data = [raw_data]
-            df = bars_from_json(raw_data, sid, src_id, fetch_id, run_id, content_hash, avail_at, ingested_at)
+            df = bars_from_json(raw_data, sid, src_id, fetch_id, run_id, content_hash, reparse_ts, ingested_at)
             df = check_market_sanity(df)
             total += write_bars(con, df)
     return total
@@ -137,6 +131,7 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
     """Compact a canonical table by removing duplicate versions.
 
     Keeps only the newest available_at per (natural_key + version_hash).
+    Uses window-function dedup for portability across DuckDB, Postgres, and SQLite.
     """
     key_map = {
         "lake_bars": ["security_id", "effective_date", "source_id"],
@@ -148,13 +143,24 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
         raise ValueError(f"No key map for {table}")
 
     key_cols = ", ".join(keys)
-    # Note: rowid works in DuckDB/SQLite but NOT in Postgres through postgres_scan.
+    stg = f"_compact_{table}"
+
     con.execute(f"""
-        DELETE FROM {table}
-        WHERE rowid NOT IN (
-            SELECT MIN(rowid) FROM {table}
-            GROUP BY {key_cols}, available_at, version_hash
-        )
+        CREATE TABLE {stg} AS
+        SELECT * EXCLUDE rn FROM (
+            SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY {key_cols}, available_at, version_hash
+                    ORDER BY available_at
+                ) AS rn
+            FROM {table}
+        ) dup
+        WHERE rn = 1
     """)
+    con.execute(f"DELETE FROM {table}")
+    cols = ", ".join(c[0] for c in con.execute(f"DESCRIBE {stg}").fetchall())
+    con.execute(f"INSERT INTO {table} SELECT {cols} FROM {stg}")
+    con.execute(f"DROP TABLE IF EXISTS {stg}")
+
     _r = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     return _r[0] if _r else 0

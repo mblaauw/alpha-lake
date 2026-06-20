@@ -10,13 +10,22 @@ from alpha_lake.interop import duckdb_to_polars, polars_to_duckdb
 from alpha_lake.source_registry import get_source_precedence
 
 
+def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> None:
+    if snapshot_id is not None:
+        from alpha_lake.catalog import set_snapshot
+
+        set_snapshot(con, snapshot_id)
+
+
 def read_bars_asof(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],
     as_of: datetime,
     start_date: date | None = None,
     end_date: date | None = None,
-) -> pl.DataFrame:
+    snapshot_id: str | None = None,
+    ) -> pl.DataFrame:
+    _pin_snapshot(con, snapshot_id)
     source_priority = get_source_precedence("bars_daily")
     params: list = [security_ids, as_of, as_of.date()]
 
@@ -82,6 +91,7 @@ def read_bars_adjusted(
     start_date: date | None = None,
     end_date: date | None = None,
     price_mode: str = "raw",
+    snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     """Return bars with PIT-bounded price adjustment.
 
@@ -90,9 +100,13 @@ def read_bars_adjusted(
                     'total_return' (apply splits + dividends).
     """
     if price_mode == "raw":
-        return read_bars_asof(con, security_ids, as_of, start_date, end_date)
+        return read_bars_asof(
+            con, security_ids, as_of, start_date, end_date, snapshot_id=snapshot_id,
+        )
 
-    raw = read_bars_asof(con, security_ids, as_of, start_date, end_date)
+    raw = read_bars_asof(
+        con, security_ids, as_of, start_date, end_date, snapshot_id=snapshot_id,
+    )
     if raw.height == 0:
         return raw
 
@@ -143,13 +157,16 @@ def read_bars_latest(
     security_ids: list[str],
     start_date: date | None = None,
     end_date: date | None = None,
+    snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     """PIT-unsafe: returns newest data available as of now().
 
     This is an explicit non-research path. Research reads must use
     read_bars_asof() with an explicit as_of parameter.
     """
-    return read_bars_asof(con, security_ids, get_clock().now(), start_date, end_date)
+    return read_bars_asof(
+        con, security_ids, get_clock().now(), start_date, end_date, snapshot_id=snapshot_id,
+    )
 
 
 def read_panel(
@@ -157,12 +174,14 @@ def read_panel(
     spine: pl.DataFrame,
     as_of: datetime,
     dataset: str = "lake_bars",
+    snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     """Panel/spine reader: for each (security_id, effective_date) in the spine,
     return the newest version with available_at <= as_of.
 
     The spine must have columns 'security_id' and 'effective_date'.
     """
+    _pin_snapshot(con, snapshot_id)
     con.execute("DROP VIEW IF EXISTS _spine")
     con.register("_spine", spine.to_arrow())
     query = f"""
@@ -189,9 +208,11 @@ def read_asof_join(
     con: duckdb.DuckDBPyConnection,
     spine: pl.DataFrame,
     dataset: str = "lake_bars",
+    snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     """Per-row PIT join: the spine must have 'security_id', 'effective_date',
     and 'as_of' columns. Each row gets its own PIT boundary."""
+    _pin_snapshot(con, snapshot_id)
     con.execute("DROP VIEW IF EXISTS _spine")
     con.register("_spine", spine.to_arrow())
     query = f"""

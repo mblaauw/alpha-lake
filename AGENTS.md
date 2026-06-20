@@ -16,9 +16,12 @@ Alpha-Lake is a stack-first, bitemporal, replayable **market-data lakehouse**. I
 validates, and serves **point-in-time-correct** market facts. It owns facts; it knows nothing about strategy.
 
 Stack: Python 3.14 · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · MinIO (S3) ·
-dlt ingestion · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose.
+dlt ingestion · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
+Dagster (optional).
 
-Full spec: `@docs/DESIGN.md`. Decisions: `@docs/adr/`.
+Secrets via `SecretStore` ABC (`EnvSecretStore` / `StaticSecretStore`); see `@src/alpha_lake/secrets.py`.
+
+Full spec: `@docs/DESIGN.md`. Operations: `@docs/operations.md`. Decisions: `@docs/adr/`.
 
 ## Workflow
 

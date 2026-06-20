@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import os
-
 import httpx
+
+from alpha_lake.secrets import get_store
 
 
 def alpaca_client() -> httpx.AsyncClient:
-    api_key = os.environ.get("APCA_API_KEY_ID", "")
-    secret_key = os.environ.get("APCA_API_SECRET_KEY", "")
+    store = get_store()
+    api_key = store.get("alpaca_api_key_id")
+    secret_key = store.get("alpaca_api_secret_key")
     headers = {
         "APCA-API-KEY-ID": api_key,
         "APCA-API-SECRET-KEY": secret_key,
