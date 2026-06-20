@@ -65,7 +65,7 @@ flowchart LR
   subgraph STORE[Storage backends]
     direction TB
     CAT[(Catalog DB<br/>Postgres primary<br/>SQLite embedded tests)]
-    OBJ[(Object store<br/>MinIO primary<br/>local FS embedded tests)]
+    OBJ[(Object store<br/>RustFS primary<br/>local FS embedded tests)]
   end
   CON[Consumers]
   S1 & S2 & S3 --> ING --> RAW --> CAN --> SRV --> CON
@@ -96,7 +96,7 @@ flowchart TB
     direction LR
     J[just up] --> APP[alpha-lake app container]
     APP --> PG[(DuckLake catalog · Postgres)]
-    APP --> S3[(Parquet data · MinIO/S3)]
+    APP --> S3[(Parquet data · RustFS/S3)]
     APP --> OTEL[OTel collector]
     DAG[Dagster optional] --> APP
   end
@@ -112,13 +112,13 @@ flowchart TB
 | Purpose | Normal development, integration, v0.1 validation | Fast tests, debugging, fixture generation, golden replay |
 | Runtime | Docker Compose or Podman Compose | In-process Python / DuckDB |
 | Catalog | Postgres container | SQLite file |
-| Object store | MinIO S3-compatible container | local filesystem |
+| Object store | RustFS S3-compatible container/binary | local filesystem |
 | Orchestration | Typer CLI in app container; Dagster optional | pytest / replay runner |
 | Observability | OTel → collector | OTel → console |
 | Command shape | `just up`, `just bootstrap`, `just ingest`, `just health` | `just test`, `just replay` |
 | Architectural status | **Primary path** | **Supporting harness only** |
 
-The developer does not install Postgres, MinIO, Dagster, DuckDB extensions, or observability services locally. The only expected host tools are a container runtime, `just`, and optionally `uv` for local editing. The stack is started and stopped as one isolated namespace.
+The developer does not install Postgres, RustFS, Dagster, DuckDB extensions, or observability services locally. The only expected host tools are a container runtime, `just`, and optionally `uv` for local editing. The stack is started and stopped as one isolated namespace.
 
 ## 4. The temporal model (conceptual)
 
@@ -735,7 +735,7 @@ flowchart LR
 
 `reparse` with a new `parser_version` mints a new canonical version visible at `available_at = reparse_time`. Snapshots pinned to the old version still see old values; reparse never mutates a prior canonical row or raw archive object.
 
-**Reference execution:** `just up` starts Postgres + MinIO + the app container; `just ingest ...` executes the CLI in the app container against the real stack.
+**Reference execution:** `just up` starts Postgres + RustFS + the app container; `just ingest ...` executes the CLI in the app container against the real stack.
 
 **Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates; dlt's Dagster integration drives extraction. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
@@ -764,7 +764,7 @@ catalog   = "ducklake:postgres:host=pg dbname=lake_catalog"
 data_path = "s3://lake/"
 
 [s3]
-endpoint  = "minio:9000"
+endpoint  = "rustfs:9000"
 url_style = "path"
 use_ssl   = false
 
@@ -810,7 +810,7 @@ flowchart TB
     direction TB
     PY[uv.lock + vendor/wheelhouse/ — Python deps]
     IMG[vendor/images/*.tar — digest-pinned containers]
-    BIN[vendor/bin/ — optional static binaries]
+    BIN[vendor/bin/rustfs — optional static binary]
     CFG[.stack/ — service configs]
     NIX[flake.nix — hermetic ceiling]
   end
@@ -819,9 +819,9 @@ flowchart TB
 ```
 
 - **Python:** `uv.lock` committed; `uv export` → `vendor/wheelhouse/` for offline `uv sync --offline` inside the app image or embedded harness.
-- **App container:** the Alpha-Lake CLI runs inside a pinned app image so developers do not install Postgres, MinIO, DuckDB extensions, or service dependencies on the host.
-- **Services:** `compose.yaml` pins **image digests** for Postgres, MinIO, the Alpha-Lake app, and optional Dagster/OTel collector. `just vendor` runs `docker save`/`podman save` into `vendor/images/` for air-gap transfer + load into an internal registry.
-- **Hermetic option:** `flake.nix` pins Python, Postgres, DuckDB, and CLI tooling together (`nix develop` / `nix run`). Maximal reproducibility; Compose + uv remains the pragmatic default.
+- **App container:** the Alpha-Lake CLI runs inside a pinned app image so developers do not install Postgres, RustFS, DuckDB extensions, or service dependencies on the host.
+- **Services:** `compose.yaml` pins **image digests** for Postgres, RustFS, the Alpha-Lake app, and optional Dagster/OTel collector. `just vendor` runs `docker save`/`podman save` into `vendor/images/` for air-gap transfer + load into an internal registry. RustFS may instead be the vendored static binary in `vendor/bin/`.
+- **Hermetic option:** `flake.nix` pins Python, RustFS, Postgres, DuckDB, and CLI tooling together (`nix develop` / `nix run`). Maximal reproducibility; Compose + uv remains the pragmatic default.
 
 **Air-gapped workflow:** `just vendor` (online) → copy `vendor/` → `just up --offline` (air-gapped). Nothing reaches the internet at run time.
 
@@ -834,12 +834,12 @@ alpha-lake/
 ├── pyproject.toml  uv.lock  flake.nix  justfile
 ├── compose.yaml  Dockerfile                            # reference stack runtime
 ├── config/
-│   ├── stack.toml                                      # Postgres + MinIO default
+│   ├── stack.toml                                      # Postgres + RustFS default
 │   ├── embedded.toml                                   # tests / replay only
 │   └── settings schema generated from Pydantic models
 ├── contracts/                                          # dataset contract YAML, e.g. bars.v1.yaml
 ├── vendor/{wheelhouse,images,bin}/                     # offline deps
-├── .stack/{minio,postgres,dagster,otel}/              # pinned service configs
+├── .stack/{rustfs,postgres,dagster,otel}/              # pinned service configs
 ├── src/alpha_lake/
 │   ├── models/ ports/                                  # pure core
 │   ├── connectors/ raw/ normalize/ quality/ canonical/ # ingest path
@@ -889,17 +889,17 @@ alpha-lake/
 
 ## 28. Build plan (from scratch, stack-first, vertical-slice, oracle-gated)
 
-Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/MinIO object storage + app-container execution — are exercised immediately.
+Each phase ships only when the golden replay hash is stable and boundary tests are green. The hardest integration risks — DuckLake + Postgres catalog + S3/RustFS object storage + app-container execution — are exercised immediately.
 
-- **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, MinIO object store, Alpha-Lake app container, config loading, DuckLake attach, `models/` + `ports/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
-- **Phase 1 — bars vertical slice against the real stack.** dlt source → raw archive on MinIO → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
+- **Phase 0 — stack skeleton.** Compose stack with Postgres catalog, RustFS object store, Alpha-Lake app container, config loading, DuckLake attach, `models/` + `ports/`, import-linter, OTel collector, `just up/down/health`. No dataset work is accepted until the real stack can boot and pass a health check.
+- **Phase 1 — bars vertical slice against the real stack.** dlt source → raw archive on RustFS → Polars parse → Patito `BarFact` → SCD2 bitemporal write to DuckLake/Postgres catalog → PIT reader. Prove restatement (§11), leakage (§12), idempotency, and visibility tests. This single slice exercises every hard part.
 - **Phase 2 — embedded replay harness.** Add SQLite/local-FS only for pytest, fixture generation, golden replay, and debugging. This harness must prove equivalence with the stack path for frozen fixtures, but it must not become a separate runtime architecture.
 - **Phase 3 — identity & actions.** security master (§10) + corporate actions + adjusted views (bars adjustment depends on them), still running through the reference stack.
 - **Phase 4 — remaining datasets.** fundamentals → insider → news_articles + social_posts → entity_mentions + sentiment_annotations + attention_metrics → earnings_calendar, each repeating the Phase-1 vertical pattern.
 - **Phase 5 — serving surface.** as-of panel / spine join; catalog; health; explicit `latest_*` non-research paths; technical indicator library serving (§14); text analytics serving (§15).
 - **Phase 6 — orchestration hardening.** Add Dagster assets over the already-proven `flows/`; asset checks wrap Patito gates; date partitions improve backfill UX. Dagster is not allowed to own business logic.
-- **Phase 7 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, offline `just up --offline`, fixture bundles, and reproducibility docs.
-- **Phase 8 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; MinIO HA configuration only when genuinely needed.
+- **Phase 7 — packaging and air-gap.** Digest-pinned images, `vendor/images`, `vendor/wheelhouse`, optional `vendor/bin/rustfs`, offline `just up --offline`, fixture bundles, and reproducibility docs.
+- **Phase 8 — hardening.** dataset contracts + schema versioning; SQLMesh derived layer; Arrow Flight/ADBC serving; Kubernetes deployment target; RustFS clustering only when GA and genuinely needed.
 
 ## 29. Tech stack
 
@@ -909,7 +909,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Reference runtime | Docker Compose / Podman Compose, driven by `just` |
 | Lakehouse | DuckLake 1.0 (Parquet + SQL catalog) |
 | Catalog DB | PostgreSQL reference path; SQLite embedded harness only |
-| Object store | MinIO S3-compatible reference path; local FS embedded harness only |
+| Object store | RustFS S3-compatible reference path; local FS embedded harness only |
 | Engine | DuckDB |
 | Ingestion | dlt (incremental, SCD2, contracts, REST toolkit) |
 | Dataframes + models + validation | Polars + Patito |
@@ -923,7 +923,7 @@ One dataframe lib (Polars), one SQL engine (DuckDB) — never both for the same 
 
 ## 30. Non-goals (v1)
 
-Strategy logic; materialized features; intraday/streaming; distributed compute; hosted multi-tenant service; ML online feature store; governance UI; Kubernetes platformization. Design the seams (object storage, Postgres catalog, Flight serving, Dagster/SQLMesh, Kubernetes deployment, clustering); do not build the distributed platform in v1.
+Strategy logic; materialized features; intraday/streaming; distributed compute; hosted multi-tenant service; ML online feature store; governance UI; Kubernetes platformization; RustFS clustering. Design the seams (object storage, Postgres catalog, Flight serving, Dagster/SQLMesh, Kubernetes deployment, clustering); do not build the distributed platform in v1.
 
 ## 31. Summary
 

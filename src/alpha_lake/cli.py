@@ -133,7 +133,7 @@ def health():
     checks: dict = {"runtime": cfg.lake.runtime, "datasets": {}}
     if cfg.lake.runtime == "stack":
         checks["postgres"] = _check_postgres(return_bool=True)
-        checks["minio"] = _check_minio(return_bool=True)
+        checks["rustfs"] = _check_rustfs(return_bool=True)
     else:
         checks["runtime_check"] = "embedded"
     _output(f"Runtime: {cfg.lake.runtime}", data={"runtime": cfg.lake.runtime})
@@ -171,21 +171,21 @@ def _check_postgres(return_bool: bool = False) -> bool:
         return False
 
 
-def _check_minio(return_bool: bool = False) -> bool:
+def _check_rustfs(return_bool: bool = False) -> bool:
     from alpha_lake.config import get_config as _get_cfg
     cfg = _get_cfg()
     try:
         r = httpx.get(f"http://{cfg.s3.endpoint}/minio/health/live", timeout=5.0)
         if r.status_code == 200:
-            _output("minio: ok")
+            _output("rustfs: ok")
             return True
         else:
-            _output(f"minio: unexpected status {r.status_code}")
+            _output(f"rustfs: unexpected status {r.status_code}")
             if not return_bool:
                 sys.exit(1)
             return False
     except Exception as e:
-        _output(f"minio: unreachable — {e}")
+        _output(f"rustfs: unreachable — {e}")
         if not return_bool:
             sys.exit(1)
         return False

@@ -11,7 +11,7 @@ import duckdb
 class EmbeddedHarness:
     """SQLite/local-fs embedded harness for tests and replay.
 
-    Replaces Postgres → SQLite/DuckDB, MinIO → local filesystem,
+    Replaces Postgres → SQLite/DuckDB, RustFS → local filesystem,
     OTel gRPC → console. Same code paths via dependency injection.
     """
 

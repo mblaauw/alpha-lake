@@ -9,7 +9,7 @@ def test_load_config_embedded():
 
 def test_config_defaults():
     cfg = RootConfig(lake=LakeConfig())
-    assert cfg.s3.endpoint == "minio:9000"
+    assert cfg.s3.endpoint == "rustfs:9000"
     assert cfg.lake.runtime == "stack"
 
 

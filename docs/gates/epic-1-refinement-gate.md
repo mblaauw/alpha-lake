@@ -71,9 +71,9 @@ Every item must be ticked or explicitly deferred before Phase 2 work begins.
 
 | # | Criterion | Status | Evidence | Notes |
 |---|-----------|--------|----------|-------|
-| I1 | Compose stack boots and `just health` passes | ⚠️ Needs verification | `compose.yaml`: postgres + minio + app + otel services with healthchecks. `cli.py`: TCP check on postgres:5432, HTTP check on minio:9000. | Requires running `just up` and `just health` manually. No CI step for this. |
+| I1 | Compose stack boots and `just health` passes | ⚠️ Needs verification | `compose.yaml`: postgres + rustfs + app + otel services with healthchecks. `cli.py`: TCP check on postgres:5432, HTTP check on rustfs:9000. | Requires running `just up` and `just health` manually. No CI step for this. |
 | I2 | `just bootstrap` initializes catalog | ✅ | `catalog/__init__.py`: `bootstrap()` creates `source`, `source_dataset`, `ingestion_run`, `manifest` tables | PR #166. Full verification requires stack running. |
-| I3 | DuckDB extensions (ducklake, httpfs, parquet, postgres) auto-install | ✅ | `catalog/__init__.py`: `connect()` runs INSTALL/Load on startup. `configure_s3()` sets S3 endpoint/region/ssl. | PR #172 |
+| I3 | DuckDB extensions (ducklake, httpfs, parquet, postgres) auto-install | ✅ | `catalog/__init__.py`: `connect()` runs INSTALL/LOAD on startup. `configure_s3()` sets S3 endpoint/region/ssl. | PR #172 |
 | I4 | CI runs on every PR | ✅ | `.github/workflows/ci.yaml`: PR trigger + push to main. lint-typecheck + test jobs. | PR #163 |
 
 ### Documentation

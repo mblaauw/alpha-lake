@@ -3,7 +3,7 @@
 services:
   postgres:
     image: postgres:17-alpine
-  minio:
-    image: minio/minio:latest
+  rustfs:
+    image: ghcr.io/rustfs/rustfs:latest
   otel:
     image: otel/opentelemetry-collector-contrib:latest
