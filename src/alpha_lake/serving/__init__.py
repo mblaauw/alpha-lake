@@ -17,6 +17,178 @@ def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> No
         set_snapshot(con, snapshot_id)
 
 
+def _priority_case(source_priority: list[str]) -> str:
+    parts = ["CASE source_id"]
+    for i, s in enumerate(source_priority):
+        parts.append(f"WHEN '{s}' THEN {i}")
+    parts.append(f"ELSE {len(source_priority)} END")
+    return " ".join(parts)
+
+
+def _source_order(dataset: str | None) -> str:
+    if dataset is None:
+        return "available_at DESC"
+    priority = get_source_precedence(dataset)
+    if not priority:
+        return "available_at DESC"
+    return f"{_priority_case(priority)}, available_at DESC"
+
+
+def pit_read(
+    con: duckdb.DuckDBPyConnection,
+    table: str = "lake_bars",
+    *,
+    security_ids: list[str] | None = None,
+    spine: pl.DataFrame | None = None,
+    as_of: datetime | None = None,
+    as_of_col: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    source_precedence_dataset: str | None = None,
+    snapshot_id: str | None = None,
+) -> pl.DataFrame:
+    """Unified point-in-time read across all serving modes.
+
+    Two input modes:
+    - **Security-list mode:** pass ``security_ids`` (and optionally
+      ``start_date``/``end_date``). Requires ``as_of``. Returns exact
+      effective-date matches within the range.
+    - **Spine mode:** pass a ``spine`` DataFrame with at minimum
+      ``security_id`` and ``effective_date`` columns. Requires either
+      ``as_of`` (scalar PIT) or ``as_of_col`` (per-row PIT).
+
+    Source precedence is applied when ``source_precedence_dataset`` is
+    given (e.g. ``"bars_daily"``) or when the ``table`` name maps to a
+    configured precedence in the source registry.
+
+    Returns all columns from ``table`` plus ``security_id`` and
+    ``effective_date`` (and ``as_of`` in per-row mode).
+    """
+    _pin_snapshot(con, snapshot_id)
+
+    ds = source_precedence_dataset or _infer_dataset(table)
+    order_clause = _source_order(ds)
+
+    # --- Security-list mode with scalar as_of ---
+    if security_ids is not None:
+        if as_of is None:
+            raise ValueError("as_of is required when security_ids is provided")
+        params: list = [security_ids, as_of, as_of.date()]
+
+        where_parts = [
+            "b.security_id = ANY(?)",
+            "b.available_at <= CAST(? AS TIMESTAMP)",
+            "b.effective_date <= CAST(? AS DATE)",
+        ]
+        if start_date:
+            where_parts.append("b.effective_date >= ?")
+            params.append(start_date)
+        if end_date:
+            where_parts.append("b.effective_date <= ?")
+            params.append(end_date)
+
+        where_clause = "\n  AND ".join(where_parts)
+
+        query = f"""
+            WITH per_source AS (
+                SELECT
+                    b.security_id,
+                    b.effective_date,
+                    b.available_at,
+                    b.source_id,
+                    b.* EXCLUDE (security_id, effective_date, available_at, source_id),
+                    ROW_NUMBER() OVER (
+                        PARTITION BY b.security_id, b.effective_date
+                        ORDER BY b.available_at DESC
+                    ) AS version_rank
+                FROM {table} b
+                WHERE {where_clause}
+            ),
+            preferred AS (
+                SELECT *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY security_id, effective_date
+                        ORDER BY {order_clause}
+                    ) AS source_rank
+                FROM per_source
+                WHERE version_rank = 1
+            )
+            SELECT * EXCLUDE (version_rank, source_rank)
+            FROM preferred
+            WHERE source_rank = 1
+            ORDER BY security_id, effective_date
+        """
+        return duckdb_to_polars(con, query, params)
+
+    # --- Spine mode ---
+    if spine is None:
+        raise ValueError("Provide either security_ids or spine")
+
+    con.execute("DROP VIEW IF EXISTS _spine")
+    con.register("_spine", spine.to_arrow())
+
+    try:
+        # Per-row as_of mode
+        if as_of_col is not None:
+            query = f"""
+                WITH joined AS (
+                    SELECT s.security_id, s.effective_date, s.{as_of_col} AS as_of,
+                           b.* EXCLUDE (security_id, effective_date),
+                           ROW_NUMBER() OVER (
+                               PARTITION BY s.security_id, s.effective_date, s.{as_of_col}
+                               ORDER BY {order_clause}
+                           ) AS rn
+                    FROM _spine s
+                    LEFT JOIN {table} b
+                        ON s.security_id = b.security_id
+                       AND b.effective_date <= s.effective_date
+                       AND b.available_at <= s.{as_of_col}
+                )
+                SELECT * EXCLUDE rn
+                FROM joined
+                WHERE rn = 1
+            """
+            return duckdb_to_polars(con, query, [])
+
+        # Scalar as_of mode (ASOF JOIN)
+        if as_of is None:
+            raise ValueError("as_of is required for scalar PIT mode")
+
+        query = f"""
+            SELECT s.security_id, s.effective_date,
+                   b.* EXCLUDE (security_id, effective_date)
+            FROM _spine s
+            ASOF LEFT JOIN {table} b
+                ON s.security_id = b.security_id
+               AND s.effective_date >= b.effective_date
+               AND ? >= b.available_at
+            WHERE b.effective_date <= ?
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY s.security_id, s.effective_date
+                ORDER BY {order_clause}
+            ) = 1
+        """
+        return duckdb_to_polars(con, query, [as_of, as_of.date()])
+
+    finally:
+        con.execute("DROP VIEW IF EXISTS _spine")
+
+
+def _infer_dataset(table: str) -> str | None:
+    mapping = {
+        "lake_bars": "bars_daily",
+        "corp_actions": "corp_actions",
+        "fundamentals": "fundamentals",
+        "insider_tx": "insider_tx",
+        "news_articles": "news",
+        "earnings_calendar": "earnings_calendar",
+    }
+    return mapping.get(table)
+
+
+# --- Backward-compatible wrappers ---
+
+
 def read_bars_asof(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],
@@ -24,64 +196,16 @@ def read_bars_asof(
     start_date: date | None = None,
     end_date: date | None = None,
     snapshot_id: str | None = None,
-    ) -> pl.DataFrame:
-    _pin_snapshot(con, snapshot_id)
-    source_priority = get_source_precedence("bars_daily")
-    params: list = [security_ids, as_of, as_of.date()]
-
-    date_filter = ""
-    if start_date:
-        date_filter += " AND b.effective_date >= ?"
-        params.append(start_date)
-    if end_date:
-        date_filter += " AND b.effective_date <= ?"
-        params.append(end_date)
-
-    query = """
-        WITH per_source AS (
-            SELECT
-                b.security_id,
-                b.effective_date,
-                b.available_at,
-                b.source_id,
-                b.open, b.high, b.low, b.close, b.volume,
-                b.version_hash,
-                b.quality_status,
-                ROW_NUMBER() OVER (
-                    PARTITION BY b.security_id, b.effective_date
-                    ORDER BY b.available_at DESC
-                ) AS version_rank
-            FROM lake_bars b
-            WHERE b.security_id = ANY(?)
-              AND b.available_at <= CAST(? AS TIMESTAMP)
-              AND b.effective_date <= CAST(? AS DATE)
-    """ + date_filter + """
-        ),
-        preferred AS (
-            SELECT *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY security_id, effective_date
-                    ORDER BY """ + _priority_case(source_priority) + """, available_at DESC
-                ) AS source_rank
-            FROM per_source
-            WHERE version_rank = 1
-        )
-        SELECT
-            security_id, effective_date, available_at, source_id,
-            open, high, low, close, volume, version_hash, quality_status
-        FROM preferred
-        WHERE source_rank = 1
-        ORDER BY security_id, effective_date
-    """
-    return duckdb_to_polars(con, query, params)
-
-
-def _priority_case(source_priority: list[str]) -> str:
-    parts = ["CASE source_id"]
-    for i, s in enumerate(source_priority):
-        parts.append(f"WHEN '{s}' THEN {i}")
-    parts.append(f"ELSE {len(source_priority)} END")
-    return " ".join(parts)
+) -> pl.DataFrame:
+    return pit_read(
+        con, "lake_bars",
+        security_ids=security_ids,
+        as_of=as_of,
+        start_date=start_date,
+        end_date=end_date,
+        source_precedence_dataset="bars_daily",
+        snapshot_id=snapshot_id,
+    )
 
 
 def read_bars_adjusted(
@@ -181,27 +305,13 @@ def read_panel(
 
     The spine must have columns 'security_id' and 'effective_date'.
     """
-    _pin_snapshot(con, snapshot_id)
-    con.execute("DROP VIEW IF EXISTS _spine")
-    con.register("_spine", spine.to_arrow())
-    query = f"""
-        SELECT s.security_id, s.effective_date,
-               b.available_at, b.source_id,
-               b.open, b.high, b.low, b.close, b.volume
-        FROM _spine s
-        ASOF LEFT JOIN {dataset} b
-            ON s.security_id = b.security_id
-           AND s.effective_date >= b.effective_date
-           AND ? >= b.available_at
-        WHERE b.effective_date <= ?
-        QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY s.security_id, s.effective_date
-            ORDER BY b.available_at DESC
-        ) = 1
-    """
-    result = duckdb_to_polars(con, query, [as_of, as_of.date()])
-    con.execute("DROP VIEW IF EXISTS _spine")
-    return result
+    return pit_read(
+        con, dataset,
+        spine=spine,
+        as_of=as_of,
+        source_precedence_dataset=_infer_dataset(dataset),
+        snapshot_id=snapshot_id,
+    )
 
 
 def read_asof_join(
@@ -212,30 +322,12 @@ def read_asof_join(
 ) -> pl.DataFrame:
     """Per-row PIT join: the spine must have 'security_id', 'effective_date',
     and 'as_of' columns. Each row gets its own PIT boundary."""
-    _pin_snapshot(con, snapshot_id)
-    con.execute("DROP VIEW IF EXISTS _spine")
-    con.register("_spine", spine.to_arrow())
-    query = f"""
-        WITH joined AS (
-            SELECT s.security_id, s.effective_date, s.as_of,
-                   b.available_at, b.source_id,
-                   b.open, b.high, b.low, b.close, b.volume,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY s.security_id, s.effective_date, s.as_of
-                       ORDER BY b.available_at DESC
-                   ) AS rn
-            FROM _spine s
-            LEFT JOIN {dataset} b
-                ON s.security_id = b.security_id
-               AND b.effective_date <= s.effective_date
-               AND b.available_at <= s.as_of
-        )
-        SELECT security_id, effective_date, as_of,
-               available_at, source_id,
-               open, high, low, close, volume
-        FROM joined
-        WHERE rn = 1
-    """
-    result = duckdb_to_polars(con, query, [])
-    con.execute("DROP VIEW IF EXISTS _spine")
-    return result
+    if "as_of" not in spine.columns:
+        raise ValueError("Spine must have an 'as_of' column for per-row PIT")
+    return pit_read(
+        con, dataset,
+        spine=spine,
+        as_of_col="as_of",
+        source_precedence_dataset=_infer_dataset(dataset),
+        snapshot_id=snapshot_id,
+    )
