@@ -40,7 +40,7 @@ just health    # check dataset freshness and status
 | Epic 4 | Phase 4 | Remaining datasets: fundamentals, insider, news, social/text analytics | P1 ✅ |
 | Epic 5 | Phase 5 | Serving: panel, PIT joins, catalog, health, latest_* | P1 ✅ |
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 ✅ |
-| Epic 7 | Phase 7 | Packaging: vendor, air-gap, Nix, release workflow | P2 ✅ |
+| Epic 7 | Phase 7 | Cloud-native hardening: secrets, snapshot pinning, observability, docs | P2 ✅ |
 | Epic 8 | Phase 8 | Hardening: contracts, SQLMesh, Arrow Flight, K8s | P2 |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
@@ -60,7 +60,8 @@ All work is tracked on the [Alpha-Lake Project Board](https://github.com/users/m
 
 ## Design
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).
+See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).  
+See [docs/operations.md](docs/operations.md) for operations guidance, memory sizing, and monitoring thresholds.
 
 ## Architecture Decision Records
 
@@ -78,7 +79,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementat
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Accepted |
-| 0013 | Nix flake as hermetic reproducibility ceiling | Proposed |
+| 0013 | Nix flake as hermetic reproducibility ceiling | Superseded by ADR-0012 |
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Accepted |
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Accepted |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Accepted |

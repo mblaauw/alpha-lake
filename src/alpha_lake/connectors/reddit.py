@@ -8,11 +8,12 @@ from alpha_lake.connectors.base import RawFetch, build_manifest
 from alpha_lake.source_registry import get_source
 
 
-async def _get_oauth_token(cfg) -> str:
+async def _get_oauth_token() -> str:
     """Get Reddit OAuth2 token via client credentials flow."""
-    import os
-    client_id = os.environ.get("REDDIT_CLIENT_ID", "")
-    client_secret = os.environ.get("REDDIT_CLIENT_SECRET", "")
+    from alpha_lake.secrets import get_store
+    store = get_store()
+    client_id = store.get("reddit_client_id")
+    client_secret = store.get("reddit_client_secret")
     auth = httpx.BasicAuth(client_id, client_secret)
     async with httpx.AsyncClient() as client:
         r = await client.post("https://www.reddit.com/api/v1/access_token",
@@ -24,7 +25,7 @@ async def _get_oauth_token(cfg) -> str:
 
 async def fetch_subreddit(subreddit: str, limit: int = 100) -> RawFetch:
     cfg = get_source("reddit")
-    token = await _get_oauth_token(cfg)
+    token = await _get_oauth_token()
     headers = {
         "User-Agent": "alpha-lake/0.1 (market-data lakehouse)",
         "Authorization": f"Bearer {token}",
