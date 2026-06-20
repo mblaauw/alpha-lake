@@ -5,8 +5,6 @@ from functools import lru_cache
 
 import exchange_calendars as ec
 
-CALENDAR_VERSION: str = ec.__version__
-
 _EXCHANGE_MAP: dict[str, str] = {
     "XNYS": "XNYS",
     "NYSE": "XNYS",

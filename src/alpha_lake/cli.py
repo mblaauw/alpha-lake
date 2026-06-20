@@ -2,7 +2,6 @@ import json
 import socket
 import sys
 
-import httpx
 import typer
 
 from alpha_lake.catalog import bootstrap as bootstrap_catalog, connect

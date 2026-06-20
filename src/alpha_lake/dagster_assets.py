@@ -4,7 +4,7 @@ from __future__ import annotations
 import dagster as dg
 
 from alpha_lake.config import load_config
-from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars
+from alpha_lake.flows import compact_dataset, ingest_bars
 
 
 @dg.asset(
