@@ -32,7 +32,7 @@ def _ensure_kernel(con: duckdb.DuckDBPyConnection) -> None:
 
 def pit_read(
     con: duckdb.DuckDBPyConnection,
-    table: str = "lake_bars",  # noqa: ARG001
+    table: str = "lake_bars",
     *,
     security_ids: list[str] | None = None,
     spine: pl.DataFrame | None = None,
@@ -40,7 +40,7 @@ def pit_read(
     as_of_col: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
-    source_precedence_dataset: str | None = None,  # noqa: ARG001
+    source_precedence_dataset: str | None = None,
     snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     """Unified point-in-time read across all serving modes.
@@ -53,16 +53,16 @@ def pit_read(
       ``security_id`` and ``effective_date`` columns. Requires either
       ``as_of`` (scalar PIT) or ``as_of_col`` (per-row PIT).
 
+    For ``lake_bars`` the dedicated DuckDB macros (``bars_asof`` etc.)
+    are used. For all other tables a generic SQL PIT query is executed.
+
     Source precedence is applied via the kernel's ``_kernel_source_priority``
     table when ``source_precedence_dataset`` is given.
-
-    Returns all columns from ``table`` plus ``security_id`` and
-    ``effective_date`` (and ``as_of`` in per-row mode).
     """
     _pin_snapshot(con, snapshot_id)
     _ensure_kernel(con)
 
-    if security_ids is not None:
+    if table == "lake_bars" and security_ids is not None:
         if as_of is None:
             raise ValueError("as_of is required when security_ids is provided")
         return duckdb_to_polars(
@@ -71,29 +71,70 @@ def pit_read(
             [security_ids, as_of, start_date, end_date],
         )
 
-    if spine is None:
-        raise ValueError("Provide either security_ids or spine")
-
-    con.execute("DROP VIEW IF EXISTS _spine")
-    con.register("_spine", spine)
-
-    try:
-        if as_of_col is not None:
-            return duckdb_to_polars(
-                con,
-                "SELECT * FROM bars_asof_join()",
-            )
-
-        if as_of is None:
-            raise ValueError("as_of is required for scalar PIT mode")
-
-        return duckdb_to_polars(
-            con,
-            "SELECT * FROM bars_asof_spine(?)",
-            [as_of],
-        )
-    finally:
+    if table == "lake_bars" and spine is not None:
         con.execute("DROP VIEW IF EXISTS _spine")
+        con.register("_spine", spine)
+        try:
+            if as_of_col is not None:
+                return duckdb_to_polars(con, "SELECT * FROM bars_asof_join()")
+            if as_of is None:
+                raise ValueError("as_of is required for scalar PIT mode")
+            return duckdb_to_polars(con, "SELECT * FROM bars_asof_spine(?)", [as_of])
+        finally:
+            con.execute("DROP VIEW IF EXISTS _spine")
+
+    id_col = "security_id" if table != "macro_series" else "series_id"
+    id_param = "security_id" if table != "macro_series" else "series_id"
+
+    if security_ids is not None:
+        if as_of is None:
+            raise ValueError("as_of is required when security_ids is provided")
+        if source_precedence_dataset:
+            precedence_join = f"""
+                LEFT JOIN _kernel_source_priority p
+                    ON p.dataset = '{source_precedence_dataset}'
+                   AND p.source_id = t.source_id
+            """
+        else:
+            precedence_join = ""
+        sql = f"""
+            SELECT * FROM (
+                SELECT t.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY t.{id_param}, t.effective_date
+                        ORDER BY COALESCE(p.priority, 999), t.available_at DESC
+                    ) AS _pit_rank
+                FROM {table} t
+                {precedence_join}
+                WHERE t.{id_param} IN ({",".join(["?"] * len(security_ids))})
+                  AND t.available_at <= ?::TIMESTAMPTZ
+                  AND (?::DATE IS NULL OR t.effective_date >= ?::DATE)
+                  AND (?::DATE IS NULL OR t.effective_date <= ?::DATE)
+            ) sub
+            WHERE _pit_rank = 1
+            ORDER BY {id_param}, effective_date
+        """
+        params = list(security_ids) + [as_of, start_date, start_date, end_date, end_date]
+        return duckdb_to_polars(con, sql, params)
+
+    if spine is not None:
+        con.execute("DROP VIEW IF EXISTS _spine")
+        con.register("_spine", spine)
+        try:
+            sql = f"""
+                SELECT s.*, t.* EXCLUDE (security_id, effective_date)
+                FROM _spine s
+                LEFT JOIN {table} t
+                    ON s.{id_col} = t.{id_param}
+                   AND s.effective_date = t.effective_date
+                   AND t.available_at <= s.as_of::TIMESTAMPTZ
+                ORDER BY s.security_id, s.effective_date
+            """
+            return duckdb_to_polars(con, sql)
+        finally:
+            con.execute("DROP VIEW IF EXISTS _spine")
+
+    raise ValueError("Provide either security_ids or spine")
 
 
 def _infer_dataset(table: str) -> str | None:

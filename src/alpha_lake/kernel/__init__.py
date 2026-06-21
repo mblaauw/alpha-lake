@@ -14,20 +14,22 @@ _SQL_FILES: list[str] = [p.read_text() for p in sorted(_SQL_DIR.glob("*.sql"))]
 
 
 def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
-    from alpha_lake.config import get_config as _get_cfg
     from alpha_lake.source_registry import get_source_precedence
 
-    cfg = _get_cfg()
     con.execute(
         "CREATE TABLE IF NOT EXISTS _kernel_source_priority ("
         "dataset VARCHAR, source_id VARCHAR, priority INT)"
     )
     con.execute("DELETE FROM _kernel_source_priority")
     values = []
-    # Discover all datasets that have precedence entries in config.
-    precedence_datasets: set[str] = set(cfg.precedence.keys())
-    # Always include bars_daily for backward compatibility with SQL macros.
-    precedence_datasets.add("bars_daily")
+    precedence_datasets: set[str] = {"bars_daily"}
+    try:
+        from alpha_lake.config import get_config as _get_cfg
+
+        cfg = _get_cfg()
+        precedence_datasets.update(cfg.precedence.keys())
+    except AssertionError:
+        pass
     for dataset in sorted(precedence_datasets):
         sources = get_source_precedence(dataset)
         for i, source_id in enumerate(sources):
