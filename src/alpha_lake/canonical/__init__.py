@@ -12,13 +12,13 @@ from alpha_lake.interop import generate_ddl, polars_to_duckdb
 from alpha_lake.models.bar_fact import BarFact
 from alpha_lake.models.corp_action_fact import CorpActionFact
 from alpha_lake.models.dataset_models import (
-    AttentionMetricFact,
     EarningsEventFact,
     EntityMentionFact,
     FundamentalFact,
     InsiderTxFact,
     NewsArticleFact,
     SentimentAnnotationFact,
+    SocialAttentionFact,
     SocialPostFact,
 )
 from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
@@ -49,7 +49,7 @@ _INSIDER_KEYS = (
     "source_id",
 )
 _EARN_KEYS = ("security_id", "report_date", "source_id")
-_ATTR_KEYS = ("security_id", "window_start", "window_end", "window_type")
+_SOCIAL_KEYS = ("security_id", "effective_date", "cohort", "source_id")
 _SENT_KEYS = ("annotation_id",)
 _MACRO_KEYS = ("series_id", "effective_date", "source_id")
 _ECON_CAL_KEYS = ("event_id", "effective_date", "source_id")
@@ -67,7 +67,7 @@ DATASETS: dict[str, Dataset] = {
     "earnings_calendar": Dataset("earnings_calendar", EarningsEventFact, _EARN_KEYS),
     "entity_mentions": Dataset("entity_mentions", EntityMentionFact, ("mention_id",)),
     "sentiment_annotations": Dataset("sentiment_annotations", SentimentAnnotationFact, _SENT_KEYS),
-    "attention_metrics": Dataset("attention_metrics", AttentionMetricFact, _ATTR_KEYS),
+    "attention_metrics": Dataset("attention_metrics", SocialAttentionFact, _SOCIAL_KEYS),
     "macro_series": Dataset("macro_series", MacroSeriesFact, _MACRO_KEYS),
     "economic_calendar": Dataset("economic_calendar", EconomicCalendarFact, _ECON_CAL_KEYS),
     "technical_indicators": Dataset("technical_indicators", TechnicalIndicatorFact, _TECH_KEYS),

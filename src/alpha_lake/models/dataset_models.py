@@ -137,15 +137,16 @@ class SentimentAnnotationFact(pt.Model):
     annotation_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
-    text_item_id: str
-    text_item_type: str
-    sentiment_score: float = Field(ge=-1, le=1)
-    sentiment_label: str
-    model_version: str
-    prompt_version: str
-    taxonomy_version: str
-    input_text_hash: str
-    source_dataset_version: str
+    source_id: str
+    annotation_kind: str
+    sentiment_score: float | None = None
+    sentiment_label: str = ""
+    model_version: str | None = None
+    prompt_version: str | None = None
+    taxonomy_version: str | None = None
+    input_text_hash: str | None = None
+    source_dataset_version: str | None = None
+    security_id: str = ""
     source_fetch_id: str
     raw_payload_hash: str
     ingestion_run_id: str
@@ -156,24 +157,17 @@ class SentimentAnnotationFact(pt.Model):
     quality_status: str = "valid"
 
 
-class AttentionMetricFact(pt.Model):
+class SocialAttentionFact(pt.Model):
     model_config = {"coerce_nulls": True}
     security_id: str
     effective_date: datetime.date
     available_at: datetime.datetime
-    window_start: datetime.date
-    window_end: datetime.date
-    window_type: str
-    article_count: int = Field(ge=0)
-    mention_count: int = Field(ge=0)
-    unique_source_count: int = Field(ge=0)
-    unique_author_count: int = Field(ge=0)
-    mean_sentiment: float | None = None
-    sentiment_std: float | None = None
-    positive_share: float | None = Field(None, ge=0, le=1)
-    neutral_share: float | None = Field(None, ge=0, le=1)
-    negative_share: float | None = Field(None, ge=0, le=1)
-    velocity_score: float | None = None
+    source_id: str
+    cohort: str
+    mentions: int = Field(ge=0)
+    mentions_24h_ago: int = Field(ge=0)
+    rank: int | None = Field(None, ge=1)
+    rank_24h_ago: int | None = Field(None, ge=1)
     source_fetch_id: str
     raw_payload_hash: str
     ingestion_run_id: str

@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from alpha_lake.connectors.alpaca_bars import fetch_daily_bars as _alpaca_bars
+from alpha_lake.connectors.apewisdom import fetch_attention as _apewisdom
 from alpha_lake.connectors.corp_actions_eodhd import fetch_splits as _eodhd_splits
 from alpha_lake.connectors.corp_actions_tiingo import fetch_splits as _tiingo_splits
 from alpha_lake.connectors.eodhd import fetch_bars_daily as _eodhd_bars
@@ -17,6 +18,7 @@ from alpha_lake.connectors.marketaux import fetch_news as _marketaux_news
 from alpha_lake.connectors.reddit import fetch_subreddit as _reddit
 from alpha_lake.connectors.sec_edgar import fetch_companyfacts as _sec_edgar
 from alpha_lake.connectors.sec_insider import fetch_insider_transactions as _sec_insider
+from alpha_lake.connectors.stocktwits import fetch_sentiment as _stocktwits
 from alpha_lake.connectors.tiingo import fetch_bars_daily as _tiingo_bars
 from alpha_lake.connectors.tiingo_fundamentals import fetch_fundamentals as _tiingo_fundamentals
 from alpha_lake.connectors.tiingo_news import fetch_news as _tiingo_news
@@ -48,6 +50,7 @@ def has_api_key(source_id: str) -> bool:
 
 
 register("alpaca", "bars_daily", _alpaca_bars)
+register("apewisdom", "attention_metrics", _apewisdom)
 register("eodhd", "bars_daily", _eodhd_bars)
 register("eodhd", "earnings_calendar", _eodhd_earnings)
 register("eodhd", "fundamentals", _eodhd_fundamentals)
@@ -60,6 +63,7 @@ register("marketaux", "news", _marketaux_news)
 register("reddit", "social_posts", _reddit)
 register("sec", "fundamentals", _sec_edgar)
 register("sec", "insider_tx", _sec_insider)
+register("stocktwits", "sentiment", _stocktwits)
 register("tiingo", "bars_daily", _tiingo_bars)
 register("tiingo", "fundamentals", _tiingo_fundamentals)
 register("tiingo", "news", _tiingo_news)

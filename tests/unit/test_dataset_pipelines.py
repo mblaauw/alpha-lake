@@ -5,13 +5,13 @@ import polars as pl
 
 from alpha_lake.canonical import write_dataset
 from alpha_lake.models.dataset_models import (
-    AttentionMetricFact,
     EarningsEventFact,
     EntityMentionFact,
     FundamentalFact,
     InsiderTxFact,
     NewsArticleFact,
     SentimentAnnotationFact,
+    SocialAttentionFact,
     SocialPostFact,
 )
 
@@ -26,7 +26,7 @@ def _mk(table: str, **kw) -> pl.DataFrame:
         "social_posts": SocialPostFact,
         "entity_mentions": EntityMentionFact,
         "sentiment_annotations": SentimentAnnotationFact,
-        "attention_metrics": AttentionMetricFact,
+        "attention_metrics": SocialAttentionFact,
     }
     model = models[table]
     ts = datetime(2025, 6, 1, 16, 0, tzinfo=UTC)
@@ -137,30 +137,23 @@ def test_write_datasets():
             "sentiment_annotations",
             dict(
                 annotation_id="ann1",
-                source_id="llm",
-                text_item_id="a1",
-                text_item_type="news_article",
+                source_id="stocktwits",
+                annotation_kind="message_tag",
                 sentiment_score=0.5,
-                sentiment_label="positive",
-                model_version="v1",
-                prompt_version="v1",
-                taxonomy_version="v1",
-                input_text_hash="abc",
-                source_dataset_version="1",
+                sentiment_label="Bullish",
+                security_id="sec_t",
             ),
         ),
         (
             "attention_metrics",
             dict(
                 security_id="sec_t",
-                source_id="lake",
-                window_start=date(2025, 1, 1),
-                window_end=date(2025, 1, 3),
-                window_type="3d",
-                article_count=5,
-                mention_count=10,
-                unique_source_count=3,
-                unique_author_count=2,
+                source_id="apewisdom",
+                cohort="wallstreetbets",
+                mentions=100,
+                mentions_24h_ago=80,
+                rank=1,
+                rank_24h_ago=2,
             ),
         ),
     ]

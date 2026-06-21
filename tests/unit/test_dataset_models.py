@@ -3,13 +3,13 @@ from datetime import date, datetime
 import polars as pl
 
 from alpha_lake.models.dataset_models import (
-    AttentionMetricFact,
     EarningsEventFact,
     EntityMentionFact,
     FundamentalFact,
     InsiderTxFact,
     NewsArticleFact,
     SentimentAnnotationFact,
+    SocialAttentionFact,
     SocialPostFact,
 )
 from alpha_lake.normalize.rules import normalize_value, standardize_line_item
@@ -138,8 +138,8 @@ def _make(name: str) -> list[str]:
             "annotation_id",
             "effective_date",
             "available_at",
-            "text_item_id",
-            "text_item_type",
+            "source_id",
+            "annotation_kind",
             "sentiment_score",
             "sentiment_label",
             "model_version",
@@ -147,6 +147,7 @@ def _make(name: str) -> list[str]:
             "taxonomy_version",
             "input_text_hash",
             "source_dataset_version",
+            "security_id",
             "source_fetch_id",
             "raw_payload_hash",
             "ingestion_run_id",
@@ -156,23 +157,16 @@ def _make(name: str) -> list[str]:
             "parser_version",
             "quality_status",
         ],
-        "AttentionMetricFact": [
+        "SocialAttentionFact": [
             "security_id",
             "effective_date",
             "available_at",
-            "window_start",
-            "window_end",
-            "window_type",
-            "article_count",
-            "mention_count",
-            "unique_source_count",
-            "unique_author_count",
-            "mean_sentiment",
-            "sentiment_std",
-            "positive_share",
-            "neutral_share",
-            "negative_share",
-            "velocity_score",
+            "source_id",
+            "cohort",
+            "mentions",
+            "mentions_24h_ago",
+            "rank",
+            "rank_24h_ago",
             "source_fetch_id",
             "raw_payload_hash",
             "ingestion_run_id",
@@ -213,6 +207,12 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "engagement_json",
         "source_name",
         "description",
+        "model_version",
+        "prompt_version",
+        "taxonomy_version",
+        "input_text_hash",
+        "source_dataset_version",
+        "security_id",
     }
     int_cols = {
         "schema_version",
@@ -221,6 +221,8 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "mention_count",
         "unique_source_count",
         "unique_author_count",
+        "mentions",
+        "mentions_24h_ago",
     }
     float_cols = {
         "value",
@@ -235,7 +237,7 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "negative_share",
         "velocity_score",
     }
-    date_cols = {"window_start", "window_end", "report_date"}
+    date_cols = {"window_start", "window_end", "report_date", "effective_date"}
     dt_cols = {"available_at", "published_at", "source_published_at", "ingested_at", "validated_at"}
 
     data = {}
@@ -359,34 +361,29 @@ def test_sentiment_annotation_fact():
         annotation_id="ann1",
         effective_date=date(2025, 1, 1),
         available_at=datetime(2025, 1, 2, 12, 0),
-        text_item_id="a1",
-        text_item_type="news_article",
+        source_id="stocktwits",
+        annotation_kind="message_tag",
         sentiment_score=0.5,
-        sentiment_label="positive",
-        model_version="v1",
-        prompt_version="v1",
-        taxonomy_version="v1",
-        input_text_hash="abc",
-        source_dataset_version="1",
+        sentiment_label="Bullish",
+        security_id="",
     )
     assert SentimentAnnotationFact.validate(df).height == 1
 
 
-def test_attention_metric_fact():
+def test_social_attention_fact():
     df = _td(
-        "AttentionMetricFact",
+        "SocialAttentionFact",
         security_id="sec_t",
         effective_date=date(2025, 1, 1),
         available_at=datetime(2025, 1, 2, 12, 0),
-        window_start=date(2025, 1, 1),
-        window_end=date(2025, 1, 3),
-        window_type="3d",
-        article_count=5,
-        mention_count=10,
-        unique_source_count=3,
-        unique_author_count=2,
+        source_id="apewisdom",
+        cohort="wallstreetbets",
+        mentions=100,
+        mentions_24h_ago=80,
+        rank=1,
+        rank_24h_ago=2,
     )
-    assert AttentionMetricFact.validate(df).height == 1
+    assert SocialAttentionFact.validate(df).height == 1
 
 
 def test_normalize_value():

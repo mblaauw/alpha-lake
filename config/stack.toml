@@ -162,6 +162,18 @@ base_url = "https://oauth.reddit.com"
 rate_limit_per_sec = 1.0
 max_retries = 3
 
+[sources.stocktwits]
+base_url = "https://api.stocktwits.com/api/2"
+requires_key = false
+rate_limit_per_sec = 1.0
+max_retries = 3
+
+[sources.apewisdom]
+base_url = "https://apewisdom.io/api/v1.0"
+requires_key = false
+rate_limit_per_sec = 1.0
+max_retries = 3
+
 [source_datasets.eodhd]
 [source_datasets.eodhd.bars_daily]
 enabled = true
@@ -239,14 +251,30 @@ max_retries = 3
 [source_datasets.finnhub.news]
 enabled = false
 parser_version = 1
+[source_datasets.finnhub.sentiment]
+enabled = false
+parser_version = 1
 
 [source_datasets.marketaux]
 [source_datasets.marketaux.news]
 enabled = false
 parser_version = 1
+[source_datasets.marketaux.sentiment]
+enabled = false
+parser_version = 1
 
 [source_datasets.fmp]
 [source_datasets.fmp.economic_calendar]
+enabled = false
+parser_version = 1
+
+[source_datasets.stocktwits]
+[source_datasets.stocktwits.sentiment]
+enabled = false
+parser_version = 1
+
+[source_datasets.apewisdom]
+[source_datasets.apewisdom.attention_metrics]
 enabled = false
 parser_version = 1
 
@@ -294,3 +322,4 @@ max_staleness_days = 2
 [precedence]
 bars_daily = ["eodhd", "tiingo"]
 news = ["finnhub", "marketaux", "tiingo"]
+sentiment = ["marketaux", "finnhub", "stocktwits"]
