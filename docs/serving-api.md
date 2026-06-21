@@ -114,7 +114,7 @@ In-pod token bucket per API key (v1). Configurable requests per second and burst
 | 401 | Missing or invalid API key |
 | 422 | Validation error (bad parameters) |
 | 429 | Rate limit exceeded |
-| 500 | Internal error (logged with trace ID) |
+| 500 | Internal error (logged) |
 
 ## Kernel Architecture
 

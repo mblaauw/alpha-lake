@@ -4,7 +4,7 @@ set shell := ["bash", "-c"]
 
 # Start the reference stack
 up *flags:
-    docker compose up -d postgres rustfs otel {{ flags }}
+    docker compose up -d postgres rustfs {{ flags }}
 
 # Stop the reference stack
 down:
@@ -52,7 +52,7 @@ vendor:
     uv export --no-dev --output-file vendor/wheelhouse/requirements.txt
     docker compose pull
     rm -rf vendor/images && mkdir -p vendor/images
-    for img in postgres:17-alpine rustfs/rustfs:latest otel/opentelemetry-collector-contrib:0.123.0; do \
+    for img in postgres:17-alpine rustfs/rustfs:latest; do \
       n=$(echo "$$img" | tr '/:' '_'); \
       docker save "$$img" | gzip > "vendor/images/$$n.tar.gz"; \
     done

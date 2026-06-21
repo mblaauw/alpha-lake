@@ -41,7 +41,6 @@ services:
       ALPHA_LAKE_EODHD_API_KEY: "${ALPHA_LAKE_EODHD_API_KEY:-}"
       RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
       RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin}"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4317
     volumes:
       - ./config:/config:ro
     depends_on:
@@ -50,15 +49,6 @@ services:
       rustfs:
         condition: service_healthy
     entrypoint: ["alpha-lake"]
-
-  otel:
-    image: otel/opentelemetry-collector-contrib:0.123.0
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-    volumes:
-      - .stack/otel/otel-collector.yaml:/etc/otel-collector.yaml:ro
-    command: ["--config", "/etc/otel-collector.yaml"]
 
 volumes:
   pgdata:

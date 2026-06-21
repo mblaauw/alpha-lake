@@ -12,7 +12,7 @@ Stack-first, bitemporal market-data lakehouse. Ingests, archives, validates, and
 ## Quick start
 
 ```bash
-just up        # start the reference stack (Postgres + RustFS + OTel)
+just up        # start the reference stack (Postgres + RustFS)
 just bootstrap # initialize the catalog
 just ingest    # ingest market data (synthetic by default — see below)
 just health    # check dataset freshness and status
@@ -52,7 +52,7 @@ exercised end-to-end against real endpoints.
 
 | Epic | Phase | Focus | Priority |
 |------|-------|-------|----------|
-| Epic 0 | Phase 0 | Foundation: stack, CI, OTel, config | P0 ✅ |
+| Epic 0 | Phase 0 | Foundation: stack, CI, config | P0 ✅ |
 | Epic 1 | Phase 1 | Bars vertical slice: connector → PIT read | P0 ✅ |
 | Epic 2 | Phase 2 | Testing: replay harness, fixtures, contract tests | P0 ✅ |
 | Cleanup | — | Retrospective: timezone, SQL injection, dead code, test hygiene, import-linter, ClockPort | P0 ✅ |
@@ -98,7 +98,7 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0008 | dlt for ingestion framework with idempotency | Superseded |
 | 0009 | Fact store + transform library, never a feature store | Refined by 0017 |
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
-| 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
+| 0011 | OpenTelemetry OTLP collector in stack, console in harness | Superseded |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Accepted |
 | 0013 | Nix flake as hermetic reproducibility ceiling | Superseded by ADR-0012 |
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Accepted |
@@ -111,6 +111,9 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
 | 0022 | Blob store — unified raw archive interface | Accepted |
 | 0023 | Dataset descriptor for unified canonical write | Accepted |
+| 0024 | SQL kernel macros over inline stored procedures | Accepted |
+| 0025 | Dataset support tiers | Accepted |
+| 0027 | Structured JSON logging replaces OpenTelemetry as default observability | Accepted |
 
 ## Development
 
