@@ -31,3 +31,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
 | 0022 | Blob store — unified raw archive interface | Accepted |
 | 0023 | Dataset descriptor for unified canonical write | Accepted |
+| 0024 | Serving architecture — versioned SQL kernel, REST transport, API key auth | Accepted |

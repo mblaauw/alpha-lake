@@ -290,7 +290,21 @@ Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the 
 
 ## 11. The point-in-time read (mechanics)
 
-Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source (`QUALIFY row_number() OVER (PARTITION BY ... ORDER BY available_at DESC) = 1`), then source precedence by `source_dataset_registry.priority`. See the PIT reader skill (`pit-reader`) for implementation patterns and leakage-test requirements.
+### 11.1 Kernel — versioned SQL artifact
+
+Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source (`QUALIFY row_number() OVER (PARTITION BY ... ORDER BY available_at DESC) = 1`), then source precedence by `source_dataset_registry.priority`.
+
+This resolution logic does not live in Python string templates. It is a **versioned SQL kernel** in `src/alpha_lake/kernel/sql/` — one `.sql` file per dataset contract (e.g. `bars_pit.sql`, `bars_adjusted.sql`). Each file defines a parameterized DuckDB table macro:
+
+```sql
+CREATE OR REPLACE MACRO bars_asof(
+    security_ids, as_of, start_date := NULL, end_date := NULL
+) AS TABLE ...
+```
+
+The kernel is loaded by `register_kernel(con)` inside the connection factory (`catalog.connect()`), so every transport — library, REST pod, publish job, test — receives the same macros automatically. Macro creation is in-memory metadata (microseconds), so the per-connection cost is nil. See ADR-0024 for the full rationale.
+
+### 11.2 Mechanics
 
 For historical observation datasets such as bars, the valid-time rule is `effective_date <= :as_of`. For known-future event datasets such as earnings calendars or announced corporate actions, readers may return future `event_date`/`effective_date` rows if `available_at <= :as_of`; the fact that an event is scheduled in the future can itself be knowable today.
 
@@ -381,7 +395,7 @@ Candlestick pattern helpers are allowed only as neutral structural descriptions 
 
 ### 14.3 Semantics and caching
 
-Indicators that need explicit semantics (anchored VWAP, total-return, benchmark-relative) require the caller to supply the relevant parameters — the library does not assume defaults. Recursive indicators (EMA, RSI, ATR, etc.) require an `available_at`-bounded lookback window before `start` or a documented deterministic seed. A materialized indicator cache (`technical_indicator_cache`) may be used for frequently reused outputs; it remains rebuildable derived state with explicit invalidation rules.
+Indicators that need explicit semantics (anchored VWAP, total-return, benchmark-relative) require the caller to supply the relevant parameters — the library does not assume defaults. Recursive indicators (EMA, RSI, ATR, etc.) require an `available_at`-bounded lookback window before `start` or a documented deterministic seed. The warm-up boundary is computed via `calendar_.shift_trading_days(start_date, -MAX_WINDOW)`, which uses `exchange_calendars`' multi-step session offset for efficient, calendar-aware lookback. The indicator server prepends warm-up history before the target range, then trims warm-up rows from the result. A materialized indicator cache (`technical_indicator_cache`) may be used for frequently reused outputs; it remains rebuildable derived state with explicit invalidation rules.
 
 ### 14.6 Boundary with Alpha-Quant
 
@@ -496,27 +510,61 @@ else:
 
 ## 18. Serving API
 
-```python
-lake = MarketLake.open(config)
+### 18.1 Architecture (three-layer)
 
-# readers — research readers REQUIRE as_of
-bars = lake.bars(symbol="META", start=d1, end=d2, as_of=A, price_mode="split_adjusted")
-fund = lake.fundamentals(symbol="AAPL", as_of=A)
-
-# as-of panel — scalar as_of (whole panel as known at one instant)
-panel = lake.panel(securities=[...], fields=["close","volume"], start=d1, end=d2, as_of=A)
-
-# spine join — each row carries its own as_of (true point-in-time join, leakage-free)
-panel = lake.asof_panel(spine=dates_df,            # (security_id, decision_date)
-                        fields=["close","fund.debt_to_equity"], as_of_col="decision_date")
-
-# catalog (control plane) + health
-lake.catalog.datasets(); lake.health(as_of=A)
+```
+kernel/sql/*.sql         — PIT resolution table macros (bars_asof, bars_adjusted, ...)
+serving/__init__.py      — thin Python callers binding parameters, calling kernel macros
+transport/*              — FastAPI REST (primary remote), Python library, CLI harness
 ```
 
-Readers return typed models / Arrow tables. **Catalog** answers *what exists + is it trustworthy* (schema version, freshness, row/quarantine/reconciliation counts, dataset versions = DuckLake snapshots, lineage) from the DuckLake catalog DB — no separate metadata service. **Remote (deferred):** Arrow Flight SQL / ADBC (zero-copy, not REST); DuckLake read-only HTTPS share for simple cases.
+The kernel (layer 1) is a versioned SQL artifact loaded per-connection by `register_kernel(con)` in `catalog.connect()`. Every transport receives the same macros automatically — see §11 and ADR-0024.
 
-`latest_*` methods are explicitly non-research escape hatches. They return a distinct PIT-unsafe type or carry `pit_unsafe=True`, and still filter to `available_at <= now()`.
+The serving layer (layer 2) binds parameters and delegates to kernel macros. These are the public Python reader contracts (`read_bars_asof`, `read_panel`, `read_asof_join`, `read_bars_adjusted`, `read_bars_latest`, catalog/health). They return Polars DataFrames.
+
+### 18.2 REST transport (primary remote)
+
+The REST API is served by FastAPI (optional `[server]` extra). All endpoints go through the same `connect()` → `register_kernel()` path, so the kernel is always present.
+
+```
+GET /v1/bars?symbol=META&start=2026-01-01&end=2026-06-01&as_of=2026-06-15T16:00:00Z&price_mode=split_adjusted
+GET /v1/bars/indicators?symbol=META&indicators=sma:50,rsi:14&as_of=2026-06-15T16:00:00Z&price_mode=split_adjusted
+GET /v1/health
+```
+
+**Authentication:** `X-API-Key` header with bcrypt-hashed tokens. Key prefixes: `al_live_` for production, `al_test_` for testing. Keys are managed via CLI subcommand and stored via the existing `SecretStore` ABC.
+
+**Rate limiting:** In-pod token bucket per key (v1). Shared store (e.g. Redis) deferred to v2.
+
+**Lookback cap:** A configurable `max_lookback_days` bound is enforced at the kernel level to prevent unbounded bulk queries. Overridable in private deployments via config.
+
+`latest_*` endpoints explicitly document PIT-unsafety and still apply `available_at <= now()`. They must never feed into research or backtest pipelines.
+
+### 18.3 Python library (local/embedded)
+
+The existing Python reader contracts remain the local-access path. They require an explicit DuckDB connection obtained from `catalog.connect(cfg)`, ensuring the kernel is always loaded. This path is used by:
+
+- **Notebooks/research** — inline PIT reads against the embedded or remote catalog.
+- **Publish jobs** — batch pipelines that read/write from the same process.
+- **Tests** — unit and integration tests create in-memory DuckDB connections, load the kernel, and run against fixture tables.
+
+### 18.4 Catalog & health
+
+Catalog metadata (datasets, schema versions, row counts, snapshots) is served from the DuckLake catalog DB — no separate metadata service. Both the Python library and REST transport expose:
+
+- `list_datasets` / `dataset_health` / `catalog_health` — per-dataset and overall freshness.
+- `list_snapshots` / `set_snapshot` — DuckLake snapshot enumeration and read pinning.
+- `resolve_ingestion_run` — map an `ingestion_run_id` to a DuckLake snapshot ID.
+
+### 18.5 Remote transport roadmap
+
+| Phase | Transport | Status |
+|-------|-----------|--------|
+| v1 | REST (FastAPI) with API key auth | Building |
+| v2 | Python SDK wrapping REST transport | Future |
+| v3 | Arrow Flight SQL / ADBC (bulk optimization) | Future |
+
+Arrow Flight SQL / ADBC is deferred as a bulk-optimization pass for large panel reads, not the primary remote surface.
 
 ## 19. Orchestration — flow functions, thin shells
 
@@ -712,7 +760,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Transform | DuckDB SQL ▸ SQLMesh |
 | Orchestration | Typer CLI in app container first; Dagster optional over `flows/` |
 | Observability | OpenTelemetry (OTLP collector in stack; console in embedded harness) |
-| Remote serving | Arrow Flight SQL / ADBC (deferred) |
+| Remote serving | REST (FastAPI, optional `[server]` extra); Arrow Flight SQL / ADBC deferred for bulk |
 | Lint/format · types · tests · boundaries | ruff · ty · pytest · import-linter |
 | Raw archive blob store | `s3fs` (S3) / `pathlib.Path` (local) via BlobStore ABC |
 
@@ -727,7 +775,8 @@ Strategy logic; materialized features; intraday/streaming; distributed compute; 
 ```mermaid
 flowchart LR
   A[fetch · connector] --> B[archive raw] --> C[parse · Polars] --> D[validate · Patito]
-  D --> E[reconcile] --> F[(canonicalize · DuckLake · bitemporal)] --> G[serve · DuckDB/Arrow · PIT]
+  D --> E[reconcile] --> F[(canonicalize · DuckLake · bitemporal)]
+  F --> H[kernel · kernel/sql/*.sql · PIT macros] --> G[serve · REST / Python / CLI]
 ```
 
 The lake owns bitemporal, source-aware, replayable facts. Consumers own interpretation. It installs nothing it doesn't carry, and it runs stack-first in its own self-contained Compose space. The embedded path exists only to make tests, fixtures, and golden replay fast and deterministic.
