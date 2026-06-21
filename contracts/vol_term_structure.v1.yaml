@@ -1,0 +1,44 @@
+dataset: vol_term_structure
+version: 1
+description: Volatility-index family levels and derived contango spread (neutral).
+
+primary_key:
+  - series_id
+  - effective_date
+  - source_id
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - series_id
+  - effective_date
+  - available_at
+  - source_id
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - value
+
+freshness_sla:
+  calendar: exchange
+  rule: within_2_days
+
+quality_status:
+  allowed: [valid, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Vol index levels ingested via existing bars pipeline for index symbols."
+  - "Derived contango_spread is a neutral measurement, not a signal."

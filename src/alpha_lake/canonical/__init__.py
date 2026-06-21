@@ -28,6 +28,7 @@ from alpha_lake.models.macro_fact import MacroSeriesFact
 from alpha_lake.models.market_breadth_fact import MarketBreadthFact
 from alpha_lake.models.relative_strength_fact import RelativeStrengthFact
 from alpha_lake.models.technical_fact import TechnicalIndicatorFact
+from alpha_lake.models.vol_term_structure_fact import VolTermStructureFact
 
 NORMALIZATION_VERSION: int = 1
 
@@ -59,6 +60,7 @@ _MACRO_KEYS = ("series_id", "effective_date", "source_id")
 _ECON_CAL_KEYS = ("event_id", "effective_date", "source_id")
 _TECH_KEYS = ("security_id", "effective_date", "source_id")
 _RS_KEYS = ("security_id", "effective_date", "window")
+_VOL_TERM_KEYS = ("series_id", "effective_date", "source_id")
 _BREADTH_KEYS = ("metric_id", "effective_date")
 
 DATASETS: dict[str, Dataset] = {
@@ -79,6 +81,7 @@ DATASETS: dict[str, Dataset] = {
     "technical_indicators": Dataset("technical_indicators", TechnicalIndicatorFact, _TECH_KEYS),
     "relative_strength": Dataset("relative_strength", RelativeStrengthFact, _RS_KEYS),
     "market_breadth": Dataset("market_breadth", MarketBreadthFact, _BREADTH_KEYS),
+    "vol_term_structure": Dataset("vol_term_structure", VolTermStructureFact, _VOL_TERM_KEYS),
 }
 
 

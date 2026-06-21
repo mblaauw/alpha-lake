@@ -357,6 +357,15 @@ description = "Cross-sectional participation: % above MA across basket/sectors a
 [quality.market_breadth]
 max_staleness_days = 2
 
+[datasets.vol_term_structure]
+tier = "experimental"
+supported = false
+sla = false
+description = "Volatility-index family levels and derived term-structure spread."
+
+[quality.vol_term_structure]
+max_staleness_days = 2
+
 [precedence]
 analyst_estimates = ["finnhub", "fmp"]
 bars_daily = ["eodhd", "tiingo"]
