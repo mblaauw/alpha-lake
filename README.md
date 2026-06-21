@@ -1,5 +1,10 @@
 # Alpha-Lake
 
+[![CI](https://github.com/mblaauw/alpha-lake/actions/workflows/ci.yaml/badge.svg)](https://github.com/mblaauw/alpha-lake/actions/workflows/ci.yaml)
+[![Release](https://github.com/mblaauw/alpha-lake/actions/workflows/release.yaml/badge.svg)](https://github.com/mblaauw/alpha-lake/actions/workflows/release.yaml)
+[![Python](https://img.shields.io/badge/python-3.13%20|%203.14-blue)](https://www.python.org)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+
 Stack-first, bitemporal market-data lakehouse. Ingests, archives, validates, and serves point-in-time-correct market facts to notebooks, backtests, dashboards, ML, and trading systems.
 
 > **Owns facts. Serves what was knowable as of a date. Knows nothing about strategy.**
