@@ -37,7 +37,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services and "rustfs" in services
-    except subprocess.SubprocessError, FileNotFoundError, OSError:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
 
 
