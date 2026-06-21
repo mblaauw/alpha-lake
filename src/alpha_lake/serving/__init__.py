@@ -125,7 +125,7 @@ def pit_read(
         raise ValueError("Provide either security_ids or spine")
 
     con.execute("DROP VIEW IF EXISTS _spine")
-    con.register("_spine", spine.to_arrow())
+    con.register("_spine", spine)
 
     try:
         # Per-row as_of mode
@@ -198,7 +198,8 @@ def read_bars_asof(
     snapshot_id: str | None = None,
 ) -> pl.DataFrame:
     return pit_read(
-        con, "lake_bars",
+        con,
+        "lake_bars",
         security_ids=security_ids,
         as_of=as_of,
         start_date=start_date,
@@ -225,11 +226,21 @@ def read_bars_adjusted(
     """
     if price_mode == "raw":
         return read_bars_asof(
-            con, security_ids, as_of, start_date, end_date, snapshot_id=snapshot_id,
+            con,
+            security_ids,
+            as_of,
+            start_date,
+            end_date,
+            snapshot_id=snapshot_id,
         )
 
     raw = read_bars_asof(
-        con, security_ids, as_of, start_date, end_date, snapshot_id=snapshot_id,
+        con,
+        security_ids,
+        as_of,
+        start_date,
+        end_date,
+        snapshot_id=snapshot_id,
     )
     if raw.height == 0:
         return raw
@@ -289,7 +300,12 @@ def read_bars_latest(
     read_bars_asof() with an explicit as_of parameter.
     """
     return read_bars_asof(
-        con, security_ids, get_clock().now(), start_date, end_date, snapshot_id=snapshot_id,
+        con,
+        security_ids,
+        get_clock().now(),
+        start_date,
+        end_date,
+        snapshot_id=snapshot_id,
     )
 
 
@@ -306,7 +322,8 @@ def read_panel(
     The spine must have columns 'security_id' and 'effective_date'.
     """
     return pit_read(
-        con, dataset,
+        con,
+        dataset,
         spine=spine,
         as_of=as_of,
         source_precedence_dataset=_infer_dataset(dataset),
@@ -325,7 +342,8 @@ def read_asof_join(
     if "as_of" not in spine.columns:
         raise ValueError("Spine must have an 'as_of' column for per-row PIT")
     return pit_read(
-        con, dataset,
+        con,
+        dataset,
         spine=spine,
         as_of_col="as_of",
         source_precedence_dataset=_infer_dataset(dataset),

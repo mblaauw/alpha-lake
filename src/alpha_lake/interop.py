@@ -11,10 +11,7 @@ def polars_to_duckdb(
 ) -> None:
     if isinstance(df, pl.LazyFrame):
         df = df.collect()
-    rel = con.from_arrow(df.to_arrow())
-    rel.create(table_name)
-
-
+    con.execute(f"CREATE TABLE {table_name} AS SELECT * FROM df")
 
 
 def duckdb_to_polars(
@@ -22,6 +19,4 @@ def duckdb_to_polars(
     query: str,
     params: list | None = None,
 ) -> pl.DataFrame:
-    result = pl.from_arrow(con.execute(query, params or []).to_arrow_table())
-    assert isinstance(result, pl.DataFrame)
-    return result
+    return con.execute(query, params or []).pl()
