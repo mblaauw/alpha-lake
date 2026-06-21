@@ -13,7 +13,8 @@ import pytest
 from alpha_lake.canonical import write_bars
 from alpha_lake.catalog import bootstrap as _bootstrap_catalog
 from alpha_lake.catalog import connect
-from alpha_lake.config import LakeConfig, RootConfig, S3Config, load_config
+from alpha_lake.config import LakeConfig, RootConfig, S3Config
+from alpha_lake.config import _config as _global_config
 from alpha_lake.raw import archive, read_raw
 from alpha_lake.serving import read_bars_asof
 
@@ -37,7 +38,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services and "rustfs" in services
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except subprocess.SubprocessError, FileNotFoundError, OSError:
         return False
 
 
@@ -76,7 +77,25 @@ def test_mode_parity_storage():
     )
     raw_data = b'{"test":"parity payload"}'
 
-    load_config()
+    # Set global config for archive()/read_raw() which use get_config()
+    global _global_config
+    _global_config = RootConfig(
+        lake=LakeConfig(
+            runtime="stack",
+            catalog=(
+                f"ducklake:postgres:dbname=lake_catalog "
+                f"host={_PGHOST} port=5432 user=lake password=lake"
+            ),
+            canonical_data_path="s3://lake/",
+            raw_archive_uri="s3://lake/raw/",
+            calendar_version="4.13.2",
+        ),
+        s3=S3Config(
+            endpoint=f"{_RUSTFS_HOST}:9000",
+            url_style="path",
+            use_ssl=False,
+        ),
+    )
 
     # --- 1. Embedded mode ---
     with tempfile.TemporaryDirectory() as tmpdir:
