@@ -44,13 +44,12 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4317
     volumes:
       - ./config:/config:ro
-      - ./src:/app/src:ro
     depends_on:
       postgres:
         condition: service_healthy
       rustfs:
         condition: service_healthy
-    entrypoint: ["uv", "run", "--frozen", "alpha-lake"]
+    entrypoint: ["alpha-lake"]
 
   otel:
     image: otel/opentelemetry-collector-contrib:0.123.0
