@@ -24,6 +24,27 @@ def test_source_config_defaults():
     cfg = SourceConfig()
     assert cfg.api_key == ""
     assert cfg.rate_limit_per_sec == 10.0
+    assert cfg.fallback_base_url is None
+    assert cfg.requires_key is True
+    assert cfg.contact_email == ""
+    assert cfg.rate_limit_per_min is None
+    assert cfg.rate_limit_per_day is None
+
+
+def test_source_config_with_limits():
+    cfg = SourceConfig(
+        rate_limit_per_sec=5.0,
+        rate_limit_per_min=100,
+        rate_limit_per_day=1000,
+        fallback_base_url="https://fallback.example.com",
+        requires_key=False,
+        contact_email="test@example.com",
+    )
+    assert cfg.rate_limit_per_min == 100
+    assert cfg.rate_limit_per_day == 1000
+    assert cfg.fallback_base_url == "https://fallback.example.com"
+    assert cfg.requires_key is False
+    assert cfg.contact_email == "test@example.com"
 
 
 def test_dataset_posture_defaults():

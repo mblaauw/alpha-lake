@@ -12,7 +12,12 @@ from alpha_lake.secrets import get_store
 class SourceConfig(pydantic.BaseModel):
     api_key: str = ""
     base_url: str = ""
+    fallback_base_url: str | None = None
+    requires_key: bool = True
+    contact_email: str = ""
     rate_limit_per_sec: float = 10.0
+    rate_limit_per_min: int | None = None
+    rate_limit_per_day: int | None = None
     max_retries: int = 3
 
 
@@ -93,6 +98,9 @@ def load_config(path: str | None = None) -> RootConfig:
         stored = store.get(f"{source_id}_api_key")
         if stored:
             raw["sources"][source_id].setdefault("api_key", stored)
+        contact = store.get(f"{source_id}_contact_email")
+        if contact:
+            raw["sources"][source_id].setdefault("contact_email", contact)
 
     _config = RootConfig.model_validate(raw)
     return _config
