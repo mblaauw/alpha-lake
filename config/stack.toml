@@ -132,6 +132,17 @@ cross_source_enabled = true
 strict_event_match = true
 cross_source_enabled = true
 
+[reconcile.analyst_estimates]
+numeric_diff_pct = 1.0
+cross_source_enabled = true
+
+[reconcile.news_articles]
+cross_source_enabled = true
+
+[reconcile.macro_series]
+numeric_diff_pct = 1.0
+cross_source_enabled = false
+
 [sources.eodhd]
 base_url = "https://eodhd.com/api"
 rate_limit_per_sec = 10.0
