@@ -266,5 +266,14 @@ description = "Per-symbol return vs configured benchmark and cross-sectional RS 
 [quality.relative_strength]
 max_staleness_days = 2
 
+[datasets.market_breadth]
+tier = "experimental"
+supported = false
+sla = false
+description = "Cross-sectional participation: % above MA across basket/sectors and leadership ratios."
+
+[quality.market_breadth]
+max_staleness_days = 2
+
 [precedence]
 bars_daily = ["eodhd", "tiingo"]

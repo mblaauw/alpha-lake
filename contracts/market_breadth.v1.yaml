@@ -1,0 +1,43 @@
+dataset: market_breadth
+version: 1
+description: Cross-sectional participation measurements — % above MA and leadership ratios.
+
+primary_key:
+  - metric_id
+  - effective_date
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - metric_id
+  - effective_date
+  - available_at
+  - value
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - value
+
+freshness_sla:
+  calendar: exchange
+  rule: within_2_days
+
+quality_status:
+  allowed: [valid, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Basket, sector list, and ratio pairs are config-driven."
+  - "Null value when data is insufficient (warmup or missing symbol)."
