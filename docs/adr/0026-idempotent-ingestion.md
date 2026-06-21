@@ -1,4 +1,4 @@
-# ADR-0027: Idempotent Ingestion — skip existing data before API calls
+# ADR-0026: Idempotent Ingestion — skip existing data before API calls
 
 **Status:** Accepted
 

@@ -15,7 +15,7 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0005 | Security master PIT resolution | Accepted |
 | 0006 | Read-time adjusted price computation | Accepted |
 | 0007 | Embedded SQLite/local-fs harness for testing | Accepted |
-| 0008 | dlt for ingestion framework with idempotency | Accepted |
+| 0008 | dlt for ingestion framework with idempotency | Superseded |
 | 0009 | Fact store + transform library, never a feature store | Refined by 0017 |
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
 | 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
@@ -33,3 +33,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0023 | Dataset descriptor for unified canonical write | Accepted |
 | 0024 | Serving architecture — versioned SQL kernel, REST transport, API key auth | Accepted |
 | 0025 | Dataset support tiers and experimental text sources | Accepted |
+| 0026 | Idempotent ingestion — skip existing data before API calls | Accepted |

@@ -34,7 +34,7 @@ Additionally, the indicator warm-up mechanism specified in ADR-0017 ("an `availa
 3. **Three-layer architecture: kernel SQL → serving Python → transport.**
 
    ```
-   kernel/sql/*.sql       — PIT resolution table macros (bars_asof, bars_adjusted, ...)
+    kernel/sql/*.sql       — PIT resolution table macros (bars_asof, bars_pit_adjusted, ...)
    serving/__init__.py    — thin Python callers binding parameters, calling kernel macros
    transports/            — FastAPI REST (primary remote), Python library, CLI
    ```
@@ -45,7 +45,7 @@ Additionally, the indicator warm-up mechanism specified in ADR-0017 ("an `availa
 
 6. **Rate limiting.** In-pod token bucket for v1 (no external dependency). Shared store (e.g. Redis) deferred to v2 — Redis is not currently in the stack and requires operational overhead.
 
-7. **Lookback cap.** A configurable `max_lookback_days` bound is enforced at the kernel level, preventing unbounded bulk queries through the REST API.
+7. **Lookback cap.** A configurable `max_lookback_days` bound is enforced at the transport layer (in `transport/app.py`), preventing unbounded bulk queries through the REST API. The kernel SQL itself has no awareness of lookback limits.
 
 8. **`shift_trading_days(n)` added to `calendar_.py`.** Uses `exchange_calendars`' built-in `date_to_session(dt, direction="next", count=n)` for efficient multi-step offset. Enables deterministic indicator warm-up: the indicator server prepends `shift_trading_days(start_date, -MAX_WINDOW)` trading days of history before the target range, then trims the warm-up rows from the result.
 

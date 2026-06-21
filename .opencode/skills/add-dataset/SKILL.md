@@ -1,6 +1,6 @@
 ---
 name: add-dataset
-description: Alpha-Lake dataset vertical-slice template. Use when adding bars, fundamentals, insider, corporate actions, news, social, earnings, or any new dataset.
+description: Alpha-Lake dataset vertical-slice template. Use when adding bars, fundamentals, insider, corporate actions, earnings, or any new core/convenience dataset.
 ---
 
 # Add Dataset
@@ -59,6 +59,13 @@ quality_status
 9. Add PIT reader and leakage test.
 10. Add contract and replay fixture.
 ```
+
+## Product posture
+
+News and social datasets are **experimental** (tier 3), disabled by default, and not SLA-eligible.
+Do not add or expand text/news/social connectors unless explicitly requested and the dataset
+config posture is updated first. Deepen core facts (bars, fundamentals, corp actions,
+reconciliation) instead.
 
 ## Gates
 
