@@ -186,9 +186,6 @@ dependencies = [
     { name = "exchange-calendars" },
     { name = "fsspec" },
     { name = "httpx" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-sdk" },
     { name = "patito" },
     { name = "polars" },
     { name = "psycopg2-binary" },
@@ -209,6 +206,11 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
 ]
+otel = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-sdk" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -225,9 +227,9 @@ requires-dist = [
     { name = "fsspec", specifier = ">=2024.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "opentelemetry-api", specifier = ">=1.30" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30" },
-    { name = "opentelemetry-sdk", specifier = ">=1.30" },
+    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.30" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otel'", specifier = ">=1.30" },
+    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.30" },
     { name = "patito", specifier = ">=0.5" },
     { name = "polars", specifier = ">=1.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
@@ -242,7 +244,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.15" },
     { name = "zstd", specifier = ">=1.5" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["otel", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
