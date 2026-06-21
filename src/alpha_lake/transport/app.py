@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+from time import monotonic
+from typing import Any
+
+import duckdb
+import polars as pl
+from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-import]
+from fastapi.responses import JSONResponse  # type: ignore[unresolved-import]
+
+from alpha_lake.calendar_ import shift_trading_days
+from alpha_lake.catalog import catalog_health, connect
+from alpha_lake.config import load_config
+from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
+from alpha_lake.secrets import get_store
+from alpha_lake.security_master import resolve as resolve_security
+from alpha_lake.serving import read_bars_asof
+
+_INDICATOR_MAP: dict[str, Callable[..., Any]] = {
+    "sma": sma,
+    "ema": ema,
+    "rsi": rsi,
+    "bollinger": bollinger_bands,
+    "atr": atr,
+    "macd": macd,
+}
+
+_RECURSIVE_MULTIPLIER: dict[str, int] = {
+    "sma": 1,
+    "ema": 3,
+    "rsi": 3,
+    "bollinger": 1,
+    "atr": 5,
+    "macd": 3,
+}
+
+
+def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
+    parts = spec.split(",")
+    result: list[tuple[str, list[int | float]]] = []
+    for part in parts:
+        part = part.strip()
+        if ":" in part:
+            name, *args_str = part.split(":")
+            args = [float(a) for a in args_str]
+            result.append((name, args))
+        else:
+            result.append((part, []))
+    return result
+
+
+def _compute_warmup(
+    indicator: str, args: list[int | float], start: date | None, exchange: str = "XNYS"
+) -> date | None:
+    if start is None:
+        return None
+    mult = _RECURSIVE_MULTIPLIER.get(indicator, 1)
+    window = int(args[0]) if args else 14
+    return shift_trading_days(start, -(window * mult), exchange=exchange)
+
+
+class _TokenBucket:
+    def __init__(self, rate: float, burst: int) -> None:
+        self.rate = rate
+        self.burst = burst
+        self._tokens = float(burst)
+        self._last = monotonic()
+
+    def consume(self) -> bool:
+        now = monotonic()
+        elapsed = now - self._last
+        self._tokens = min(float(self.burst), self._tokens + elapsed * self.rate)
+        self._last = now
+        if self._tokens >= 1.0:
+            self._tokens -= 1.0
+            return True
+        return False
+
+
+def _verify_key(key: str) -> bool:
+    store = get_store()
+    suffix = (
+        "live" if key.startswith("al_live_") else "test" if key.startswith("al_test_") else None
+    )
+    if suffix is None:
+        return False
+    stored = store.get(f"alpha_lake_api_key_{suffix}")
+    if not stored:
+        return False
+    return hmac.compare_digest(
+        hashlib.sha256(key.encode()).hexdigest(),
+        hashlib.sha256(stored.encode()).hexdigest(),
+    )
+
+
+_connection: duckdb.DuckDBPyConnection | None = None
+_buckets: dict[str, _TokenBucket] = {}
+_MAX_LOOKBACK_DAYS = 365 * 3
+
+
+def _get_con() -> duckdb.DuckDBPyConnection:
+    global _connection
+    if _connection is None:
+        _connection = connect(load_config())
+    return _connection
+
+
+def _auth(request: Request) -> str:
+    key = request.headers.get("X-API-Key") or request.headers.get("Authorization", "").removeprefix(
+        "Bearer "
+    )
+    if not key:
+        raise HTTPException(401, "Missing API key")
+    if not _verify_key(key):
+        raise HTTPException(401, "Invalid API key")
+    bucket = _buckets.get(key)
+    if bucket is None:
+        bucket = _buckets[key] = _TokenBucket(rate=10.0, burst=20)
+    if not bucket.consume():
+        raise HTTPException(429, "Rate limit exceeded — single-replica limit")
+    return key
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+app = FastAPI(title="Alpha-Lake", version="0.1.0")
+
+
+@app.get("/v1/health")
+async def health():
+    return catalog_health(_get_con())
+
+
+@app.get("/v1/bars")
+async def bars(
+    request: Request,
+    symbol: str,
+    start: date | None = None,
+    end: date | None = None,
+    as_of: datetime | None = None,
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+
+    if as_of is None:
+        as_of = _now()
+
+    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
+        raise HTTPException(
+            422,
+            f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days",
+        )
+
+    sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
+    if sec_id is None:
+        raise HTTPException(404, f"Symbol '{symbol}' not found")
+
+    kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
+    if start:
+        kwargs["start_date"] = start
+    if end:
+        kwargs["end_date"] = end
+    if snapshot_id:
+        kwargs["snapshot_id"] = snapshot_id
+
+    df = read_bars_asof(_get_con(), **kwargs)
+    return JSONResponse(_pl_to_dicts(df))
+
+
+@app.get("/v1/bars/indicators")
+async def bars_indicators(
+    request: Request,
+    symbol: str,
+    indicators: str,
+    start: date | None = None,
+    end: date | None = None,
+    as_of: datetime | None = None,
+):
+    _auth(request)
+
+    if as_of is None:
+        as_of = _now()
+
+    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
+        raise HTTPException(
+            422,
+            f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days",
+        )
+
+    sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
+    if sec_id is None:
+        raise HTTPException(404, f"Symbol '{symbol}' not found")
+
+    parsed = _parse_indicators(indicators)
+    for name, _args in parsed:
+        if name not in _INDICATOR_MAP:
+            raise HTTPException(422, f"Unknown indicator: {name}")
+
+    warmup_start = start
+    for name, args in parsed:
+        w = _compute_warmup(name, args, start)
+        if w and (warmup_start is None or w < warmup_start):
+            warmup_start = w
+
+    kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
+    if warmup_start:
+        kwargs["start_date"] = warmup_start
+    if end:
+        kwargs["end_date"] = end
+
+    bars_df = read_bars_asof(_get_con(), **kwargs)
+    if bars_df.height == 0:
+        return JSONResponse([])
+
+    bars_df = bars_df.sort("effective_date")
+    result = bars_df.to_dict(as_series=False)
+    result["effective_date"] = [str(d) for d in result["effective_date"]]
+
+    for name, args in parsed:
+        fn = _INDICATOR_MAP[name]
+        if name == "atr":
+            series = fn(bars_df["high"], bars_df["low"], bars_df["close"], *args)
+            result[name] = [float(x) if x is not None else None for x in series]
+        elif name in ("bollinger", "macd"):
+            bands = fn(bars_df["close"], *args)
+            if isinstance(bands, dict):
+                for k, v in bands.items():
+                    result[f"{name}_{k}"] = [float(x) if x is not None else None for x in v]
+        else:
+            series = fn(bars_df["close"], *args)
+            result[name] = [float(x) if x is not None else None for x in series]
+
+    if start and warmup_start and warmup_start < start:
+        mask = [str(d) >= start.isoformat() for d in result["effective_date"]]
+        for key in list(result.keys()):
+            result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
+
+    return JSONResponse(result)
+
+
+def _pl_to_dicts(df: pl.DataFrame) -> list[dict[str, Any]]:
+    return [{k: _v(v) for k, v in row.items()} for row in df.rows(named=True)]
+
+
+def _v(val: Any) -> Any:
+    if isinstance(val, datetime | date):
+        return val.isoformat()
+    return val

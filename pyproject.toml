@@ -28,6 +28,10 @@ otel = [
     "opentelemetry-sdk>=1.30",
     "opentelemetry-exporter-otlp-proto-grpc>=1.30",
 ]
+server = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+]
 dev = [
     "dlt>=1.0",
     "ruff>=0.9",
@@ -35,6 +39,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "import-linter>=2.0",
+    "httpx>=0.28",
 ]
 
 [tool.ruff]
@@ -60,6 +65,12 @@ invalid-return-type = "error"
 unused-ignore-comment = "warn"
 
 [[tool.ty.overrides]]
+include = ["src/alpha_lake/transport/**"]
+
+[tool.ty.overrides.rules]
+possibly-unresolved-reference = "warn"
+
+[[tool.ty.overrides]]
 include = ["tests/**"]
 
 [tool.ty.overrides.rules]
@@ -78,6 +89,7 @@ layers = [
     "fixtures",
     "flows",
     "harness",
+    "transport",
     "serving",
     "replay",
     "catalog",
@@ -86,6 +98,7 @@ layers = [
     "normalize",
     "raw",
     "connectors",
+    "kernel",
     "source_registry",
     "clock",
     "storage",

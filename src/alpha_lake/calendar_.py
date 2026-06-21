@@ -39,13 +39,23 @@ def next_trading_day(dt: datetime.date, exchange: str = "XNYS") -> datetime.date
     return cal.date_to_session(dt.isoformat(), direction="next").date()
 
 
+def shift_trading_days(dt: datetime.date, n: int, exchange: str = "XNYS") -> datetime.date:
+    cal = _get_calendar(_resolve(exchange))
+    if n == 0:
+        return dt
+    fn = cal.next_session if n > 0 else cal.previous_session
+    current = dt.isoformat()
+    for _ in range(abs(n)):
+        current = fn(current)
+    if isinstance(current, str):
+        return datetime.date.fromisoformat(current)
+    return current.date()
+
+
 def trading_days_in_range(
     start: datetime.date,
     end: datetime.date,
     exchange: str = "XNYS",
 ) -> list[datetime.date]:
     cal = _get_calendar(_resolve(exchange))
-    return [
-        s.date()
-        for s in cal.sessions_in_range(start.isoformat(), end.isoformat())
-    ]
+    return [s.date() for s in cal.sessions_in_range(start.isoformat(), end.isoformat())]

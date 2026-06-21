@@ -58,6 +58,9 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     attach_str, data_path = _build_attach(cfg)
     con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
     con.execute("USE lake_catalog")
+    from alpha_lake.kernel import register_kernel
+
+    register_kernel(con)
     return con
 
 
