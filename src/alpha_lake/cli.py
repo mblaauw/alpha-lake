@@ -19,7 +19,7 @@ from alpha_lake.cli_ui import (
 from alpha_lake.cli_ui import (
     install_traceback as install_rich_traceback,
 )
-from alpha_lake.config import get_config, load_config
+from alpha_lake.config import RootConfig, get_config, load_config
 from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, reparse_bars
 
 app = typer.Typer(name="alpha-lake")
@@ -38,6 +38,7 @@ def _main(
 def bootstrap():
     """Initialize the catalog and storage."""
     cfg = get_config()
+    _require_infra(cfg)
     with spinner("Bootstrapping catalog…"):
         bootstrap_catalog(cfg)
     panel("Bootstrap", "Catalog bootstrapped.", style="green")
@@ -51,6 +52,7 @@ def ingest(
     source: str = typer.Option(None, help="Source ID"),
 ):
     """Ingest market data for a security."""
+    _require_infra(get_config())
     con = connect(get_config())
     ids = [security_id]
     with progress() as p:
@@ -73,6 +75,7 @@ def backfill(
     source: str = typer.Option(None),
 ):
     """Backfill bars for a date range."""
+    _require_infra(get_config())
     from datetime import date
 
     from alpha_lake.calendar_ import trading_days_in_range
@@ -104,6 +107,7 @@ def reparse(
     effective_date: str = typer.Option(None, help="YYYY-MM-DD"),
 ):
     """Reparse raw archive data for a security."""
+    _require_infra(get_config())
     from datetime import date
 
     con = connect(get_config())
@@ -130,6 +134,7 @@ def reparse(
 @app.command()
 def compact(table: str = typer.Option(..., help="Table to compact")):
     """Compact a canonical table by removing duplicate versions."""
+    _require_infra(get_config())
     con = connect(get_config())
     with spinner(f"Compacting {table}…"):
         count = compact_dataset(con, table)
@@ -208,6 +213,21 @@ def health():
         pass
 
 
+def _require_infra(cfg: RootConfig) -> None:
+    """Quick connectivity check before commands that need the stack.
+
+    In stack mode, warns and shows how to start the stack if Postgres or
+    RustFS is unreachable, avoiding confusing errors deep inside DuckDB.
+    """
+    if cfg.lake.runtime != "stack":
+        return
+    pg_ok = _check_postgres(return_bool=True)
+    rs_ok = _check_rustfs(return_bool=True)
+    if not pg_ok or not rs_ok:
+        warn("Stack unreachable — run [bold]just up[/] to start it.")
+        sys.exit(1)
+
+
 def _check_postgres(return_bool: bool = False) -> bool:
     try:
         with socket.create_connection(("postgres", 5432), timeout=5.0):
@@ -239,6 +259,7 @@ def catalog(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show snapshot details"),
 ):
     """List datasets and their status."""
+    _require_infra(get_config())
     from alpha_lake.catalog import catalog_health, list_datasets, list_snapshots
 
     con = connect(get_config())
