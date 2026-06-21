@@ -45,11 +45,6 @@ jobs:
           enable-cache: true
       - run: uv sync --extra dev
 
-      - name: Install mc (MinIO Client)
-        run: |
-          curl -sL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-          chmod +x /usr/local/bin/mc
-
       - name: Build app image
         run: docker compose build app
 

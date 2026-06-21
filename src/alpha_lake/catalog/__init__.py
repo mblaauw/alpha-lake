@@ -63,29 +63,22 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
 
 def _ensure_bucket(cfg: RootConfig) -> None:
     """Create the S3 data bucket if it doesn't already exist."""
-    import subprocess
+    import s3fs
 
     data_path = cfg.lake.canonical_data_path
     if not data_path.startswith("s3://"):
         return
     bucket = data_path.removeprefix("s3://").split("/")[0]
     s3 = cfg.s3
-    mc_alias = "lake"
-    subprocess.run(
-        ["mc", "alias", "set", mc_alias,
-         f"http://{s3.endpoint}", s3.access_key, s3.secret_key,
-         "--api", "S3v4"],
-        capture_output=True, check=False,
+
+    fs = s3fs.S3FileSystem(
+        endpoint_url=f"http://{s3.endpoint}",
+        key=s3.access_key,
+        secret=s3.secret_key,
+        client_kwargs={"region_name": "us-east-1"},
+        config_kwargs={"s3": {"addressing_style": s3.url_style}},
     )
-    result = subprocess.run(
-        ["mc", "ls", f"{mc_alias}/{bucket}"],
-        capture_output=True, text=True, check=False,
-    )
-    if result.returncode != 0:
-        subprocess.run(
-            ["mc", "mb", f"{mc_alias}/{bucket}"],
-            capture_output=True, check=False,
-        )
+    fs.mkdir(bucket, exist_ok=True)
 
 
 def bootstrap(cfg: RootConfig) -> None:
@@ -183,6 +176,3 @@ def set_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str) -> None:
         raise NotImplementedError(
             f"Snapshot pinning not supported by this DuckLake version: {e}"
         ) from e
-
-
-
