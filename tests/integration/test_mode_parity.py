@@ -13,7 +13,7 @@ import pytest
 from alpha_lake.canonical import write_bars
 from alpha_lake.catalog import bootstrap as _bootstrap_catalog
 from alpha_lake.catalog import connect
-from alpha_lake.config import LakeConfig, RootConfig, S3Config
+from alpha_lake.config import LakeConfig, RootConfig, S3Config, load_config
 from alpha_lake.raw import archive, read_raw
 from alpha_lake.serving import read_bars_asof
 
@@ -37,7 +37,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services and "rustfs" in services
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except subprocess.SubprocessError, FileNotFoundError, OSError:
         return False
 
 
@@ -75,6 +75,8 @@ def test_mode_parity_storage():
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
     raw_data = b'{"test":"parity payload"}'
+
+    load_config()
 
     # --- 1. Embedded mode ---
     with tempfile.TemporaryDirectory() as tmpdir:
