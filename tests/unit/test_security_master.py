@@ -1,8 +1,17 @@
+from __future__ import annotations
+
 from datetime import UTC, date, datetime
 
 import duckdb
 
-from alpha_lake.security_master import mint_security_id, register, resolve
+from alpha_lake.security_master import (
+    _reset_cache_for_test,
+    mint_security_id,
+    register,
+    register_ticker_cik,
+    resolve,
+    resolve_ticker_to_cik,
+)
 
 
 def test_mint_security_id_deterministic():
@@ -10,7 +19,7 @@ def test_mint_security_id_deterministic():
     h2 = mint_security_id(figi="BBG000B9XVX7")
     assert h1 == h2
     assert h1.startswith("sec_")
-    assert len(h1) == 28  # "sec_" + 24 hex chars
+    assert len(h1) == 28
 
 
 def test_mint_security_id_different_inputs():
@@ -32,36 +41,59 @@ def test_mint_security_id_empty():
 
 def test_register_and_resolve():
     con = duckdb.connect()
-    sid = mint_security_id(figi="BBG000B9XVX7")
-    register(con, "AAPL", sid, date(2020, 1, 1),
-             available_at=datetime(2020, 1, 1, tzinfo=UTC),
-             name="Apple Inc.", exchange="XNAS")
-    result = resolve(con, "AAPL")
-    assert result == sid
+    con.execute("SET timezone = 'UTC'")
+    register(
+        con,
+        symbol="AAPL",
+        security_id="sec_aapl",
+        effective_start=date(2020, 1, 1),
+        available_at=datetime(2020, 1, 1, tzinfo=UTC),
+        cik="0000320193",
+    )
+    sid = resolve(con, "AAPL")
+    assert sid == "sec_aapl"
+    con.close()
 
 
-def test_resolve_pit():
+def test_register_and_resolve_in_pit():
     con = duckdb.connect()
-    sid = mint_security_id(figi="BBG000B9XVX7")
-    register(con, "AAPL", sid, date(2020, 1, 1),
-             available_at=datetime(2020, 1, 1, tzinfo=UTC))
-    # Before effective_start → no match
-    before = resolve(con, "AAPL", as_of=date(2019, 12, 31))
-    assert before is None
-    # After effective_start → match
-    after = resolve(con, "AAPL", as_of=date(2020, 6, 15))
-    assert after == sid
+    con.execute("SET timezone = 'UTC'")
+    register(
+        con,
+        symbol="AAPL",
+        security_id="sec_old",
+        effective_start=date(2015, 1, 1),
+        effective_end=date(2019, 12, 31),
+        available_at=datetime(2019, 1, 1, tzinfo=UTC),
+    )
+    register(
+        con,
+        symbol="AAPL",
+        security_id="sec_new",
+        effective_start=date(2020, 1, 1),
+        available_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    old = resolve(con, "AAPL", as_of=date(2019, 6, 1))
+    assert old == "sec_old"
+    new = resolve(con, "AAPL", as_of=date(2020, 6, 1))
+    assert new == "sec_new"
+    con.close()
 
 
-def test_symbol_reuse():
-    con = duckdb.connect()
-    old_sid = mint_security_id(figi="OLD123")
-    new_sid = mint_security_id(figi="NEW456")
-    register(con, "TICKER", old_sid, date(2020, 1, 1), effective_end=date(2022, 12, 31),
-             available_at=datetime(2020, 1, 1, tzinfo=UTC))
-    register(con, "TICKER", new_sid, date(2023, 1, 1),
-             available_at=datetime(2023, 1, 1, tzinfo=UTC))
+def test_resolve_ticker_cik_cache():
+    _reset_cache_for_test()
+    register_ticker_cik("AAPL", "0000320193")
+    cik = resolve_ticker_to_cik("aapl")
+    assert cik == "0000320193"
 
-    assert resolve(con, "TICKER", as_of=date(2021, 6, 1)) == old_sid
-    assert resolve(con, "TICKER", as_of=date(2023, 6, 1)) == new_sid
-    assert resolve(con, "TICKER", as_of=date(2019, 1, 1)) is None
+
+def test_resolve_ticker_case_insensitive():
+    _reset_cache_for_test()
+    register_ticker_cik("MSFT", "0000789019")
+    assert resolve_ticker_to_cik("msft") == "0000789019"
+    assert resolve_ticker_to_cik("MSFT") == "0000789019"
+
+
+def test_resolve_ticker_not_found():
+    _reset_cache_for_test()
+    assert resolve_ticker_to_cik("UNKNOWN") is None

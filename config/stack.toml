@@ -263,6 +263,9 @@ parser_version = 1
 [source_datasets.finnhub.analyst_estimates]
 enabled = false
 parser_version = 1
+[source_datasets.finnhub.insider_tx]
+enabled = false
+parser_version = 1
 
 [source_datasets.marketaux]
 [source_datasets.marketaux.news]
@@ -357,5 +360,6 @@ max_staleness_days = 2
 [precedence]
 analyst_estimates = ["finnhub", "fmp"]
 bars_daily = ["eodhd", "tiingo"]
+insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
 sentiment = ["marketaux", "finnhub", "stocktwits"]

@@ -12,6 +12,27 @@ from alpha_lake.connectors.base import (
 from alpha_lake.source_registry import get_source
 
 
+async def fetch_insider_sentiment(symbol: str) -> RawFetch:
+    cfg = get_source("finnhub")
+    check_budget(cfg)
+    params: dict[str, Any] = {
+        "token": cfg.api_key,
+        "symbol": symbol,
+    }
+    async with build_client(cfg) as client:
+        endpoint = "/api/v1/stock/insider-sentiment"
+        response = await fetch_with_retry(client, endpoint, params=params)
+        manifest = build_manifest(
+            "finnhub",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
+        return RawFetch(manifest=manifest, body=response.content)
+
+
 async def fetch_recommendation_trends(symbol: str) -> RawFetch:
     cfg = get_source("finnhub")
     check_budget(cfg)

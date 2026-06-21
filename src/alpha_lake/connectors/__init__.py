@@ -12,6 +12,9 @@ from alpha_lake.connectors.eodhd_earnings import fetch_earnings_calendar as _eod
 from alpha_lake.connectors.eodhd_fundamentals import fetch_fundamentals as _eodhd_fundamentals
 from alpha_lake.connectors.eodhd_news import fetch_news as _eodhd_news
 from alpha_lake.connectors.finnhub import (
+    fetch_insider_sentiment as _finnhub_insider,
+)
+from alpha_lake.connectors.finnhub import (
     fetch_news as _finnhub_news,
 )
 from alpha_lake.connectors.finnhub import (
@@ -67,6 +70,7 @@ register("eodhd", "earnings_calendar", _eodhd_earnings)
 register("eodhd", "fundamentals", _eodhd_fundamentals)
 register("eodhd", "news", _eodhd_news)
 register("eodhd", "corp_actions", _eodhd_splits)
+register("finnhub", "insider_tx", _finnhub_insider)
 register("finnhub", "news", _finnhub_news)
 register("finnhub", "analyst_estimates", _finnhub_recs)
 register("fmp", "analyst_estimates", _fmp_ratings)
