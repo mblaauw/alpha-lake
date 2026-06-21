@@ -12,6 +12,27 @@ from alpha_lake.connectors.base import (
 from alpha_lake.source_registry import get_source
 
 
+async def fetch_analyst_ratings(symbol: str) -> RawFetch:
+    cfg = get_source("fmp")
+    check_budget(cfg)
+    params: dict[str, Any] = {
+        "apikey": cfg.api_key,
+        "symbol": symbol,
+    }
+    async with build_client(cfg) as client:
+        endpoint = "/v3/analyst-stock-recommendations"
+        response = await fetch_with_retry(client, endpoint, params=params)
+        manifest = build_manifest(
+            "fmp",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
+        return RawFetch(manifest=manifest, body=response.content)
+
+
 async def fetch_economic_calendar(
     from_date: str = "",
     to_date: str = "",

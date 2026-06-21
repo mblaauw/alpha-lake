@@ -9,6 +9,7 @@ import patito as pt
 import polars as pl
 
 from alpha_lake.interop import generate_ddl, polars_to_duckdb
+from alpha_lake.models.analyst_estimate_fact import AnalystEstimateFact
 from alpha_lake.models.bar_fact import BarFact
 from alpha_lake.models.corp_action_fact import CorpActionFact
 from alpha_lake.models.dataset_models import (
@@ -37,6 +38,7 @@ class Dataset:
     natural_keys: tuple[str, ...]
 
 
+_ANALYST_KEYS = ("security_id", "effective_date", "source_id")
 _BARS_KEYS = ("security_id", "effective_date", "source_id")
 _CORP_KEYS = ("security_id", "action_type", "effective_date", "source_id")
 _FUND_KEYS = ("security_id", "fiscal_period", "statement_type", "line_item", "source_id")
@@ -58,6 +60,7 @@ _RS_KEYS = ("security_id", "effective_date", "window")
 _BREADTH_KEYS = ("metric_id", "effective_date")
 
 DATASETS: dict[str, Dataset] = {
+    "analyst_estimates": Dataset("analyst_estimates", AnalystEstimateFact, _ANALYST_KEYS),
     "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
     "corp_actions": Dataset("corp_actions", CorpActionFact, _CORP_KEYS),
     "fundamentals": Dataset("fundamentals", FundamentalFact, _FUND_KEYS),

@@ -254,6 +254,9 @@ parser_version = 1
 [source_datasets.finnhub.sentiment]
 enabled = false
 parser_version = 1
+[source_datasets.finnhub.analyst_estimates]
+enabled = false
+parser_version = 1
 
 [source_datasets.marketaux]
 [source_datasets.marketaux.news]
@@ -265,6 +268,9 @@ parser_version = 1
 
 [source_datasets.fmp]
 [source_datasets.fmp.economic_calendar]
+enabled = false
+parser_version = 1
+[source_datasets.fmp.analyst_estimates]
 enabled = false
 parser_version = 1
 
@@ -282,6 +288,15 @@ parser_version = 1
 [source_datasets.fred.macro_series]
 enabled = false
 parser_version = 1
+
+[datasets.analyst_estimates]
+tier = "experimental"
+supported = false
+sla = false
+description = "Analyst recommendation tallies and price targets; neutral counts only."
+
+[quality.analyst_estimates]
+max_staleness_days = 14
 
 [datasets.economic_calendar]
 tier = "experimental"
@@ -320,6 +335,7 @@ description = "Cross-sectional participation: % above MA across basket/sectors a
 max_staleness_days = 2
 
 [precedence]
+analyst_estimates = ["finnhub", "fmp"]
 bars_daily = ["eodhd", "tiingo"]
 news = ["finnhub", "marketaux", "tiingo"]
 sentiment = ["marketaux", "finnhub", "stocktwits"]

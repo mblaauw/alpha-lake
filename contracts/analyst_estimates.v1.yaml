@@ -1,0 +1,51 @@
+dataset: analyst_estimates
+version: 1
+description: Analyst recommendation tallies and price targets; neutral counts only.
+
+primary_key:
+  - security_id
+  - effective_date
+  - source_id
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - security_id
+  - effective_date
+  - available_at
+  - source_id
+  - strong_buy
+  - buy
+  - hold
+  - sell
+  - strong_sell
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - target_mean
+  - target_high
+  - target_low
+
+freshness_sla:
+  calendar: exchange
+  rule: within_14_days
+
+quality_status:
+  allowed: [valid, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Recommendation tallies only — no aggregated buy/sell verdicts stored."
+  - "Multi-source precedence: finnhub > fmp."
