@@ -57,5 +57,5 @@ def test_weekend_start():
         result = shift_trading_days(date(2026, 1, 3), 0, "XNYS")
         # The result depends on calendar behavior — just ensure it exists
         assert result is not None
-    except ValueError, KeyError:
+    except (ValueError, KeyError):
         pytest.skip("Calendar does not handle weekend input for n=0")
