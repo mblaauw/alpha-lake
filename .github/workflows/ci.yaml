@@ -17,8 +17,8 @@ jobs:
   lint-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - run: uv sync --extra dev
@@ -29,8 +29,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - run: uv sync --extra dev
@@ -39,8 +39,8 @@ jobs:
   stack-integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - run: uv sync --extra dev
@@ -52,22 +52,13 @@ jobs:
         run: docker compose up -d postgres rustfs
 
       - name: Wait for services
-        run: |
-          for i in $(seq 1 30); do
-            if docker compose exec postgres pg_isready -U lake -d lake_catalog >/dev/null 2>&1 \
-               && curl -sf http://localhost:9001/minio/health/live >/dev/null 2>&1; then
-              echo "Services healthy"
-              break
-            fi
-            echo "Waiting... ($i)"
-            sleep 2
-          done
+        run: docker compose wait postgres rustfs
 
       - name: Bootstrap catalog
         run: docker compose run --rm app bootstrap
 
       - name: Ingest synthetic data
-        run: docker compose run --rm app ingest
+        run: docker compose run --rm app ingest --security-id sec_test
 
       - name: Run mode-parity tests against stack
         run: uv run pytest tests/integration/test_mode_parity.py -v
