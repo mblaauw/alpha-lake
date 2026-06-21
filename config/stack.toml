@@ -215,6 +215,12 @@ parser_version = 1
 enabled = false
 parser_version = 1
 
+[sources.finnhub]
+base_url = "https://finnhub.io/api/v1"
+rate_limit_per_sec = 1.0
+rate_limit_per_min = 55
+max_retries = 3
+
 [sources.fmp]
 base_url = "https://financialmodelingprep.com/api/v3"
 rate_limit_per_sec = 5.0
@@ -228,6 +234,16 @@ requires_key = false
 rate_limit_per_sec = 5.0
 rate_limit_per_day = 120000
 max_retries = 3
+
+[source_datasets.finnhub]
+[source_datasets.finnhub.news]
+enabled = false
+parser_version = 1
+
+[source_datasets.marketaux]
+[source_datasets.marketaux.news]
+enabled = false
+parser_version = 1
 
 [source_datasets.fmp]
 [source_datasets.fmp.economic_calendar]
@@ -277,3 +293,4 @@ max_staleness_days = 2
 
 [precedence]
 bars_daily = ["eodhd", "tiingo"]
+news = ["finnhub", "marketaux", "tiingo"]

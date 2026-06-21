@@ -1,0 +1,48 @@
+dataset: news_articles
+version: 1
+description: Dated, source-attributed news articles from configurable providers.
+
+primary_key:
+  - article_id
+  - source_id
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - article_id
+  - effective_date
+  - available_at
+  - source_id
+  - title
+  - url
+  - text_hash
+  - source_name
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - description
+  - published_at
+
+freshness_sla:
+  calendar: exchange
+  rule: within_1_day
+
+quality_status:
+  allowed: [valid, quarantined, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Multi-source precedence: Finnhub > Marketaux > Tiingo."
+  - "Article body is not stored; only headline, summary, publisher, url."
