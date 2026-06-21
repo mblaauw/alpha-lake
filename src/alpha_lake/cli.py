@@ -1,4 +1,3 @@
-import json
 import socket
 import sys
 
@@ -6,29 +5,32 @@ import typer
 
 from alpha_lake.catalog import bootstrap as bootstrap_catalog
 from alpha_lake.catalog import connect
+from alpha_lake.cli_ui import (
+    fail,
+    info,
+    ok,
+    panel,
+    progress,
+    set_mode,
+    spinner,
+    table,
+    warn,
+)
+from alpha_lake.cli_ui import (
+    install_traceback as install_rich_traceback,
+)
 from alpha_lake.config import get_config, load_config
 from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, reparse_bars
 
 app = typer.Typer(name="alpha-lake")
-_log_json: bool = False
-
-
-def _output(message: str, data: object = None) -> None:
-    if _log_json:
-        record = {"message": message}
-        if data is not None:
-            record["data"] = data
-        typer.echo(json.dumps(record))
-    else:
-        typer.echo(message)
 
 
 @app.callback()
 def _main(
     log_json: bool = typer.Option(False, "--log-json", help="Output structured JSON"),
 ):
-    global _log_json
-    _log_json = log_json
+    set_mode(log_json)
+    install_rich_traceback()
     load_config()
 
 
@@ -36,9 +38,9 @@ def _main(
 def bootstrap():
     """Initialize the catalog and storage."""
     cfg = get_config()
-    _output("Bootstrapping Alpha-Lake catalog...")
-    bootstrap_catalog(cfg)
-    _output("Catalog bootstrapped.")
+    with spinner("Bootstrapping catalog…"):
+        bootstrap_catalog(cfg)
+    panel("Bootstrap", "Catalog bootstrapped.", style="green")
 
 
 @app.command()
@@ -50,8 +52,16 @@ def ingest(
 ):
     """Ingest market data for a security."""
     con = connect(get_config())
-    count = ingest_bars(con, [security_id], from_date, to_date, source)
-    _output(f"Ingested {count} bars.", data={"count": count})
+    ids = [security_id]
+    with progress() as p:
+        tid = p.add_task("Ingesting…", total=1)
+
+        def _on_step(cur: int, total: int | None, label: str) -> None:
+            p.update(tid, completed=cur, total=total, description=label)
+
+        count = ingest_bars(con, ids, from_date, to_date, source, on_step=_on_step)
+        p.update(tid, completed=1)
+    panel("Ingest", f"Ingested [bold]{count}[/] bars for [bold]{security_id}[/].", style="green")
     con.close()
 
 
@@ -65,15 +75,26 @@ def backfill(
     """Backfill bars for a date range."""
     from datetime import date
 
+    from alpha_lake.calendar_ import trading_days_in_range
+
     con = connect(get_config())
-    count = backfill_bars(
-        con,
-        [security_id],
-        date.fromisoformat(start),
-        date.fromisoformat(end),
-        source,
+    ids = [security_id]
+    sd = date.fromisoformat(start)
+    ed = date.fromisoformat(end)
+    est_total = max(1, len(list(trading_days_in_range(sd, ed))))
+    with progress() as p:
+        tid = p.add_task(f"Backfilling {security_id}…", total=est_total)
+
+        def _on_step(cur: int, total: int | None, label: str) -> None:
+            p.update(tid, completed=cur, total=total or est_total, description=label)
+
+        count = backfill_bars(con, ids, sd, ed, source, on_step=_on_step)
+        p.update(tid, completed=est_total)
+    panel(
+        "Backfill",
+        f"Backfilled [bold]{count}[/] bars for [bold]{security_id}[/].",
+        style="green",
     )
-    _output(f"Backfilled {count} bars.", data={"count": count})
     con.close()
 
 
@@ -86,9 +107,23 @@ def reparse(
     from datetime import date
 
     con = connect(get_config())
+    ids = [security_id]
     ed = date.fromisoformat(effective_date) if effective_date else None
-    count = reparse_bars(con, [security_id], ed)
-    _output(f"Reparsed {count} rows.", data={"count": count})
+    with progress() as p:
+        tid = p.add_task(f"Reparsing {security_id}…", total=None)
+
+        def _on_step(cur: int, total: int | None, label: str) -> None:
+            if total is not None:
+                p.update(tid, total=total)
+            p.update(tid, completed=cur, description=label)
+
+        count = reparse_bars(con, ids, ed, on_step=_on_step)
+        p.update(tid, completed=count or 0, total=count or 0)
+    panel(
+        "Reparse",
+        f"Reparsed [bold]{count}[/] rows for [bold]{security_id}[/].",
+        style="green",
+    )
     con.close()
 
 
@@ -96,15 +131,16 @@ def reparse(
 def compact(table: str = typer.Option(..., help="Table to compact")):
     """Compact a canonical table by removing duplicate versions."""
     con = connect(get_config())
-    count = compact_dataset(con, table)
-    _output(f"Compacted {table}: {count} rows remaining.", data={"table": table, "rows": count})
+    with spinner(f"Compacting {table}…"):
+        count = compact_dataset(con, table)
+    ok(f"Compacted [bold]{table}[/]: [bold]{count}[/] rows remaining.")
     con.close()
 
 
 @app.command()
 def validate():
     """Validate dataset integrity and freshness (not yet implemented)."""
-    _output("validate: not yet implemented — use `just test` for validation checks.")
+    warn("validate: not yet implemented — use [bold]just test[/] for validation checks.")
 
 
 @app.command()
@@ -114,7 +150,7 @@ def gap_fill(
     end: str = typer.Option(..., help="End date (YYYY-MM-DD)"),
 ):
     """Gap-fill missing dates for a security (not yet implemented)."""
-    _output(f"gap-fill: not yet implemented for {security_id} {start}–{end}.")
+    warn(f"gap-fill: not yet implemented for [bold]{security_id}[/] {start}–{end}.")
 
 
 @app.command()
@@ -122,13 +158,13 @@ def rebuild(
     table: str = typer.Option(..., help="Table to rebuild"),
 ):
     """Rebuild a canonical table from raw archives (not yet implemented)."""
-    _output(f"rebuild: not yet implemented for {table}.")
+    warn(f"rebuild: not yet implemented for [bold]{table}[/].")
 
 
 @app.command()
 def replay():
     """Run golden replay against frozen fixtures."""
-    _output("replay: use `just replay` to run golden replay via pytest.")
+    info("replay: use [bold]just replay[/] to run golden replay via pytest.")
 
 
 @app.command()
@@ -136,42 +172,49 @@ def health():
     """Check dataset freshness and system health."""
     cfg = get_config()
     checks: dict = {"runtime": cfg.lake.runtime, "datasets": {}}
+    info(f"Runtime: [bold]{cfg.lake.runtime}[/]")
+
     if cfg.lake.runtime == "stack":
-        checks["postgres"] = _check_postgres(return_bool=True)
-        checks["rustfs"] = _check_rustfs(return_bool=True)
+        pg_ok = _check_postgres(return_bool=True)
+        rs_ok = _check_rustfs(return_bool=True)
+        checks["postgres"] = pg_ok
+        checks["rustfs"] = rs_ok
     else:
         checks["runtime_check"] = "embedded"
-    _output(f"Runtime: {cfg.lake.runtime}", data={"runtime": cfg.lake.runtime})
-    _output(f"Datasets configured: {len(cfg.quality)}", data={"dataset_count": len(cfg.quality)})
+
+    rows = []
     for name, qc in cfg.quality.items():
-        info = {"max_staleness_days": qc.max_staleness_days}
-        _output(f"  {name}: max_staleness={qc.max_staleness_days}d", data={name: info})
-        checks["datasets"][name] = info
+        rows.append([name, str(qc.max_staleness_days) + "d", "", ""])
+        checks["datasets"][name] = {"max_staleness_days": qc.max_staleness_days}
+    table("Datasets", ["Dataset", "Max Staleness"], rows)
 
-    if _log_json:
-        try:
-            con = connect(cfg)
-            from alpha_lake.catalog import catalog_health, list_datasets
+    from alpha_lake.catalog import catalog_health, list_datasets
 
-            hlth = catalog_health(con)
-            checks["catalog"] = hlth
-            ds_list = []
-            for ds in list_datasets(con):
-                ds_list.append(ds)
-            checks["datasets_list"] = ds_list
-            con.close()
-        except Exception:
-            pass
-        typer.echo(json.dumps({"event": "health", "data": checks}))
+    try:
+        con = connect(cfg)
+        hlth = catalog_health(con)
+        checks["catalog"] = hlth
+        s = hlth["snapshots"]
+        s_id = hlth["latest_snapshot_id"]
+        info(f"Snapshots: [bold]{s}[/], latest: [bold]{s_id}[/]")
+        ds_rows = []
+        for ds in list_datasets(con):
+            ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
+            checks.setdefault("datasets_list", []).append(ds)
+        if ds_rows:
+            table("Catalog Tables", ["Dataset", "Schema", "Rows"], ds_rows)
+        con.close()
+    except Exception:
+        pass
 
 
 def _check_postgres(return_bool: bool = False) -> bool:
     try:
         with socket.create_connection(("postgres", 5432), timeout=5.0):
-            _output("postgres: ok")
+            ok("postgres: ok")
             return True
     except Exception as e:
-        _output(f"postgres: unreachable — {e}")
+        fail(f"postgres: unreachable — {e}")
         if not return_bool:
             sys.exit(1)
         return False
@@ -182,10 +225,10 @@ def _check_rustfs(return_bool: bool = False) -> bool:
     port = 9000
     try:
         with socket.create_connection((host, port), timeout=5.0):
-            _output(f"{host}: ok")
+            ok(f"{host}: ok")
             return True
     except Exception as e:
-        _output(f"{host}: unreachable — {e}")
+        fail(f"{host}: unreachable — {e}")
         if not return_bool:
             sys.exit(1)
         return False
@@ -199,21 +242,23 @@ def catalog(
     from alpha_lake.catalog import catalog_health, list_datasets, list_snapshots
 
     con = connect(get_config())
-    health = catalog_health(con)
-    _output(
-        f"Snapshots: {health['snapshots']}, latest: {health['latest_snapshot_id']}",
-        data={"snapshots": health},
-    )
+    hlth = catalog_health(con)
+    info(f"Snapshots: [bold]{hlth['snapshots']}[/], latest: [bold]{hlth['latest_snapshot_id']}[/]")
+
+    ds_rows = []
     for ds in list_datasets(con):
-        _output(
-            f"  {ds['dataset']}: v{ds['schema_version']}, {ds['rows']} rows", data={"dataset": ds}
-        )
+        ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
+    if ds_rows:
+        table("Datasets", ["Dataset", "Schema", "Rows"], ds_rows)
+
     if verbose:
+        snap_rows = []
         for snap in list_snapshots(con):
-            _output(
-                f"  #{snap['snapshot_id']} at {snap['timestamp']}: {snap['changes']}",
-                data={"snapshot": snap},
+            snap_rows.append(
+                [f"#{snap['snapshot_id']}", str(snap["timestamp"]), str(snap["changes"])]
             )
+        if snap_rows:
+            table("Snapshots", ["Snapshot", "Timestamp", "Changes"], snap_rows)
     con.close()
 
 
@@ -222,7 +267,9 @@ def freeze_fixtures():
     """Freeze test fixtures for golden replay."""
     from alpha_lake.fixtures import freeze as _freeze
 
-    _freeze()
+    with spinner("Freezing fixtures…"):
+        _freeze()
+    ok("Fixtures frozen.")
 
 
 def main():

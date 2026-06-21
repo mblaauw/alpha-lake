@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
+from typing import Any
 
 import duckdb
 
@@ -12,6 +14,14 @@ from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
 from alpha_lake.source_registry import get_primary_source
+
+StepCallback = Callable[[int, int | None, str], None]
+"""``fn(current, total, label)`` called after each processing step.
+
+*current* is the 0‑based index of the completed step, *total* is the
+expected count (or *None* when the total is unknown), and *label* is a
+human‑readable description of the step just completed.
+"""
 
 
 def _missing_dates(
@@ -156,6 +166,7 @@ def ingest_bars(
     from_date: str = "",
     to_date: str = "",
     source_id: str | None = None,
+    on_step: StepCallback | None = None,
 ) -> int:
     """Run the full bars ingestion pipeline.
 
@@ -177,12 +188,15 @@ def ingest_bars(
     clock_now = get_clock().now()
     run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
     total = 0
+    n = len(security_ids)
 
     if connector and creds:
 
         async def _run_all():
             t = 0
-            for sid in security_ids:
+            for i, sid in enumerate(security_ids):
+                if on_step:
+                    on_step(i, n, sid)
                 missing = _missing_dates(con, "lake_bars", sid, from_date, to_date)
                 if not missing:
                     continue
@@ -200,11 +214,16 @@ def ingest_bars(
 
         total = asyncio.run(_run_all())
     else:
-        for sid in security_ids:
+        for i, sid in enumerate(security_ids):
+            if on_step:
+                on_step(i, n, sid)
             missing = _missing_dates(con, "lake_bars", sid, from_date, to_date)
             if not missing:
                 continue
             total += _ingest_synthetic(con, sid, src, missing[0], missing[-1], run_id, clock_now)
+
+    if on_step:
+        on_step(n, n, f"done — {total} bars")
 
     return total
 
@@ -215,6 +234,7 @@ def backfill_bars(
     start_date: date,
     end_date: date,
     source_id: str | None = None,
+    on_step: StepCallback | None = None,
 ) -> int:
     """Backfill bars for a date range.
 
@@ -224,8 +244,13 @@ def backfill_bars(
 
     total = 0
     days = trading_days_in_range(start_date, end_date)
+    n = len(security_ids) * len(days)
+    step = 0
     for sid in security_ids:
         for dt in days:
+            if on_step:
+                on_step(step, n, f"{sid} {dt}")
+            step += 1
             _r = con.execute(
                 "SELECT COUNT(*) FROM lake_bars WHERE security_id = ? AND effective_date = ?",
                 [sid, dt],
@@ -233,6 +258,9 @@ def backfill_bars(
             existing = _r[0] if _r else 0
             if existing == 0:
                 total += ingest_bars(con, [sid], dt.isoformat(), dt.isoformat(), source_id)
+    if on_step:
+        on_step(n, n, f"done — {total} bars")
+
     return total
 
 
@@ -240,6 +268,7 @@ def reparse_bars(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],
     effective_date: date | None = None,
+    on_step: StepCallback | None = None,
 ) -> int:
     """Reparse raw archive data and rewrite canonical rows.
 
@@ -256,6 +285,7 @@ def reparse_bars(
 
     reparse_ts = get_clock().now()
     total = 0
+    all_rows: list[tuple[str, str, str, str, str, Any, Any]] = []
     for sid in security_ids:
         if effective_date:
             rows = con.execute(
@@ -270,17 +300,26 @@ def reparse_bars(
                 "available_at, ingested_at FROM lake_bars WHERE security_id = ?",
                 [sid],
             ).fetchall()
-        for row in rows:
-            content_hash, src_id, fetch_id, run_id, avail_at, ingested_at = row
-            raw = read_raw(content_hash)
-            raw_data = json.loads(raw.decode())
-            if isinstance(raw_data, dict):
-                raw_data = [raw_data]
-            df = bars_from_json(
-                raw_data, sid, src_id, fetch_id, run_id, content_hash, reparse_ts, ingested_at
-            )
-            df = check_market_sanity(df)
-            total += write_bars(con, df)
+        all_rows.extend((sid, *r) for r in rows)
+
+    n = len(all_rows)
+    for i, (sid, content_hash, src_id, fetch_id, run_id, _avail_at, ingested_at) in enumerate(
+        all_rows
+    ):
+        if on_step:
+            on_step(i, n, f"{sid} #{content_hash[:8]}")
+        raw = read_raw(content_hash)
+        raw_data = json.loads(raw.decode())
+        if isinstance(raw_data, dict):
+            raw_data = [raw_data]
+        df = bars_from_json(
+            raw_data, sid, src_id, fetch_id, run_id, content_hash, reparse_ts, ingested_at
+        )
+        df = check_market_sanity(df)
+        total += write_bars(con, df)
+    if on_step:
+        on_step(n, n, f"done — {total} rows")
+
     return total
 
 
