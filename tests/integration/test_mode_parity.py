@@ -14,7 +14,7 @@ from alpha_lake.canonical import write_bars
 from alpha_lake.catalog import bootstrap as _bootstrap_catalog
 from alpha_lake.catalog import connect
 from alpha_lake.config import LakeConfig, RootConfig, S3Config
-from alpha_lake.config import _config as _global_config
+from alpha_lake.config import _config as _global_config  # noqa: F401
 from alpha_lake.raw import archive, read_raw
 from alpha_lake.serving import read_bars_asof
 
@@ -38,7 +38,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services and "rustfs" in services
-    except subprocess.SubprocessError, FileNotFoundError, OSError:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
 
 
