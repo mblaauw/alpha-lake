@@ -71,5 +71,5 @@ def test_macd():
     s = pl.Series([10.0, 11.0, 12.0, 13.0, 14.0, 15.0])
     m = macd(s)
     assert "macd" in m
-    assert "signal_line" in m
+    assert "macd_ema" in m
     assert "histogram" in m

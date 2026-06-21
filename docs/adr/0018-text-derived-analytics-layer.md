@@ -1,6 +1,6 @@
 # ADR-0018: Derived news & social analytics layer (neutral, PIT-bounded, versioned)
 
-**Status:** Accepted
+**Status:** Accepted; product posture refined by ADR-0025
 
 **Context:**
 
@@ -64,5 +64,6 @@ principles as the technical indicator library (ADR-0017):
 - DESIGN.md §15
 - ADR-0009: Fact store + transform library, never a feature store
 - ADR-0017: Derived technical indicator library (neutral, PIT-bounded, cacheable)
+- ADR-0025: Dataset support tiers and experimental text sources
 
 **Date:** 2026-06-19

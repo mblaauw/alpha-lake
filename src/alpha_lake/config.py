@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tomllib
+from typing import Literal
 
 import pydantic
 
@@ -19,6 +20,13 @@ class SourceDatasetConfig(pydantic.BaseModel):
     enabled: bool = True
     parser_version: int = 1
     endpoint_override: str | None = None
+
+
+class DatasetPostureConfig(pydantic.BaseModel):
+    tier: Literal["core", "convenience", "experimental"] = "core"
+    supported: bool = True
+    sla: bool = False
+    description: str = ""
 
 
 class S3Config(pydantic.BaseModel):
@@ -45,6 +53,8 @@ class QualityConfig(pydantic.BaseModel):
 class ReconciliationConfig(pydantic.BaseModel):
     price_diff_pct: float = 1.0
     volume_diff_pct: float = 5.0
+    numeric_diff_pct: float = 1.0
+    strict_event_match: bool = False
     cross_source_enabled: bool = False
 
 
@@ -61,6 +71,7 @@ class RootConfig(pydantic.BaseModel):
     s3: S3Config = S3Config()
     quality: dict[str, QualityConfig] = {}
     reconcile: dict[str, ReconciliationConfig] = {}
+    datasets: dict[str, DatasetPostureConfig] = {}
     sources: dict[str, SourceConfig] = {}
     source_datasets: dict[str, dict[str, SourceDatasetConfig]] = {}
     precedence: dict[str, list[str]] = {}

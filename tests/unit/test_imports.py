@@ -26,9 +26,46 @@ def test_source_registry():
     from alpha_lake.config import load_config
 
     load_config("config/stack.toml")
-    from alpha_lake.source_registry import get_source_precedence
+    from alpha_lake.source_registry import (
+        get_dataset_posture,
+        get_dataset_sources,
+        get_source_precedence,
+    )
 
     assert get_source_precedence("bars_daily") == ["eodhd", "tiingo"]
+    assert get_dataset_posture("news_articles").tier == "experimental"
+    assert get_dataset_posture("news_articles").supported is False
+    assert "tiingo" not in get_dataset_sources("news_articles")
+    assert "reddit" not in get_dataset_sources("social_posts")
+
+
+def test_experimental_source_opt_in(tmp_path):
+    cfg_path = tmp_path / "opt_in.toml"
+    cfg_path.write_text(
+        """
+[lake]
+runtime = "embedded"
+catalog = "ducklake:sqlite:data/lake/lake.catalog"
+canonical_data_path = "data/lake/"
+raw_archive_uri = "data/lake/"
+calendar_version = "4.13.2"
+
+[datasets.news_articles]
+tier = "experimental"
+supported = false
+sla = false
+
+[source_datasets.tiingo.news_articles]
+enabled = true
+parser_version = 1
+""",
+        encoding="utf-8",
+    )
+    from alpha_lake.config import load_config
+    from alpha_lake.source_registry import get_dataset_sources
+
+    load_config(str(cfg_path))
+    assert "tiingo" in get_dataset_sources("news_articles")
 
 
 def test_config_reconcile():
