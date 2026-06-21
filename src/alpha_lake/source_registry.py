@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from alpha_lake.config import SourceConfig, SourceDatasetConfig, get_config
+from alpha_lake.config import DatasetPostureConfig, SourceConfig, SourceDatasetConfig, get_config
 
 
 def get_source(source_id: str) -> SourceConfig:
@@ -20,6 +20,15 @@ def get_dataset_sources(dataset: str) -> dict[str, SourceDatasetConfig]:
             if dc.enabled:
                 result[source_id] = dc
     return result
+
+
+def get_dataset_posture(dataset: str) -> DatasetPostureConfig:
+    cfg = get_config()
+    return cfg.datasets.get(dataset, DatasetPostureConfig())
+
+
+def is_experimental_dataset(dataset: str) -> bool:
+    return get_dataset_posture(dataset).tier == "experimental"
 
 
 def get_primary_source(dataset: str) -> str | None:

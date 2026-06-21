@@ -25,10 +25,11 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Accepted |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Accepted |
 | 0017 | Derived technical indicator library (neutral, PIT-bounded, cacheable) | Accepted |
-| 0018 | Derived news & social analytics layer (neutral, PIT-bounded, versioned) | Accepted |
+| 0018 | Derived news & social analytics layer (neutral, PIT-bounded, versioned) | Refined by 0025 |
 | 0019 | Polars + Patito for DataFrame processing and model validation | Accepted |
 | 0020 | Trading calendar and timezone policy | Accepted |
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
 | 0022 | Blob store — unified raw archive interface | Accepted |
 | 0023 | Dataset descriptor for unified canonical write | Accepted |
 | 0024 | Serving architecture — versioned SQL kernel, REST transport, API key auth | Accepted |
+| 0025 | Dataset support tiers and experimental text sources | Accepted |

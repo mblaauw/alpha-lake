@@ -41,10 +41,96 @@ max_staleness_days = 1
 [quality.security_master]
 max_staleness_days = 7
 
+[datasets.lake_bars]
+tier = "core"
+supported = true
+sla = true
+description = "PIT daily bars; intraday is planned core expansion."
+
+[datasets.adjusted_bars]
+tier = "core"
+supported = true
+sla = true
+description = "Read-time, PIT-bounded adjusted OHLCV series; never materialized."
+
+[datasets.corp_actions]
+tier = "core"
+supported = true
+sla = true
+description = "Corporate actions used for PIT-bounded adjustments and source reconciliation."
+
+[datasets.fundamentals]
+tier = "core"
+supported = true
+sla = true
+description = "Point-in-time fundamentals; as-reported correctness is the priority."
+
+[datasets.earnings_calendar]
+tier = "core"
+supported = true
+sla = true
+description = "Known-future earnings events exposed only when already knowable."
+
+[datasets.insider_tx]
+tier = "core"
+supported = true
+sla = true
+description = "SEC insider transaction facts."
+
+[datasets.security_master]
+tier = "core"
+supported = true
+sla = true
+description = "PIT security identity resolution and issuer mapping."
+
+[datasets.technical_indicators]
+tier = "convenience"
+supported = true
+sla = false
+description = "Neutral indicator library; correctness and warm-up contract over breadth."
+
+[datasets.news_articles]
+tier = "experimental"
+supported = false
+sla = false
+description = "Dormant text archive schema; disabled by default pending licensed reliable sources."
+
+[datasets.social_posts]
+tier = "experimental"
+supported = false
+sla = false
+description = "Dormant social text schema; disabled by default pending licensed reliable sources."
+
+[datasets.entity_mentions]
+tier = "experimental"
+supported = false
+sla = false
+description = "Text-derived analytics schema retained for opt-in future work; no supported implementation."
+
+[datasets.sentiment_annotations]
+tier = "experimental"
+supported = false
+sla = false
+description = "Text-derived analytics schema retained for opt-in future work; no supported implementation."
+
+[datasets.attention_metrics]
+tier = "experimental"
+supported = false
+sla = false
+description = "Text-derived analytics schema retained for opt-in future work; no supported implementation."
+
 [reconcile.bars]
 price_diff_pct = 0.5
 volume_diff_pct = 5.0
 cross_source_enabled = false
+
+[reconcile.fundamentals]
+numeric_diff_pct = 1.0
+cross_source_enabled = true
+
+[reconcile.corp_actions]
+strict_event_match = true
+cross_source_enabled = true
 
 [sources.eodhd]
 base_url = "https://eodhd.com/api"
@@ -91,7 +177,7 @@ enabled = true
 parser_version = 1
 
 [source_datasets.tiingo.news_articles]
-enabled = true
+enabled = false
 parser_version = 1
 
 
@@ -121,7 +207,7 @@ parser_version = 1
 
 [source_datasets.reddit]
 [source_datasets.reddit.social_posts]
-enabled = true
+enabled = false
 parser_version = 1
 
 [source_datasets.alpaca]
