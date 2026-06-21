@@ -52,7 +52,16 @@ jobs:
         run: docker compose up -d postgres rustfs
 
       - name: Wait for services
-        run: docker compose wait postgres rustfs
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec postgres pg_isready -U lake -d lake_catalog >/dev/null 2>&1 \
+               && docker compose exec rustfs pgrep rustfs >/dev/null 2>&1; then
+              echo "Services healthy"
+              break
+            fi
+            echo "Waiting... ($i)"
+            sleep 2
+          done
 
       - name: Bootstrap catalog
         run: docker compose run --rm app bootstrap
