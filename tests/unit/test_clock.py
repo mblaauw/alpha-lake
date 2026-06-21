@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alpha_lake.clock import FixedClock, SystemClock, get_clock, set_clock
 
@@ -12,7 +12,7 @@ def test_system_clock_returns_utc():
 
 
 def test_fixed_clock_returns_fixed_time():
-    fixed = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    fixed = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
     clock = FixedClock(fixed)
     assert clock.now() == fixed
     assert clock.today() == fixed.date()

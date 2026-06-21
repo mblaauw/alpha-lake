@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
@@ -30,7 +30,8 @@ def test_reparse_bars():
     assert count == 1
 
     _r = con.execute(
-        "SELECT COUNT(*), COUNT(DISTINCT available_at) FROM lake_bars WHERE security_id = 'sec_test'"
+        "SELECT COUNT(*), COUNT(DISTINCT available_at) "
+        "FROM lake_bars WHERE security_id = 'sec_test'"
     ).fetchone()
     assert _r[0] == 2, "reparse must create a second version"
     assert _r[1] == 2, "second version must have different available_at"
@@ -44,7 +45,7 @@ def test_compact_dataset():
         {
             "security_id": ["sec_t"],
             "effective_date": [date(2026, 1, 5)],
-            "available_at": [datetime(2026, 1, 5, 16, 0, tzinfo=timezone.utc)],
+            "available_at": [datetime(2026, 1, 5, 16, 0, tzinfo=UTC)],
             "source_id": ["eodhd"],
             "open": [100.0],
             "high": [101.0],
@@ -174,7 +175,7 @@ def test_ingest_bars_empty_security():
 def test_compact_dataset_dedup():
     load_config("config/embedded.toml")
     con = duckdb.connect()
-    avail_at = datetime(2026, 1, 5, 16, 0, tzinfo=timezone.utc)
+    avail_at = datetime(2026, 1, 5, 16, 0, tzinfo=UTC)
     df = pl.DataFrame(
         {
             "security_id": ["sec_t"] * 3,

@@ -4,7 +4,8 @@ import sys
 
 import typer
 
-from alpha_lake.catalog import bootstrap as bootstrap_catalog, connect
+from alpha_lake.catalog import bootstrap as bootstrap_catalog
+from alpha_lake.catalog import connect
 from alpha_lake.config import get_config, load_config
 from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, reparse_bars
 from alpha_lake.obs import setup_otel
@@ -66,8 +67,15 @@ def backfill(
 ):
     """Backfill bars for a date range."""
     from datetime import date
+
     con = connect(get_config())
-    count = backfill_bars(con, [security_id], date.fromisoformat(start), date.fromisoformat(end), source)
+    count = backfill_bars(
+        con,
+        [security_id],
+        date.fromisoformat(start),
+        date.fromisoformat(end),
+        source,
+    )
     _output(f"Backfilled {count} bars.", data={"count": count})
     con.close()
 
@@ -79,6 +87,7 @@ def reparse(
 ):
     """Reparse raw archive data for a security."""
     from datetime import date
+
     con = connect(get_config())
     ed = date.fromisoformat(effective_date) if effective_date else None
     count = reparse_bars(con, [security_id], ed)
@@ -146,6 +155,7 @@ def health():
         try:
             con = connect(cfg)
             from alpha_lake.catalog import catalog_health, list_datasets
+
             hlth = catalog_health(con)
             checks["catalog"] = hlth
             ds_list = []
@@ -190,17 +200,23 @@ def catalog(
 ):
     """List datasets and their status."""
     from alpha_lake.catalog import catalog_health, list_datasets, list_snapshots
+
     con = connect(get_config())
     health = catalog_health(con)
-    _output(f"Snapshots: {health['snapshots']}, latest: {health['latest_snapshot_id']}",
-            data={"snapshots": health})
+    _output(
+        f"Snapshots: {health['snapshots']}, latest: {health['latest_snapshot_id']}",
+        data={"snapshots": health},
+    )
     for ds in list_datasets(con):
-        _output(f"  {ds['dataset']}: v{ds['schema_version']}, {ds['rows']} rows",
-                data={"dataset": ds})
+        _output(
+            f"  {ds['dataset']}: v{ds['schema_version']}, {ds['rows']} rows", data={"dataset": ds}
+        )
     if verbose:
         for snap in list_snapshots(con):
-            _output(f"  #{snap['snapshot_id']} at {snap['timestamp']}: {snap['changes']}",
-                    data={"snapshot": snap})
+            _output(
+                f"  #{snap['snapshot_id']} at {snap['timestamp']}: {snap['changes']}",
+                data={"snapshot": snap},
+            )
     con.close()
 
 
@@ -208,6 +224,7 @@ def catalog(
 def freeze_fixtures():
     """Freeze test fixtures for golden replay."""
     from alpha_lake.fixtures import freeze as _freeze
+
     _freeze()
 
 

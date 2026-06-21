@@ -19,18 +19,27 @@ from alpha_lake.models.dataset_models import (
 def _mk(table: str, **kw) -> pl.DataFrame:
     """Create a valid DataFrame for any dataset model."""
     models = {
-        "fundamentals": FundamentalFact, "insider_tx": InsiderTxFact,
-        "earnings_calendar": EarningsEventFact, "news_articles": NewsArticleFact,
-        "social_posts": SocialPostFact, "entity_mentions": EntityMentionFact,
+        "fundamentals": FundamentalFact,
+        "insider_tx": InsiderTxFact,
+        "earnings_calendar": EarningsEventFact,
+        "news_articles": NewsArticleFact,
+        "social_posts": SocialPostFact,
+        "entity_mentions": EntityMentionFact,
         "sentiment_annotations": SentimentAnnotationFact,
         "attention_metrics": AttentionMetricFact,
     }
     model = models[table]
     ts = datetime(2025, 6, 1, 16, 0, tzinfo=UTC)
     defaults = {
-        "available_at": ts, "source_fetch_id": "", "raw_payload_hash": "",
-        "ingestion_run_id": "", "content_hash": "", "version_hash": "",
-        "schema_version": 1, "parser_version": 1, "quality_status": "valid",
+        "available_at": ts,
+        "source_fetch_id": "",
+        "raw_payload_hash": "",
+        "ingestion_run_id": "",
+        "content_hash": "",
+        "version_hash": "",
+        "schema_version": 1,
+        "parser_version": 1,
+        "quality_status": "valid",
         "effective_date": date(2025, 1, 15),
     }
     data = {}
@@ -61,25 +70,99 @@ def test_write_datasets():
     con.execute("LOAD sqlite")
 
     cases = [
-        ("fundamentals", dict(security_id="sec_t", source_id="sec",
-            fiscal_period="2024Q4", statement_type="BS", line_item="Assets", value=1e6)),
-        ("insider_tx", dict(security_id="sec_t", source_id="sec",
-            filer_cik="0001", issuer_cik="0002", transaction_code="P", shares=1000.0, price=50.0, value=50000.0)),
-        ("earnings_calendar", dict(security_id="sec_t", source_id="eodhd", report_date=date(2025, 1, 15))),
-        ("news_articles", dict(article_id="a1", source_id="tiingo", title="Test", url="https://ex.com",
-            text_hash="abc", source_name="TS")),
-        ("social_posts", dict(post_id_hash="p1", source_id="reddit", platform="reddit", venue="r/t", text_hash="abc")),
-            ("entity_mentions", dict(mention_id="m1", source_id="tiingo",
-                text_item_id="a1", text_item_type="news_article", security_id="sec_t",
-                entity_name="Apple", entity_type="ORG", confidence=0.9, match_method="exact")),
-            ("sentiment_annotations", dict(annotation_id="ann1", source_id="llm",
-                text_item_id="a1", text_item_type="news_article",
-                sentiment_score=0.5, sentiment_label="positive",
-                model_version="v1", prompt_version="v1", taxonomy_version="v1",
-                input_text_hash="abc", source_dataset_version="1")),
-            ("attention_metrics", dict(security_id="sec_t", source_id="lake",
-            window_start=date(2025, 1, 1), window_end=date(2025, 1, 3), window_type="3d",
-            article_count=5, mention_count=10, unique_source_count=3, unique_author_count=2)),
+        (
+            "fundamentals",
+            dict(
+                security_id="sec_t",
+                source_id="sec",
+                fiscal_period="2024Q4",
+                statement_type="BS",
+                line_item="Assets",
+                value=1e6,
+            ),
+        ),
+        (
+            "insider_tx",
+            dict(
+                security_id="sec_t",
+                source_id="sec",
+                filer_cik="0001",
+                issuer_cik="0002",
+                transaction_code="P",
+                shares=1000.0,
+                price=50.0,
+                value=50000.0,
+            ),
+        ),
+        (
+            "earnings_calendar",
+            dict(security_id="sec_t", source_id="eodhd", report_date=date(2025, 1, 15)),
+        ),
+        (
+            "news_articles",
+            dict(
+                article_id="a1",
+                source_id="tiingo",
+                title="Test",
+                url="https://ex.com",
+                text_hash="abc",
+                source_name="TS",
+            ),
+        ),
+        (
+            "social_posts",
+            dict(
+                post_id_hash="p1",
+                source_id="reddit",
+                platform="reddit",
+                venue="r/t",
+                text_hash="abc",
+            ),
+        ),
+        (
+            "entity_mentions",
+            dict(
+                mention_id="m1",
+                source_id="tiingo",
+                text_item_id="a1",
+                text_item_type="news_article",
+                security_id="sec_t",
+                entity_name="Apple",
+                entity_type="ORG",
+                confidence=0.9,
+                match_method="exact",
+            ),
+        ),
+        (
+            "sentiment_annotations",
+            dict(
+                annotation_id="ann1",
+                source_id="llm",
+                text_item_id="a1",
+                text_item_type="news_article",
+                sentiment_score=0.5,
+                sentiment_label="positive",
+                model_version="v1",
+                prompt_version="v1",
+                taxonomy_version="v1",
+                input_text_hash="abc",
+                source_dataset_version="1",
+            ),
+        ),
+        (
+            "attention_metrics",
+            dict(
+                security_id="sec_t",
+                source_id="lake",
+                window_start=date(2025, 1, 1),
+                window_end=date(2025, 1, 3),
+                window_type="3d",
+                article_count=5,
+                mention_count=10,
+                unique_source_count=3,
+                unique_author_count=2,
+            ),
+        ),
     ]
 
     for table, kw in cases:

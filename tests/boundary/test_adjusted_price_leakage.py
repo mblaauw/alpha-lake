@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
@@ -42,12 +42,12 @@ def test_raw_price_unaffected_by_future_adjustment(con):
     split = splits_from_json(
         [{"date": "2026-01-01", "splitRatio": "2:1"}],
         "sec_lk", "eodhd_splits", "f1", "r1", "c1",
-        datetime(2026, 1, 10, 8, 0, tzinfo=timezone.utc),
+        datetime(2026, 1, 10, 8, 0, tzinfo=UTC),
     )
     write_corp_actions(con, split)
 
     result = read_bars_adjusted(con, ["sec_lk"],
-        datetime(2026, 1, 8, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+        datetime(2026, 1, 8, 12, 0, tzinfo=UTC), price_mode="split_adjusted")
     assert result["close"][0] == 100.0, "split not yet knowable"
 
 
@@ -57,12 +57,12 @@ def test_adjustment_applied_when_knowable(con):
     split = splits_from_json(
         [{"date": "2026-01-01", "splitRatio": "2:1"}],
         "sec_lk", "eodhd_splits", "f1", "r1", "c1",
-        datetime(2026, 1, 8, 8, 0, tzinfo=timezone.utc),
+        datetime(2026, 1, 8, 8, 0, tzinfo=UTC),
     )
     write_corp_actions(con, split)
 
     result = read_bars_adjusted(con, ["sec_lk"],
-        datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+        datetime(2026, 1, 10, 12, 0, tzinfo=UTC), price_mode="split_adjusted")
     assert result["close"][0] == 50.0, "split should be applied"
 
 
@@ -72,18 +72,18 @@ def test_multiple_adjustment_sources_respect_visibility(con):
 
     s1 = splits_from_json([{"date": "2026-01-01", "splitRatio": "2:1"}],
         "sec_lk", "eodhd_splits", "f1", "r1", "c1",
-        datetime(2026, 1, 8, 8, 0, tzinfo=timezone.utc))
+        datetime(2026, 1, 8, 8, 0, tzinfo=UTC))
     write_corp_actions(con, s1)
 
     s2 = splits_from_json([{"date": "2026-01-15", "splitRatio": "3:1"}],
         "sec_lk", "eodhd_splits", "f2", "r1", "c2",
-        datetime(2026, 1, 20, 8, 0, tzinfo=timezone.utc))
+        datetime(2026, 1, 20, 8, 0, tzinfo=UTC))
     write_corp_actions(con, s2)
 
     early = read_bars_adjusted(con, ["sec_lk"],
-        datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+        datetime(2026, 1, 10, 12, 0, tzinfo=UTC), price_mode="split_adjusted")
     assert early["close"][0] == 50.0, "only first split visible"
 
     late = read_bars_adjusted(con, ["sec_lk"],
-        datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc), price_mode="split_adjusted")
+        datetime(2026, 2, 1, 12, 0, tzinfo=UTC), price_mode="split_adjusted")
     assert late["close"][0] == pytest.approx(100.0 / 6.0, rel=1e-3), "both splits visible"

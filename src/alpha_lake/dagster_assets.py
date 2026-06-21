@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import dagster as dg
 
 from alpha_lake.config import load_config
@@ -15,6 +14,7 @@ def bars_daily(context: dg.AssetExecutionContext) -> int:
     """Daily bars asset — ingest bars from the primary source."""
     load_config()
     import duckdb
+
     con = duckdb.connect()
     count = ingest_bars(con, ["sec_test"], context.partition_key or "")
     con.close()
@@ -31,6 +31,7 @@ def bars_compacted(context: dg.AssetExecutionContext) -> int:
     """Compacted bars — removes duplicate versions."""
     load_config()
     import duckdb
+
     con = duckdb.connect()
     count = compact_dataset(con, "lake_bars")
     con.close()
@@ -43,11 +44,13 @@ def bars_compacted(context: dg.AssetExecutionContext) -> int:
     compute_kind="alpha-lake",
     deps=[bars_daily],
 )
-def bars_patito_check(context: dg.AssetExecutionContext) -> dg.AssetCheckResult:
+def bars_patito_check(_context: dg.AssetExecutionContext) -> dg.AssetCheckResult:
     """Asset check: Patito validation on bars."""
     from alpha_lake.models.bar_fact import BarFact
+
     load_config()
     import duckdb
+
     con = duckdb.connect()
     df = con.execute("SELECT * FROM lake_bars LIMIT 100").fetchdf()
     try:

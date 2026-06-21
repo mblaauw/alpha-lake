@@ -2,7 +2,14 @@ import polars as pl
 import pytest
 
 from alpha_lake.derived.indicators import (
-    atr, bollinger_bands, ema, macd, obv, rsi, sma, vwap,
+    atr,
+    bollinger_bands,
+    ema,
+    macd,
+    obv,
+    rsi,
+    sma,
+    vwap,
 )
 
 
@@ -37,9 +44,9 @@ def test_bollinger_bands():
 
 def test_atr():
     h = pl.Series([11.0, 12.0, 13.0])
-    l = pl.Series([9.0, 8.0, 7.0])
+    lo = pl.Series([9.0, 8.0, 7.0])
     c = pl.Series([10.0, 11.0, 12.0])
-    t = atr(h, l, c)
+    t = atr(h, lo, c)
     assert len(t) == 3
 
 
@@ -53,10 +60,10 @@ def test_obv():
 
 def test_vwap():
     h = pl.Series([11.0, 12.0])
-    l = pl.Series([9.0, 8.0])
+    lo = pl.Series([9.0, 8.0])
     c = pl.Series([10.0, 11.0])
     v = pl.Series([1000, 2000])
-    w = vwap(h, l, c, v)
+    w = vwap(h, lo, c, v)
     assert w[1] > w[0]
 
 

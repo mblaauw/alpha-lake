@@ -39,8 +39,12 @@ _BARS_KEYS = ("security_id", "effective_date", "source_id")
 _CORP_KEYS = ("security_id", "action_type", "effective_date", "source_id")
 _FUND_KEYS = ("security_id", "fiscal_period", "statement_type", "line_item", "source_id")
 _INSIDER_KEYS = (
-    "security_id", "filer_cik", "issuer_cik",
-    "transaction_code", "effective_date", "source_id",
+    "security_id",
+    "filer_cik",
+    "issuer_cik",
+    "transaction_code",
+    "effective_date",
+    "source_id",
 )
 _EARN_KEYS = ("security_id", "report_date", "source_id")
 _ATTR_KEYS = ("security_id", "window_start", "window_end", "window_type")
@@ -140,7 +144,9 @@ def _generate_ddl(model_class: type[pt.Model], table_name: str) -> str:
 
 
 def compute_version_hash(df: pl.DataFrame) -> pl.DataFrame:
-    float_cols = [c for c in df.columns if c != "version_hash" and df[c].dtype in (pl.Float32, pl.Float64)]
+    float_cols = [
+        c for c in df.columns if c != "version_hash" and df[c].dtype in (pl.Float32, pl.Float64)
+    ]
     hash_input = df.with_columns(pl.col(float_cols).round(10))
     hash_input = hash_input.select([c for c in hash_input.columns if c != "version_hash"])
     hash_expr = pl.struct(hash_input.columns).map_elements(

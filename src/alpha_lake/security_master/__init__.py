@@ -43,7 +43,7 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
             ORDER BY available_at DESC
             LIMIT 1
             """,
-            [symbol, as_of, as_of]
+            [symbol, as_of, as_of],
         ).fetchall()
     else:
         rows = con.execute(
@@ -53,7 +53,7 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
             ORDER BY available_at DESC
             LIMIT 1
             """,
-            [symbol]
+            [symbol],
         ).fetchall()
     return rows[0][0] if rows else None
 
@@ -91,8 +91,9 @@ def register(
     con.execute(
         """
         INSERT INTO security_master
-            (security_id, symbol, name, exchange, figi, cik, effective_start, effective_end, available_at)
+            (security_id, symbol, name, exchange, figi, cik,
+             effective_start, effective_end, available_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [security_id, symbol, name, exchange, figi, cik, effective_start, effective_end, ts]
+        [security_id, symbol, name, exchange, figi, cik, effective_start, effective_end, ts],
     )

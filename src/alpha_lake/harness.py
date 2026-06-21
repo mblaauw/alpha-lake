@@ -7,7 +7,6 @@ from pathlib import Path
 import duckdb
 
 
-
 class EmbeddedHarness:
     """SQLite/local-fs embedded harness for tests and replay.
 

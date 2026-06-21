@@ -259,8 +259,9 @@ def reparse_bars(
     for sid in security_ids:
         if effective_date:
             rows = con.execute(
-                "SELECT content_hash, source_id, source_fetch_id, ingestion_run_id, "
-                "available_at, ingested_at FROM lake_bars WHERE security_id = ? AND effective_date = ?",
+                "SELECT content_hash, source_id, source_fetch_id, "
+                "ingestion_run_id, available_at, ingested_at "
+                "FROM lake_bars WHERE security_id = ? AND effective_date = ?",
                 [sid, effective_date],
             ).fetchall()
         else:

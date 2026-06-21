@@ -8,9 +8,21 @@ from alpha_lake.source_registry import get_source
 
 async def fetch_news(symbol: str, from_date: str, to_date: str) -> RawFetch:
     cfg = get_source("eodhd")
-    params: dict[str, Any] = {"api_token": cfg.api_key, "s": symbol, "from": from_date, "to": to_date}
+    params: dict[str, Any] = {
+        "api_token": cfg.api_key,
+        "s": symbol,
+        "from": from_date,
+        "to": to_date,
+    }
     async with build_client(cfg) as client:
         endpoint = "/eod/news"
         response = await fetch_with_retry(client, endpoint, params=params)
-        manifest = build_manifest("eodhd", endpoint, params, response.content, response.status_code, 1)
+        manifest = build_manifest(
+            "eodhd",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
         return RawFetch(manifest=manifest, body=response.content)

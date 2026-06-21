@@ -1,9 +1,9 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
-
 import pytest
+
 from alpha_lake.canonical import write_bars
 from alpha_lake.derived import ema, returns, sma, typical_price
 from alpha_lake.serving import read_asof_join, read_bars_latest, read_panel
@@ -42,7 +42,7 @@ def test_read_panel():
     spine = pl.DataFrame({
         "security_id": ["sec_t"], "effective_date": [date(2026, 1, 10)],
     })
-    result = read_panel(con, spine, datetime(2026, 1, 15, tzinfo=timezone.utc))
+    result = read_panel(con, spine, datetime(2026, 1, 15, tzinfo=UTC))
     assert result.height == 1
     assert result["close"][0] == 100.0
     con.close()
@@ -55,7 +55,7 @@ def test_read_asof_join():
     spine = pl.DataFrame({
         "security_id": ["sec_t", "sec_t"],
         "effective_date": [date(2026, 1, 5), date(2026, 1, 10)],
-        "as_of": [datetime(2026, 1, 6, tzinfo=timezone.utc), datetime(2026, 1, 15, tzinfo=timezone.utc)],
+        "as_of": [datetime(2026, 1, 6, tzinfo=UTC), datetime(2026, 1, 15, tzinfo=UTC)],
     })
     result = read_asof_join(con, spine).sort("effective_date")
     assert result.height == 2

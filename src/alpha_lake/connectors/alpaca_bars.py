@@ -11,5 +11,12 @@ async def fetch_daily_bars(symbol: str, start: str, end: str) -> RawFetch:
     async with alpaca_client() as client:
         endpoint = "/v2/stocks/bars"
         response = await client.get(endpoint, params=params)
-        manifest = build_manifest("alpaca", endpoint, params, response.content, response.status_code, 1)
+        manifest = build_manifest(
+            "alpaca",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
         return RawFetch(manifest=manifest, body=response.content)

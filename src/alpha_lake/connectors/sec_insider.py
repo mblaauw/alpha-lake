@@ -21,5 +21,12 @@ async def fetch_insider_transactions(cik: str, from_date: str = "", to_date: str
     async with build_client(cfg) as client:
         endpoint = "/cgi-bin/browse-edgar"
         response = await fetch_with_retry(client, endpoint, params=params)
-        manifest = build_manifest("sec", endpoint, params, response.content, response.status_code, 1)
+        manifest = build_manifest(
+            "sec",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
         return RawFetch(manifest=manifest, body=response.content)

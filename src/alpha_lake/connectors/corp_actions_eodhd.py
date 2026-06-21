@@ -12,7 +12,14 @@ async def fetch_splits(symbol: str) -> RawFetch:
     async with build_client(cfg) as client:
         endpoint = f"/splits/{symbol}.US"
         response = await fetch_with_retry(client, endpoint, params=params)
-        manifest = build_manifest("eodhd", endpoint, params, response.content, response.status_code, 1)
+        manifest = build_manifest(
+            "eodhd",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
         return RawFetch(manifest=manifest, body=response.content)
 
 
@@ -22,5 +29,12 @@ async def fetch_dividends(symbol: str, from_date: str, to_date: str) -> RawFetch
     async with build_client(cfg) as client:
         endpoint = f"/div/{symbol}.US"
         response = await fetch_with_retry(client, endpoint, params=params)
-        manifest = build_manifest("eodhd", endpoint, params, response.content, response.status_code, 1)
+        manifest = build_manifest(
+            "eodhd",
+            endpoint,
+            params,
+            response.content,
+            response.status_code,
+            1,
+        )
         return RawFetch(manifest=manifest, body=response.content)

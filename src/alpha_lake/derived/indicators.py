@@ -26,7 +26,11 @@ def rsi(series: pl.Series, window: int = 14) -> pl.Series:
     return 100 - (100 / (1 + rs))
 
 
-def bollinger_bands(series: pl.Series, window: int = 20, num_std: float = 2.0) -> dict[str, pl.Series]:
+def bollinger_bands(
+    series: pl.Series,
+    window: int = 20,
+    num_std: float = 2.0,
+) -> dict[str, pl.Series]:
     """Bollinger Bands: middle (SMA), upper, lower."""
     middle = sma(series, window)
     std = series.rolling_std(window_size=window)
@@ -39,11 +43,17 @@ def bollinger_bands(series: pl.Series, window: int = 20, num_std: float = 2.0) -
 
 def atr(high: pl.Series, low: pl.Series, close: pl.Series, window: int = 14) -> pl.Series:
     """Average True Range."""
-    tr = pl.DataFrame({
-        "h_l": high - low,
-        "h_c": (high - close.shift(1)).abs(),
-        "l_c": (low - close.shift(1)).abs(),
-    }).select(pl.max_horizontal("h_l", "h_c", "l_c")).to_series()
+    tr = (
+        pl.DataFrame(
+            {
+                "h_l": high - low,
+                "h_c": (high - close.shift(1)).abs(),
+                "l_c": (low - close.shift(1)).abs(),
+            }
+        )
+        .select(pl.max_horizontal("h_l", "h_c", "l_c"))
+        .to_series()
+    )
     return tr.rolling_mean(window_size=window)
 
 
@@ -64,7 +74,9 @@ def vwap(high: pl.Series, low: pl.Series, close: pl.Series, volume: pl.Series) -
     return cum_pv / cum_v
 
 
-def macd(series: pl.Series, fast: int = 12, slow: int = 26, signal_period: int = 9) -> dict[str, pl.Series]:
+def macd(
+    series: pl.Series, fast: int = 12, slow: int = 26, signal_period: int = 9
+) -> dict[str, pl.Series]:
     """MACD line, signal line, histogram."""
     ema_fast = ema(series, fast)
     ema_slow = ema(series, slow)

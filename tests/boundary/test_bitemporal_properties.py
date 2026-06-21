@@ -10,18 +10,30 @@ from alpha_lake.serving import read_bars_asof
 
 
 def _row(security_id: str, effective: date, avail: datetime, close: float) -> pl.DataFrame:
-    return pl.DataFrame({
-        "security_id": [security_id],
-        "effective_date": [effective],
-        "available_at": [avail],
-        "source_id": ["eodhd"],
-        "open": [close * 0.99], "high": [close * 1.01], "low": [close * 0.98],
-        "close": [close], "volume": [100000],
-        "source_fetch_id": [""], "raw_payload_hash": [""],
-        "ingestion_run_id": [""], "content_hash": [""], "version_hash": [""],
-        "schema_version": [1], "parser_version": [1], "quality_status": ["valid"],
-        "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
-    }).with_columns(
+    return pl.DataFrame(
+        {
+            "security_id": [security_id],
+            "effective_date": [effective],
+            "available_at": [avail],
+            "source_id": ["eodhd"],
+            "open": [close * 0.99],
+            "high": [close * 1.01],
+            "low": [close * 0.98],
+            "close": [close],
+            "volume": [100000],
+            "source_fetch_id": [""],
+            "raw_payload_hash": [""],
+            "ingestion_run_id": [""],
+            "content_hash": [""],
+            "version_hash": [""],
+            "schema_version": [1],
+            "parser_version": [1],
+            "quality_status": ["valid"],
+            "source_published_at": [None],
+            "ingested_at": [None],
+            "validated_at": [None],
+        }
+    ).with_columns(
         pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
@@ -31,7 +43,10 @@ def _row(security_id: str, effective: date, avail: datetime, close: float) -> pl
 _ids = st.text(min_size=1, max_size=10).filter(lambda s: s.isascii())
 
 
-@given(security_id=_ids, effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 5, 31)))
+@given(
+    security_id=_ids,
+    effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 5, 31)),
+)
 @settings(deadline=None)
 def test_never_leak(security_id: str, effective: date):
     """Every returned row must have available_at <= as_of (invariant I5)."""
@@ -40,11 +55,16 @@ def test_never_leak(security_id: str, effective: date):
     write_bars(con, _row(security_id, effective, datetime(2025, 6, 1, 16, 0, tzinfo=UTC), 100.0))
     result = read_bars_asof(con, [security_id], as_of)
     for row in result.iter_rows(named=True):
-        assert row["available_at"] <= as_of, f"Leak: available_at={row['available_at']} > as_of={as_of}"
+        assert row["available_at"] <= as_of, (
+            f"Leak: available_at={row['available_at']} > as_of={as_of}"
+        )
     con.close()
 
 
-@given(security_id=_ids, effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 5, 31)))
+@given(
+    security_id=_ids,
+    effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 5, 31)),
+)
 @settings(deadline=None)
 def test_restatement_immutable(security_id: str, effective: date):
     """A later restatement must not change what an earlier as_of sees."""
@@ -65,7 +85,9 @@ def test_restatement_immutable(security_id: str, effective: date):
     con.close()
 
 
-@given(security_id=_ids, effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 6, 14)))
+@given(
+    security_id=_ids, effective=st.dates(min_value=date(2020, 1, 1), max_value=date(2025, 6, 14))
+)
 @settings(deadline=None)
 def test_backfill_visibility(security_id: str, effective: date):
     """A backfill must be invisible to as_of before its available_at."""

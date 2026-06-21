@@ -1,4 +1,4 @@
-from alpha_lake.config import LakeConfig, RootConfig, load_config, SourceConfig
+from alpha_lake.config import LakeConfig, RootConfig, SourceConfig, load_config
 
 
 def test_load_config_embedded():
