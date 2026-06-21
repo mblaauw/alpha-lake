@@ -1,0 +1,45 @@
+dataset: relative_strength
+version: 1
+description: Per-symbol return vs configured benchmark and cross-sectional RS percentile.
+
+primary_key:
+  - security_id
+  - effective_date
+  - window
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - security_id
+  - effective_date
+  - available_at
+  - window
+  - rs_return
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - rs_percentile
+
+freshness_sla:
+  calendar: exchange
+  rule: within_2_days
+
+quality_status:
+  allowed: [valid, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Cross-sectional percentile is computed over the configured universe."
+  - "Warm-up windows produce null rs_return."

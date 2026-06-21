@@ -257,5 +257,14 @@ description = "Point-in-time macro series; FRED revisions preserved as knowledge
 [quality.macro_series]
 max_staleness_days = 45
 
+[datasets.relative_strength]
+tier = "experimental"
+supported = false
+sla = false
+description = "Per-symbol return vs configured benchmark and cross-sectional RS percentile."
+
+[quality.relative_strength]
+max_staleness_days = 2
+
 [precedence]
 bars_daily = ["eodhd", "tiingo"]

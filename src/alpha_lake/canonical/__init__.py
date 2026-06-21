@@ -23,6 +23,7 @@ from alpha_lake.models.dataset_models import (
 )
 from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
 from alpha_lake.models.macro_fact import MacroSeriesFact
+from alpha_lake.models.relative_strength_fact import RelativeStrengthFact
 from alpha_lake.models.technical_fact import TechnicalIndicatorFact
 
 NORMALIZATION_VERSION: int = 1
@@ -52,6 +53,7 @@ _SENT_KEYS = ("annotation_id",)
 _MACRO_KEYS = ("series_id", "effective_date", "source_id")
 _ECON_CAL_KEYS = ("event_id", "effective_date", "source_id")
 _TECH_KEYS = ("security_id", "effective_date", "source_id")
+_RS_KEYS = ("security_id", "effective_date", "window")
 
 DATASETS: dict[str, Dataset] = {
     "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
@@ -67,6 +69,7 @@ DATASETS: dict[str, Dataset] = {
     "macro_series": Dataset("macro_series", MacroSeriesFact, _MACRO_KEYS),
     "economic_calendar": Dataset("economic_calendar", EconomicCalendarFact, _ECON_CAL_KEYS),
     "technical_indicators": Dataset("technical_indicators", TechnicalIndicatorFact, _TECH_KEYS),
+    "relative_strength": Dataset("relative_strength", RelativeStrengthFact, _RS_KEYS),
 }
 
 
