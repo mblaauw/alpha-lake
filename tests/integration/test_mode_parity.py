@@ -10,11 +10,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+import alpha_lake.config as _alpha_lake_config
 from alpha_lake.canonical import write_bars
 from alpha_lake.catalog import bootstrap as _bootstrap_catalog
 from alpha_lake.catalog import connect
 from alpha_lake.config import LakeConfig, RootConfig, S3Config
-from alpha_lake.config import _config as _global_config  # noqa: F401
 from alpha_lake.raw import archive, read_raw
 from alpha_lake.serving import read_bars_asof
 
@@ -78,8 +78,7 @@ def test_mode_parity_storage():
     raw_data = b'{"test":"parity payload"}'
 
     # Set global config for archive()/read_raw() which use get_config()
-    global _global_config
-    _global_config = RootConfig(
+    _alpha_lake_config._config = RootConfig(
         lake=LakeConfig(
             runtime="stack",
             catalog=(
