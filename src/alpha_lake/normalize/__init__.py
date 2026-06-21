@@ -45,6 +45,45 @@ def macro_series_from_json(
     )
 
 
+def economic_calendar_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        event_date = record.get("date") or record.get("eventDate") or ""
+        event_name = record.get("event") or record.get("eventName") or ""
+        if not event_date or not event_name:
+            continue
+        rows.append(
+            {
+                "event_id": f"{source_id}_{event_name}_{event_date}",
+                "effective_date": event_date,
+                "available_at": available_at,
+                "source_id": source_id,
+                "country": record.get("country", "US"),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
 def bars_from_json(
     raw: list[dict[str, Any]],
     security_id: str,

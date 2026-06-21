@@ -215,6 +215,12 @@ parser_version = 1
 enabled = false
 parser_version = 1
 
+[sources.fmp]
+base_url = "https://financialmodelingprep.com/api/v3"
+rate_limit_per_sec = 5.0
+rate_limit_per_day = 250
+max_retries = 3
+
 [sources.fred]
 base_url = "https://api.stlouisfed.org/fred"
 fallback_base_url = "https://fred.stlouisfed.org/graph"
@@ -223,10 +229,24 @@ rate_limit_per_sec = 5.0
 rate_limit_per_day = 120000
 max_retries = 3
 
+[source_datasets.fmp]
+[source_datasets.fmp.economic_calendar]
+enabled = false
+parser_version = 1
+
 [source_datasets.fred]
 [source_datasets.fred.macro_series]
 enabled = false
 parser_version = 1
+
+[datasets.economic_calendar]
+tier = "experimental"
+supported = false
+sla = false
+description = "Known-future macro events (FOMC/CPI/NFP/GDP/PCE) exposed only when knowable."
+
+[quality.economic_calendar]
+max_staleness_days = 7
 
 [datasets.macro_series]
 tier = "experimental"

@@ -21,6 +21,7 @@ from alpha_lake.models.dataset_models import (
     SentimentAnnotationFact,
     SocialPostFact,
 )
+from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
 from alpha_lake.models.macro_fact import MacroSeriesFact
 
 NORMALIZATION_VERSION: int = 1
@@ -48,6 +49,7 @@ _EARN_KEYS = ("security_id", "report_date", "source_id")
 _ATTR_KEYS = ("security_id", "window_start", "window_end", "window_type")
 _SENT_KEYS = ("annotation_id",)
 _MACRO_KEYS = ("series_id", "effective_date", "source_id")
+_ECON_CAL_KEYS = ("event_id", "effective_date", "source_id")
 
 DATASETS: dict[str, Dataset] = {
     "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
@@ -61,6 +63,7 @@ DATASETS: dict[str, Dataset] = {
     "sentiment_annotations": Dataset("sentiment_annotations", SentimentAnnotationFact, _SENT_KEYS),
     "attention_metrics": Dataset("attention_metrics", AttentionMetricFact, _ATTR_KEYS),
     "macro_series": Dataset("macro_series", MacroSeriesFact, _MACRO_KEYS),
+    "economic_calendar": Dataset("economic_calendar", EconomicCalendarFact, _ECON_CAL_KEYS),
 }
 
 
