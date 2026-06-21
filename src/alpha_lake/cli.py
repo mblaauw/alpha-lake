@@ -1,3 +1,4 @@
+import os
 import socket
 import sys
 
@@ -237,31 +238,43 @@ def _require_infra(cfg: RootConfig) -> None:
     pg_ok = _check_postgres(return_bool=True)
     rs_ok = _check_rustfs(return_bool=True)
     if not pg_ok or not rs_ok:
-        warn("Stack unreachable — run [bold]just up[/] to start it.")
+        warn(
+            "Stack unreachable — run [bold]just up[/] to start it,"
+            " or set [bold]AL_CI_PGHOST=localhost[/]"
+            " [bold]AL_CI_RUSTFS_HOST=localhost[/] when running from the host."
+        )
         sys.exit(1)
 
 
 def _check_postgres(return_bool: bool = False) -> bool:
+    host = os.environ.get("AL_CI_PGHOST", "postgres")
+    port = int(os.environ.get("AL_CI_PGPORT", "5432"))
+    label = f"postgres ({host}:{port})"
     try:
-        with socket.create_connection(("postgres", 5432), timeout=5.0):
-            ok("postgres: ok")
+        with socket.create_connection((host, port), timeout=5.0):
+            ok(f"{label}: ok")
             return True
     except Exception as e:
-        fail(f"postgres: unreachable — {e}")
+        fail(f"{label}: unreachable — {e}")
+        if "nodename" in str(e).lower():
+            info("Tip: set [bold]AL_CI_PGHOST=localhost[/] to check from the host.")
         if not return_bool:
             sys.exit(1)
         return False
 
 
 def _check_rustfs(return_bool: bool = False) -> bool:
-    host = "rustfs"
-    port = 9000
+    host = os.environ.get("AL_CI_RUSTFS_HOST", "rustfs")
+    port = int(os.environ.get("AL_CI_RUSTFS_PORT", "9000"))
+    label = f"rustfs ({host}:{port})"
     try:
         with socket.create_connection((host, port), timeout=5.0):
-            ok(f"{host}: ok")
+            ok(f"{label}: ok")
             return True
     except Exception as e:
-        fail(f"{host}: unreachable — {e}")
+        fail(f"{label}: unreachable — {e}")
+        if "nodename" in str(e).lower():
+            info("Tip: set [bold]AL_CI_RUSTFS_HOST=localhost[/] to check from the host.")
         if not return_bool:
             sys.exit(1)
         return False
