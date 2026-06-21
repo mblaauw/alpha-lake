@@ -9,7 +9,7 @@ Tests must run quickly and hermetically without Docker or network access. The fu
 Build an embedded test harness that replaces:
 - PostgreSQL → SQLite (same schema, dialect-compatible DDL)
 - RustFS/S3 → Local filesystem
-- OTel collector → Console exporter
+- OTel collector → dormant no-op (OTel removed from default stack)
 
 The harness is a pytest fixture that sets up and tears down the environment per test session or per test.
 

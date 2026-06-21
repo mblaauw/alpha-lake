@@ -18,7 +18,7 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0008 | dlt for ingestion framework with idempotency | Superseded |
 | 0009 | Fact store + transform library, never a feature store | Refined by 0017 |
 | 0010 | Flow functions; Typer CLI first, Dagster optional later | Accepted |
-| 0011 | OpenTelemetry OTLP collector in stack, console in harness | Accepted |
+| 0011 | OpenTelemetry OTLP collector in stack, console in harness | Superseded |
 | 0012 | Stack-first Compose; all deps vendored in-repo | Accepted |
 | 0013 | Nix flake as hermetic reproducibility ceiling | Superseded |
 | 0014 | Source registry as data; precedence/freshness not hardcoded | Accepted |
@@ -34,3 +34,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0024 | Serving architecture — versioned SQL kernel, REST transport, API key auth | Accepted |
 | 0025 | Dataset support tiers and experimental text sources | Accepted |
 | 0026 | Idempotent ingestion — skip existing data before API calls | Accepted |
+| 0027 | Structured JSON logging replaces OpenTelemetry as default observability | Accepted |

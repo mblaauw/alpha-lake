@@ -66,6 +66,6 @@ uv run ty check --output-format full
 
 ## Forbidden
 
-- Do not install or require host Postgres, RustFS, DuckDB extensions, or OTel services.
+- Do not install or require host Postgres, RustFS, or DuckDB extensions.
 - Do not edit dependency lists by hand when `uv add` can do it.
 - Do not use `docker compose exec app` in new docs or recipes until the app lifecycle issue is fixed.

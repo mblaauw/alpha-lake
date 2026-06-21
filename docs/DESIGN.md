@@ -85,7 +85,7 @@ The domain core (`models/`) has no I/O. Adapters implement the serving contracts
 
 ## 3. Runtime model & self-containment
 
-Alpha-Lake is **stack-first**. The production-shaped runtime is the default from day one: Postgres catalog, S3-compatible object storage, DuckLake, OpenTelemetry, and optional Dagster. The goal is to exercise the real catalog/object-store boundary immediately, not after the data model is already built around a simplified local filesystem path.
+Alpha-Lake is **stack-first**. The production-shaped runtime is the default from day one: Postgres catalog, S3-compatible object storage, DuckLake, and optional Dagster. The goal is to exercise the real catalog/object-store boundary immediately, not after the data model is already built around a simplified local filesystem path.
 
 The lightweight embedded path still exists, but only as a **test/debug/golden-replay harness**. It is not a first-class runtime and should not drive architectural decisions.
 
@@ -96,7 +96,6 @@ flowchart TB
     J[just up] --> APP[alpha-lake app container]
     APP --> PG[(DuckLake catalog · Postgres)]
     APP --> S3[(Parquet data · RustFS/S3)]
-    APP --> OTEL[OTel collector]
     DAG[Dagster optional] --> APP
   end
   subgraph EMBED["embedded harness — tests / replay only"]
@@ -113,7 +112,7 @@ flowchart TB
 | Catalog | Postgres container | SQLite file |
 | Object store | RustFS S3-compatible container/binary | local filesystem |
 | Orchestration | Typer CLI in app container; Dagster optional | pytest / replay runner |
-| Observability | OTel → collector | OTel → console |
+| Observability | Structured JSON logs + catalog health | Structured JSON logs |
 | Command shape | `just up`, `just bootstrap`, `just ingest`, `just health` | `just test`, `just replay` |
 | Architectural status | **Primary path** | **Supporting harness only** |
 
@@ -568,9 +567,13 @@ flowchart LR
 
 **Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
-## 20. Observability — OpenTelemetry
+## 20. Observability — structured logs & catalog health
 
-One SDK for logs + metrics + traces; exporters: **OTLP → collector** in the reference stack and **console** in the embedded harness. The reference collector exports metrics to a queryable backend (Prometheus in the local stack; file exporter acceptable for offline harnesses) and may also keep debug output for development. Spans wrap each flow/asset. Metrics: `ingestion_runs, fetch_{ok,fail}`, `source_latency`, `rows_written`, `quarantine_count`, `reconciliation_count`, `freshness_lag`, `snapshot_count`, `replay_duration`. Health per dataset: `latest_effective_date`, `latest_available_at`, `freshness_status`, `row_count`, `quarantine_count`, `reconciliation_count`, `ingest_outcome_counts`, `source_status`, `blocking_reason`.
+Observability is lightweight and dependency-light:
+
+- **CLI output** uses structured JSON logs (`--log-json` flag) with a `{"event": "...", "data": {...}}` envelope. The `health` command reports catalog health, dataset freshness, and service reachability.
+- **No OpenTelemetry by default.** The `src/alpha_lake/obs.py` module is a dormant seam guarded by the `ALPHA_LAKE_OTEL_ENABLED` env var; it is not called at startup. OpenTelemetry dependencies live only in the optional `[otel]` extra and are not installed in the default app image.
+- **Future REST serving** will expose a plain `GET /metrics` FastAPI endpoint (Prometheus/OpenMetrics format) when the transport layer is productionised. This avoids the gRPC/collector dependency of the OTLP path.
 
 ## 21. Determinism & replay
 
@@ -655,7 +658,7 @@ flowchart TB
 
 - **Python:** `uv.lock` committed; `uv export` → `vendor/wheelhouse/` for offline `uv sync --offline` inside the app image or embedded harness.
 - **App container:** the Alpha-Lake CLI runs inside a pinned app image so developers do not install Postgres, RustFS, DuckDB extensions, or service dependencies on the host.
-- **Services:** `compose.yaml` pins **image digests** for Postgres, RustFS, the Alpha-Lake app, and optional Dagster/OTel collector. `just vendor` runs `docker save`/`podman save` into `vendor/images/` for air-gap transfer + load into an internal registry. RustFS may instead be the vendored static binary in `vendor/bin/`.
+- **Services:** `compose.yaml` pins **image digests** for Postgres, RustFS, and the Alpha-Lake app. `just vendor` runs `docker save`/`podman save` into `vendor/images/` for air-gap transfer + load into an internal registry. RustFS may instead be the vendored static binary in `vendor/bin/`.
 - **Developer convenience (devShell):** `flake.nix` provides a `nix develop` shell with Python 3.14 and uv pre-configured. It is a development convenience, not the reproducibility guarantee — the OCI image + uv.lock + vendored wheelhouse serve that role. Compose + uv remains the pragmatic default.
 
 **Air-gapped workflow:** `just vendor` (online) → copy `vendor/` → `just up --offline` (air-gapped). Nothing reaches the internet at run time.
@@ -674,14 +677,14 @@ alpha-lake/
 │   └── settings schema generated from Pydantic models
 ├── contracts/                                          # dataset contract YAML, e.g. bars.v1.yaml
 ├── vendor/{wheelhouse,images,bin}/                     # offline deps
-├── .stack/{rustfs,postgres,dagster,otel}/              # pinned service configs
+├── .stack/{rustfs,postgres,dagster}/                   # pinned service configs
 ├── src/alpha_lake/
 │   ├── models/                                         # pure core
 │   ├── connectors/ raw/ normalize/ quality/ canonical/ # ingest path
 │   ├── security_master/ corp_actions/ derived/         # facts
 │   ├── catalog/ storage/ serving/ replay/ fixtures/
 │   ├── flows/                                           # pipeline logic (truth)
-│   ├── obs.py  config.py  cli.py                        # OTel · settings · Typer
+│   ├── obs.py  config.py  cli.py                        # dormant OTel seam · settings · Typer
 │   └── assets.py                                        # Dagster (thin over flows)
 └── tests/{unit,integration,contract,replay,boundary}/
 ```
@@ -742,7 +745,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Dataframes + models + validation | Polars + Patito |
 | Transform | DuckDB SQL ▸ SQLMesh |
 | Orchestration | Typer CLI in app container first; Dagster optional over `flows/` |
-| Observability | OpenTelemetry (OTLP collector in stack; console in embedded harness) |
+| Observability | Structured JSON logs + catalog health (CLI); Prometheus (future REST) |
 | Remote serving | REST (FastAPI, optional `[server]` extra); Arrow Flight SQL / ADBC deferred for bulk |
 | Lint/format · types · tests · boundaries | ruff · ty · pytest · import-linter |
 | Raw archive blob store | `s3fs` (S3) / `pathlib.Path` (local) via BlobStore ABC |

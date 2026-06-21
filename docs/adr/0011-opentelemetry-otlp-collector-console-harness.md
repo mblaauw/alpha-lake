@@ -1,6 +1,6 @@
 # ADR-0011: OpenTelemetry OTLP collector in stack, console in harness
 
-**Status:** Accepted
+**Status:** Superseded by ADR-0027
 
 **Context:** Observability needs differ between production (persistent, queryable) and development/testing (fast feedback, no infrastructure).
 

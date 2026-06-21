@@ -33,11 +33,7 @@ server = [
     "uvicorn[standard]>=0.34",
 ]
 dev = [
-    "dlt>=1.0",
     "fastapi>=0.115",
-    "opentelemetry-api>=1.30",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.30",
-    "opentelemetry-sdk>=1.30",
     "ruff>=0.9",
     "ty>=0.0.49",
     "pytest>=8.0",

@@ -8,7 +8,6 @@ from alpha_lake.catalog import bootstrap as bootstrap_catalog
 from alpha_lake.catalog import connect
 from alpha_lake.config import get_config, load_config
 from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, reparse_bars
-from alpha_lake.obs import setup_otel
 
 app = typer.Typer(name="alpha-lake")
 _log_json: bool = False
@@ -30,9 +29,7 @@ def _main(
 ):
     global _log_json
     _log_json = log_json
-    cfg = load_config()
-    if cfg.lake.runtime == "stack":
-        setup_otel()
+    load_config()
 
 
 @app.command()

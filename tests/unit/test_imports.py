@@ -20,6 +20,7 @@ def test_obs_imports():
     from alpha_lake.obs import setup_otel
 
     assert setup_otel is not None
+    assert setup_otel() is None  # no-op without env var
 
 
 def test_source_registry():
