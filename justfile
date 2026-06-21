@@ -1,5 +1,7 @@
 # Alpha-Lake — just recipes
 
+set shell := ["bash", "-c"]
+
 # Start the reference stack
 up *flags:
     docker compose up -d postgres rustfs otel {{ flags }}
@@ -51,7 +53,7 @@ vendor:
     docker compose pull
     rm -rf vendor/images && mkdir -p vendor/images
     for img in postgres:17-alpine rustfs/rustfs:latest otel/opentelemetry-collector-contrib:0.123.0; do \
-      n=$$(echo "$$img" | tr '/:' '_'); \
+      n=$(echo "$$img" | tr '/:' '_'); \
       docker save "$$img" | gzip > "vendor/images/$$n.tar.gz"; \
     done
     docker build -t alpha-lake-app:latest . && \
