@@ -174,6 +174,12 @@ requires_key = false
 rate_limit_per_sec = 1.0
 max_retries = 3
 
+[sources.quiver]
+base_url = "https://api.quiverquant.com/beta"
+rate_limit_per_sec = 1.0
+rate_limit_per_day = 100
+max_retries = 3
+
 [source_datasets.eodhd]
 [source_datasets.eodhd.bars_daily]
 enabled = true
@@ -284,6 +290,11 @@ parser_version = 1
 enabled = false
 parser_version = 1
 
+[source_datasets.quiver]
+[source_datasets.quiver.congress_trades]
+enabled = false
+parser_version = 1
+
 [source_datasets.fred]
 [source_datasets.fred.macro_series]
 enabled = false
@@ -297,6 +308,15 @@ description = "Analyst recommendation tallies and price targets; neutral counts 
 
 [quality.analyst_estimates]
 max_staleness_days = 14
+
+[datasets.congress_trades]
+tier = "experimental"
+supported = false
+sla = false
+description = "Legislative trade disclosures; transaction-date vs disclosure-date kept distinct."
+
+[quality.congress_trades]
+max_staleness_days = 5
 
 [datasets.economic_calendar]
 tier = "experimental"

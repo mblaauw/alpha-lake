@@ -11,6 +11,7 @@ import polars as pl
 from alpha_lake.interop import generate_ddl, polars_to_duckdb
 from alpha_lake.models.analyst_estimate_fact import AnalystEstimateFact
 from alpha_lake.models.bar_fact import BarFact
+from alpha_lake.models.congress_trade_fact import CongressTradeFact
 from alpha_lake.models.corp_action_fact import CorpActionFact
 from alpha_lake.models.dataset_models import (
     EarningsEventFact,
@@ -40,6 +41,7 @@ class Dataset:
 
 _ANALYST_KEYS = ("security_id", "effective_date", "source_id")
 _BARS_KEYS = ("security_id", "effective_date", "source_id")
+_CONGRESS_KEYS = ("transaction_id",)
 _CORP_KEYS = ("security_id", "action_type", "effective_date", "source_id")
 _FUND_KEYS = ("security_id", "fiscal_period", "statement_type", "line_item", "source_id")
 _INSIDER_KEYS = (
@@ -61,6 +63,7 @@ _BREADTH_KEYS = ("metric_id", "effective_date")
 
 DATASETS: dict[str, Dataset] = {
     "analyst_estimates": Dataset("analyst_estimates", AnalystEstimateFact, _ANALYST_KEYS),
+    "congress_trades": Dataset("congress_trades", CongressTradeFact, _CONGRESS_KEYS),
     "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
     "corp_actions": Dataset("corp_actions", CorpActionFact, _CORP_KEYS),
     "fundamentals": Dataset("fundamentals", FundamentalFact, _FUND_KEYS),

@@ -1,0 +1,45 @@
+dataset: congress_trades
+version: 1
+description: Legislative trade disclosures with distinct transaction and disclosure dates.
+
+primary_key:
+  - transaction_id
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - transaction_id
+  - politician_id
+  - security_id
+  - effective_date
+  - available_at
+  - source_id
+  - direction
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields:
+  - amount_range
+
+freshness_sla:
+  calendar: legislative
+  rule: within_5_days
+
+quality_status:
+  allowed: [valid, quarantined, stale]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "Transaction date drives effective_date; disclosure date drives available_at."
+  - "HTML-scrape fallback rows are marked quality_status=quarantined."

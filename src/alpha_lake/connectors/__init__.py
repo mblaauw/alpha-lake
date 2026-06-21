@@ -25,6 +25,7 @@ from alpha_lake.connectors.fmp import (
 )
 from alpha_lake.connectors.fred import fetch_macro_series as _fred_macro
 from alpha_lake.connectors.marketaux import fetch_news as _marketaux_news
+from alpha_lake.connectors.quiver import fetch_congress_trades as _quiver
 from alpha_lake.connectors.reddit import fetch_subreddit as _reddit
 from alpha_lake.connectors.sec_edgar import fetch_companyfacts as _sec_edgar
 from alpha_lake.connectors.sec_insider import fetch_insider_transactions as _sec_insider
@@ -72,6 +73,7 @@ register("fmp", "analyst_estimates", _fmp_ratings)
 register("fmp", "economic_calendar", _fmp_econ)
 register("fred", "macro_series", _fred_macro)
 register("marketaux", "news", _marketaux_news)
+register("quiver", "congress_trades", _quiver)
 register("reddit", "social_posts", _reddit)
 register("sec", "fundamentals", _sec_edgar)
 register("sec", "insider_tx", _sec_insider)
