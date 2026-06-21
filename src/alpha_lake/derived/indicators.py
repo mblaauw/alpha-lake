@@ -84,3 +84,73 @@ def macd(
     macd_ema = ema(macd_line, ema_window)
     histogram = macd_line - macd_ema
     return {"macd": macd_line, "macd_ema": macd_ema, "histogram": histogram}
+
+
+# --- Phase 2.1 — Extended indicator panel ---
+
+
+def returns(close: pl.Series, window: int) -> pl.Series:
+    """N-day return as a decimal fraction: (close / close.shift(N)) - 1."""
+    return (close / close.shift(window)) - 1
+
+
+def distance_to_ma(close: pl.Series, ma: pl.Series) -> pl.Series:
+    """Distance from close to moving average as a decimal: (close / ma) - 1."""
+    return (close / ma) - 1
+
+
+def above_ma(close: pl.Series, ma: pl.Series) -> pl.Series:
+    """Boolean: close is above the moving average."""
+    return close > ma
+
+
+def atr_pct(atr_series: pl.Series, close: pl.Series) -> pl.Series:
+    """ATR as a percentage of close: ATR / close * 100."""
+    return (atr_series / close) * 100
+
+
+def realized_vol(close: pl.Series, window: int, periods_per_year: int = 252) -> pl.Series:
+    """Annualized realized volatility from log returns."""
+    log_ret = close.log().diff()
+    return log_ret.rolling_std(window_size=window) * (periods_per_year**0.5)
+
+
+def relative_volume(volume: pl.Series, window: int = 20) -> pl.Series:
+    """Relative volume: volume / rolling_mean(volume, window)."""
+    return volume / volume.rolling_mean(window_size=window)
+
+
+def dollar_volume(close: pl.Series, volume: pl.Series) -> pl.Series:
+    """Dollar volume: close * volume."""
+    return close * volume
+
+
+def avg_dollar_volume(close: pl.Series, volume: pl.Series, window: int = 20) -> pl.Series:
+    """Rolling average dollar volume."""
+    dv = close * volume
+    return dv.rolling_mean(window_size=window)
+
+
+def pct_off_high(close: pl.Series, high: pl.Series, window: int = 252) -> pl.Series:
+    """Percentage below the rolling maximum high: (close / rolling_max(high)) - 1."""
+    return (close / high.rolling_max(window_size=window)) - 1
+
+
+def pct_off_low(close: pl.Series, low: pl.Series, window: int = 252) -> pl.Series:
+    """Percentage above the rolling minimum low: (close / rolling_min(low)) - 1."""
+    return (close / low.rolling_min(window_size=window)) - 1
+
+
+def is_new_high(high: pl.Series, window: int = 252) -> pl.Series:
+    """Boolean: high equals the rolling maximum high over the window."""
+    return high == high.rolling_max(window_size=window)
+
+
+def is_new_low(low: pl.Series, window: int = 252) -> pl.Series:
+    """Boolean: low equals the rolling minimum low over the window."""
+    return low == low.rolling_min(window_size=window)
+
+
+def gap_pct(open_: pl.Series, close: pl.Series) -> pl.Series:
+    """Overnight gap as a decimal: (open / prev_close) - 1."""
+    return (open_ / close.shift(1)) - 1

@@ -110,6 +110,7 @@ def _infer_dataset(table: str) -> str | None:
         "congress_trades": "congress_trades",
         "sentiment_annotations": "sentiment_annotations",
         "attention_metrics": "attention_metrics",
+        "technical_indicators": "technical_indicators",
     }
     return mapping.get(table)
 
