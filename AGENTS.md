@@ -16,7 +16,7 @@ Alpha-Lake is a stack-first, bitemporal, replayable **market-data lakehouse**. I
 validates, and serves **point-in-time-correct** market facts. It owns facts; it knows nothing about strategy.
 
 Stack: Python 3.14 · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
-dlt ingestion · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
+httpx connectors · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
 Dagster (optional).
 
 Secrets via `SecretStore` ABC (`EnvSecretStore` / `StaticSecretStore`); see `@src/alpha_lake/secrets.py`.
@@ -40,7 +40,8 @@ Full spec: `@docs/DESIGN.md`. Operations: `@docs/operations.md`. Decisions: `@do
   gh issue list --state closed --limit 200 --json number,projectItems -q "." | python3 -c "
   import sys,json
   for i in json.load(sys.stdin):
-      s = i.get('projectItems',[{}])[0].get('status',{}).get('name','')
+      items = i.get('projectItems') or [{}]
+      s = items[0].get('status',{}).get('name','')
       if s not in ('Review','Done',''): print(f'#{i[\"number\"]}: {s}')
   "
   ```
@@ -113,8 +114,10 @@ A hit is a stop-and-fix, not a warning. Neutral names only (`mean_sentiment`, `s
 |---|---|
 | Anything touching invariants / before committing | `alpha-lake-invariants` |
 | Running the stack, uv, air-gap, container commands | `stack-ops` |
-| Adding a new dataset end-to-end (the vertical slice) | `add-dataset` (pulls `connector`, `patito-fact`, `pit-reader`) |
-| Writing a dlt source / fetch + raw archive | `connector` |
+| Adding a new dataset end-to-end (the vertical slice) | `add-dataset` (pulls `connector`, `patito-fact`, `pit-reader`, `serving-kernel`) |
+| Working with the SQL kernel / PIT macros / register_kernel | `serving-kernel` |
+| Modifying the REST transport, auth, rate limiting, endpoints | `rest-transport` |
+| Writing a connector / fetch + raw archive | `connector` |
 | Writing a fact model / validation gate | `patito-fact` |
 | Writing an `as_of` reader or panel/asof-join | `pit-reader` |
 | Fixtures, replay, property tests, determinism | `golden-replay` |
@@ -133,6 +136,14 @@ steps, and always gate behind property tests + cross-check with the `alpha-lake-
 - golden-replay determinism (business output **and** bitemporal row visibility),
 - storage blob-store backend selection (`_LocalBlobStore` vs `_S3BlobStore`) and the `get_blob_store()` factory,
 - Patito-derived DDL generation (`_generate_ddl()` schema ↔ database sync) and the `Dataset`/`DATASETS` registry,
+- serving-kernel SQL macro precedence resolution (`_kernel_source_priority`, `COALESCE(priority, 999)` pattern),
+- REST transport lookback cap, auth, and rate-limiting invariants,
+
+## Product posture
+
+News and social datasets are **experimental** (tier 3), disabled by default, and not SLA-eligible.
+Do not add or expand text connectors unless explicitly requested and the dataset config posture is
+updated first. Deepen core facts (bars, fundamentals, corp actions, reconciliation) instead.
 
 ## Conventions
 

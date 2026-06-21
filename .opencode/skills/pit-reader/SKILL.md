@@ -16,31 +16,45 @@ This is invariant-dense. Prefer stronger model or cross-check with `alpha-lake-i
 - Stage 1 selects newest version per source; Stage 2 applies dataset-specific source precedence.
 - `latest_*` is a separate PIT-unsafe API and still filters `available_at <= now()`.
 
-## ASOF JOIN Shape
+## Kernel Macro Invocation
+
+PIT resolution is a **versioned SQL kernel macro**, not inline Python SQL. Call the macro via `pit_read` or the specific reader functions in `src/alpha_lake/serving/`:
+
+### Security-list mode (scalar `as_of`)
+
+```python
+con.execute("SELECT * FROM bars_asof(?, ?, ?, ?)", [security_ids, as_of, start_date, end_date])
+```
+
+The macro is defined in `src/alpha_lake/kernel/sql/bars_pit.sql` — it applies the two-stage resolution (newest version per source, then source precedence via `_kernel_source_priority`).
+
+### Spine mode (per-row `as_of`)
+
+```python
+con.register("_spine", spine)     # spine has security_id, effective_date, as_of
+con.execute("SELECT * FROM bars_asof_join()")
+```
+
+The `_spine` view is registered by the serving layer before calling the macro. The join macro is defined in `src/alpha_lake/kernel/sql/bars_pit_join.sql`.
+
+### Scalar spine mode (single `as_of` on all rows)
+
+```python
+con.execute("SELECT * FROM bars_asof_spine(?)", [as_of])
+```
+
+Defined in `src/alpha_lake/kernel/sql/bars_pit_spine.sql`.
+
+### Precedence Pattern (for reference)
 
 ```sql
-WITH spine AS (
-  SELECT security_id, effective_date, as_of
-  FROM requested_spine
-), per_source AS (
-  SELECT s.*, b.* EXCLUDE (security_id, effective_date)
-  FROM spine s
-  ASOF JOIN bars b
-    ON s.security_id = b.security_id
-   AND s.effective_date = b.effective_date
-   AND s.as_of >= b.available_at
-  WHERE b.effective_date <= s.as_of
-), preferred AS (
-  SELECT *, row_number() OVER (
-    PARTITION BY security_id, effective_date, as_of
-    ORDER BY dataset_source_priority ASC
-  ) AS source_rank
-  FROM per_source
+ROW_NUMBER() OVER (
+    PARTITION BY b.security_id, b.effective_date
+    ORDER BY COALESCE(p.priority, 999), b.available_at DESC
 )
-SELECT * EXCLUDE (source_rank)
-FROM preferred
-WHERE source_rank = 1;
 ```
+
+See `serving-kernel` skill for the full macro definition and registration workflow.
 
 ## Leakage Fixture
 
@@ -65,3 +79,5 @@ just lint
 - Do not collapse sources before version selection.
 - Do not use system time/DuckLake snapshot as PIT boundary.
 - Do not expose latest results without PIT-unsafe marker.
+- Do not hand-write PIT SQL in Python f-strings — always use kernel macros.
+- Do not hardcode source priority — the kernel reads `_kernel_source_priority`.

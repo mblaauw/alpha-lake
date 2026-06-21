@@ -66,4 +66,4 @@ source_fetch_id, ingestion_run_id, schema_version, parser_version
 
 ## Stronger-Model Gate
 
-Route to a stronger model or cross-check with invariants for PIT reader logic, deterministic `security_id`, semantic `version_hash`, and golden replay determinism.
+Route to a stronger model or cross-check with invariants for PIT reader logic, deterministic `security_id`, semantic `version_hash`, golden replay determinism (business output **and** bitemporal row visibility), storage blob-store backend selection (`_LocalBlobStore` vs `_S3BlobStore`) and the `get_blob_store()` factory, Patito-derived DDL generation (`_generate_ddl()` schema ↔ database sync) and the `Dataset`/`DATASETS` registry, and serving-kernel SQL macro precedence resolution (`_kernel_source_priority`, `COALESCE(priority, 999)` pattern).

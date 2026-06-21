@@ -294,7 +294,7 @@ Canonical datasets are keyed by `security_id`; `symbol` is resolved only at the 
 
 Every research read applies `available_at <= :as_of`, then applies the dataset's valid-time rule and resolves to one value in **two stages**: newest knowledge-time version per source (`QUALIFY row_number() OVER (PARTITION BY ... ORDER BY available_at DESC) = 1`), then source precedence by `source_dataset_registry.priority`.
 
-This resolution logic does not live in Python string templates. It is a **versioned SQL kernel** in `src/alpha_lake/kernel/sql/` — one `.sql` file per dataset contract (e.g. `bars_pit.sql`, `bars_adjusted.sql`). Each file defines a parameterized DuckDB table macro:
+This resolution logic does not live in Python string templates. It is a **versioned SQL kernel** in `src/alpha_lake/kernel/sql/` — one `.sql` file per dataset contract (e.g. `bars_pit.sql`, `bars_pit_adjusted.sql`). Each file defines a parameterized DuckDB table macro:
 
 ```sql
 CREATE OR REPLACE MACRO bars_asof(
@@ -358,6 +358,16 @@ raw price 2025-01-01; split effective 2025-06-01; split available_at 2025-06-02
 **Reconciliation ≠ quarantine (I10).** A valid *primary* is never quarantined because a *secondary* disagrees. Cross-source disagreements are persisted as an append-only `reconciliation_events` dataset with severity→action mapping in config.
 
 **Per-entity ingest outcomes:** multi-entity runs record one outcome per requested entity (`ok`, `empty`, `failed`, `quarantined`) as an explicit outcome ledger — see `src/alpha_lake/quality/` and the connector skill.
+
+### 13.5 Dataset support tiers
+
+Datasets are categorised by product posture (see ADR-0025 and `docs/product-tiers.md`):
+
+- **Core** (SLA-eligible, sellable, reconciliable): `lake_bars`, adjusted-price views, `corp_actions`, `fundamentals`, `earnings_calendar`, `insider_tx`, `security_master`.
+- **Convenience** (supported helpers, not the moat): technical indicators.
+- **Experimental** (dormant by default, not SLA-eligible): `news_articles`, `social_posts`, `entity_mentions`, `sentiment_annotations`, `attention_metrics`.
+
+Text sources remain dormant because free sources are unreliable and licensing-sensitive. The schemas and connector code stay in the repository for explicit config opt-in when a licensed source becomes available. Investment priority is core fact-layer deepening: PIT fundamentals, corporate-action coverage, multi-source reconciliation, intraday bars, delisted securities, deeper history.
 
 ## 14. Derived technical indicator library
 
@@ -427,9 +437,10 @@ The lake computes neutral market-derived measurements. Alpha-Quant decides what 
 
 
 
-## 15. Derived news & social analytics layer
+## 15. Derived news & social analytics layer (experimental)
 
-Alpha-Lake provides a neutral text-derived analytics layer for news and social data.
+> **This section describes experimental (tier 3) datasets.** News and social sources are disabled
+> by default, not SLA-eligible, and not a current product priority. See ADR-0025 and §13.5.
 
 Canonical text datasets store source-grounded facts: article/post metadata, raw payload
 lineage, publication time, availability time, source identity, and immutable text hashes.
@@ -510,61 +521,33 @@ else:
 
 ## 18. Serving API
 
-### 18.1 Architecture (three-layer)
+### 18.1 Architecture
+
+The serving layer has three tiers; details in ADR-0024 and `docs/serving-api.md`:
 
 ```
-kernel/sql/*.sql         — PIT resolution table macros (bars_asof, bars_adjusted, ...)
+kernel/sql/*.sql         — PIT resolution table macros (bars_asof, bars_pit_adjusted, ...)
 serving/__init__.py      — thin Python callers binding parameters, calling kernel macros
-transport/*              — FastAPI REST (primary remote), Python library, CLI harness
+transport/               — FastAPI REST (primary remote), Python library, CLI harness
 ```
 
-The kernel (layer 1) is a versioned SQL artifact loaded per-connection by `register_kernel(con)` in `catalog.connect()`. Every transport receives the same macros automatically — see §11 and ADR-0024.
+The kernel is loaded by `register_kernel(con)` inside `catalog.connect()` — every transport receives the same macros automatically (§11, ADR-0024).
 
-The serving layer (layer 2) binds parameters and delegates to kernel macros. These are the public Python reader contracts (`read_bars_asof`, `read_panel`, `read_asof_join`, `read_bars_adjusted`, `read_bars_latest`, catalog/health). They return Polars DataFrames.
+### 18.2 REST transport
 
-### 18.2 REST transport (primary remote)
+FastAPI (optional `[server]` extra) with endpoints `GET /v1/bars`, `GET /v1/bars/indicators`, `GET /v1/health`. API key auth (`X-API-Key`, prefix `al_live_`/`al_test_`), in-pod token bucket rate limiting, and a configurable `max_lookback_days` enforced at the transport layer. `latest_*` endpoints explicitly document PIT-unsafety and still apply `available_at <= now()`.
 
-The REST API is served by FastAPI (optional `[server]` extra). All endpoints go through the same `connect()` → `register_kernel()` path, so the kernel is always present.
+### 18.3 Python library
 
-```
-GET /v1/bars?symbol=META&start=2026-01-01&end=2026-06-01&as_of=2026-06-15T16:00:00Z&price_mode=split_adjusted
-GET /v1/bars/indicators?symbol=META&indicators=sma:50,rsi:14&as_of=2026-06-15T16:00:00Z&price_mode=split_adjusted
-GET /v1/health
-```
+Reader contracts (`read_bars_asof`, `read_bars_adjusted`, `read_panel`, `read_asof_join`, `read_bars_latest`) return Polars DataFrames over `catalog.connect()`. See `docs/serving-api.md`.
 
-**Authentication:** `X-API-Key` header with bcrypt-hashed tokens. Key prefixes: `al_live_` for production, `al_test_` for testing. Keys are managed via CLI subcommand and stored via the existing `SecretStore` ABC.
-
-**Rate limiting:** In-pod token bucket per key (v1). Shared store (e.g. Redis) deferred to v2.
-
-**Lookback cap:** A configurable `max_lookback_days` bound is enforced at the kernel level to prevent unbounded bulk queries. Overridable in private deployments via config.
-
-`latest_*` endpoints explicitly document PIT-unsafety and still apply `available_at <= now()`. They must never feed into research or backtest pipelines.
-
-### 18.3 Python library (local/embedded)
-
-The existing Python reader contracts remain the local-access path. They require an explicit DuckDB connection obtained from `catalog.connect(cfg)`, ensuring the kernel is always loaded. This path is used by:
-
-- **Notebooks/research** — inline PIT reads against the embedded or remote catalog.
-- **Publish jobs** — batch pipelines that read/write from the same process.
-- **Tests** — unit and integration tests create in-memory DuckDB connections, load the kernel, and run against fixture tables.
-
-### 18.4 Catalog & health
-
-Catalog metadata (datasets, schema versions, row counts, snapshots) is served from the DuckLake catalog DB — no separate metadata service. Both the Python library and REST transport expose:
-
-- `list_datasets` / `dataset_health` / `catalog_health` — per-dataset and overall freshness.
-- `list_snapshots` / `set_snapshot` — DuckLake snapshot enumeration and read pinning.
-- `resolve_ingestion_run` — map an `ingestion_run_id` to a DuckLake snapshot ID.
-
-### 18.5 Remote transport roadmap
+### 18.4 Transport roadmap
 
 | Phase | Transport | Status |
 |-------|-----------|--------|
 | v1 | REST (FastAPI) with API key auth | Building |
 | v2 | Python SDK wrapping REST transport | Future |
 | v3 | Arrow Flight SQL / ADBC (bulk optimization) | Future |
-
-Arrow Flight SQL / ADBC is deferred as a bulk-optimization pass for large panel reads, not the primary remote surface.
 
 ## 19. Orchestration — flow functions, thin shells
 
