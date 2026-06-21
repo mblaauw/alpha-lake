@@ -25,16 +25,27 @@ from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, repars
 app = typer.Typer(name="alpha-lake")
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _main(
+    ctx: typer.Context,
     log_json: bool = typer.Option(False, "--log-json", help="Output structured JSON"),
 ):
     set_mode(log_json)
     install_rich_traceback()
     load_config()
+    if ctx.invoked_subcommand is None:
+        theme = "bold blue"
+        panel(
+            "Welcome to Alpha-Lake",
+            "A stack-first, bitemporal, replayable market-data lakehouse.\n"
+            "Run a command below to get started.",
+            style=theme,
+        )
+        print(ctx.get_help())
+        raise typer.Exit()
 
 
-@app.command()
+@app.command(rich_help_panel="System")
 def bootstrap():
     """Initialize the catalog and storage."""
     cfg = get_config()
@@ -44,7 +55,7 @@ def bootstrap():
     panel("Bootstrap", "Catalog bootstrapped.", style="green")
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def ingest(
     security_id: str = typer.Option(..., help="Security ID to ingest"),
     from_date: str = typer.Option("", help="Start date (YYYY-MM-DD)"),
@@ -67,12 +78,12 @@ def ingest(
     con.close()
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def backfill(
-    security_id: str = typer.Option(...),
-    start: str = typer.Option(...),
-    end: str = typer.Option(...),
-    source: str = typer.Option(None),
+    security_id: str = typer.Option(..., help="Security ID to backfill"),
+    start: str = typer.Option(..., help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., help="End date (YYYY-MM-DD)"),
+    source: str = typer.Option(None, help="Source ID"),
 ):
     """Backfill bars for a date range."""
     _require_infra(get_config())
@@ -101,10 +112,12 @@ def backfill(
     con.close()
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def reparse(
-    security_id: str = typer.Option(...),
-    effective_date: str = typer.Option(None, help="YYYY-MM-DD"),
+    security_id: str = typer.Option(..., help="Security ID to reparse"),
+    effective_date: str = typer.Option(
+        None, help="Date to reparse (YYYY-MM-DD); defaults to all dates"
+    ),
 ):
     """Reparse raw archive data for a security."""
     _require_infra(get_config())
@@ -131,7 +144,7 @@ def reparse(
     con.close()
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def compact(table: str = typer.Option(..., help="Table to compact")):
     """Compact a canonical table by removing duplicate versions."""
     _require_infra(get_config())
@@ -142,13 +155,13 @@ def compact(table: str = typer.Option(..., help="Table to compact")):
     con.close()
 
 
-@app.command()
+@app.command(rich_help_panel="Validation")
 def validate():
     """Validate dataset integrity and freshness (not yet implemented)."""
     warn("validate: not yet implemented — use [bold]just test[/] for validation checks.")
 
 
-@app.command()
+@app.command(rich_help_panel="Validation")
 def gap_fill(
     security_id: str = typer.Option(..., help="Security ID"),
     start: str = typer.Option(..., help="Start date (YYYY-MM-DD)"),
@@ -158,7 +171,7 @@ def gap_fill(
     warn(f"gap-fill: not yet implemented for [bold]{security_id}[/] {start}–{end}.")
 
 
-@app.command()
+@app.command(rich_help_panel="Validation")
 def rebuild(
     table: str = typer.Option(..., help="Table to rebuild"),
 ):
@@ -166,13 +179,13 @@ def rebuild(
     warn(f"rebuild: not yet implemented for [bold]{table}[/].")
 
 
-@app.command()
+@app.command(rich_help_panel="Utilities")
 def replay():
     """Run golden replay against frozen fixtures."""
     info("replay: use [bold]just replay[/] to run golden replay via pytest.")
 
 
-@app.command()
+@app.command(rich_help_panel="System")
 def health():
     """Check dataset freshness and system health."""
     cfg = get_config()
@@ -254,7 +267,7 @@ def _check_rustfs(return_bool: bool = False) -> bool:
         return False
 
 
-@app.command()
+@app.command(rich_help_panel="System")
 def catalog(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show snapshot details"),
 ):
@@ -283,7 +296,7 @@ def catalog(
     con.close()
 
 
-@app.command(name="freeze-fixtures")
+@app.command(name="freeze-fixtures", rich_help_panel="System")
 def freeze_fixtures():
     """Freeze test fixtures for golden replay."""
     from alpha_lake.fixtures import freeze as _freeze
