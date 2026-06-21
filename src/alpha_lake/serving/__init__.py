@@ -117,6 +117,26 @@ def _infer_dataset(table: str) -> str | None:
 # --- Backward-compatible wrappers ---
 
 
+def read_macro_series_asof(
+    con: duckdb.DuckDBPyConnection,
+    series_ids: list[str],
+    as_of: datetime,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    snapshot_id: str | None = None,
+) -> pl.DataFrame:
+    return pit_read(
+        con,
+        "macro_series",
+        security_ids=series_ids,
+        as_of=as_of,
+        start_date=start_date,
+        end_date=end_date,
+        source_precedence_dataset="macro_series",
+        snapshot_id=snapshot_id,
+    )
+
+
 def read_bars_asof(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],

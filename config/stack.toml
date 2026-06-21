@@ -215,5 +215,27 @@ parser_version = 1
 enabled = false
 parser_version = 1
 
+[sources.fred]
+base_url = "https://api.stlouisfed.org/fred"
+fallback_base_url = "https://fred.stlouisfed.org/graph"
+requires_key = false
+rate_limit_per_sec = 5.0
+rate_limit_per_day = 120000
+max_retries = 3
+
+[source_datasets.fred]
+[source_datasets.fred.macro_series]
+enabled = false
+parser_version = 1
+
+[datasets.macro_series]
+tier = "experimental"
+supported = false
+sla = false
+description = "Point-in-time macro series; FRED revisions preserved as knowledge-time history."
+
+[quality.macro_series]
+max_staleness_days = 45
+
 [precedence]
 bars_daily = ["eodhd", "tiingo"]

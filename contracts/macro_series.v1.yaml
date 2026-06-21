@@ -1,0 +1,47 @@
+dataset: macro_series
+version: 1
+description: Point-in-time macroeconomic series; FRED revisions preserved as knowledge-time history.
+
+primary_key:
+  - series_id
+  - effective_date
+  - source_id
+
+partition_key:
+  - effective_date
+
+pit_columns:
+  valid_time: effective_date
+  knowledge_time: available_at
+
+required_fields:
+  - series_id
+  - effective_date
+  - available_at
+  - source_id
+  - value
+  - content_hash
+  - version_hash
+  - quality_status
+
+nullable_fields: []
+
+market_sanity:
+  value: {}
+
+freshness_sla:
+  calendar: economic
+  rule: within_45_days_of_release
+
+quality_status:
+  allowed: [valid]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "FRED revisions are preserved as distinct available_at rows — do not collapse."
+  - "Series list is config-driven in [sources.fred.series], not hardcoded."
