@@ -78,7 +78,8 @@ def _ensure_bucket(cfg: RootConfig) -> None:
         client_kwargs={"region_name": "us-east-1"},
         config_kwargs={"s3": {"addressing_style": s3.url_style}},
     )
-    fs.mkdir(bucket, exist_ok=True)
+    if not fs.exists(bucket):
+        fs.mkdir(bucket)
 
 
 def bootstrap(cfg: RootConfig) -> None:

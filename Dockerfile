@@ -1,12 +1,14 @@
 FROM python:3.13-slim
-
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+ENV UV_LINK_MODE=copy
 WORKDIR /app
 
-RUN pip install uv && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
 COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
 COPY src/ src/
-RUN uv sync --frozen --no-dev --no-cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 ENTRYPOINT ["uv", "run", "--frozen", "python", "-m", "alpha_lake.cli"]
