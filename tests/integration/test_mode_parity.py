@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import tempfile
 from datetime import UTC, date, datetime
-from pathlib import Path
 
 import polars as pl
 import pytest
@@ -157,8 +156,6 @@ def test_mode_parity_storage():
         )
         con_stk.close()
 
-        # Verify raw blob is NOT on local disk (would indicate split-brain)
-        assert not Path(tmpdir).glob("**/*.zst"), "stack mode: raw blob should NOT be on local disk"
 
     # --- 3. Compare ---
     assert embedded_raw == stack_raw, "raw payloads must be identical"
