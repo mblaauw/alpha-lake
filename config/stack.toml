@@ -128,3 +128,6 @@ parser_version = 1
 [source_datasets.alpaca.bars_daily]
 enabled = false
 parser_version = 1
+
+[precedence]
+bars_daily = ["eodhd", "tiingo"]

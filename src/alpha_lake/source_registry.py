@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from alpha_lake.config import SourceConfig, SourceDatasetConfig, get_config
 
-_SOURCE_PRECEDENCE: dict[str, list[str]] = {
-    "bars_daily": ["eodhd", "tiingo"],
-}
-
 
 def get_source(source_id: str) -> SourceConfig:
     cfg = get_config()
@@ -27,18 +23,25 @@ def get_dataset_sources(dataset: str) -> dict[str, SourceDatasetConfig]:
 
 
 def get_primary_source(dataset: str) -> str | None:
-    precedence = _SOURCE_PRECEDENCE.get(dataset, [])
-    cfg = get_config()
-    for source_id in precedence:
-        ds_configs = cfg.source_datasets.get(source_id, {})
-        dc = ds_configs.get(dataset)
-        if dc is not None and dc.enabled:
-            return source_id
-    available = get_dataset_sources(dataset)
-    if available:
-        return next(iter(available))
-    return None
+    precedence = get_source_precedence(dataset)
+    try:
+        cfg = get_config()
+        for source_id in precedence:
+            ds_configs = cfg.source_datasets.get(source_id, {})
+            dc = ds_configs.get(dataset)
+            if dc is not None and dc.enabled:
+                return source_id
+        available = get_dataset_sources(dataset)
+        if available:
+            return next(iter(available))
+        return None
+    except AssertionError:
+        return precedence[0] if precedence else None
 
 
 def get_source_precedence(dataset: str) -> list[str]:
-    return _SOURCE_PRECEDENCE.get(dataset, [])
+    try:
+        cfg = get_config()
+        return cfg.precedence.get(dataset, [])
+    except AssertionError:
+        return []

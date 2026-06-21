@@ -63,6 +63,7 @@ class RootConfig(pydantic.BaseModel):
     reconcile: dict[str, ReconciliationConfig] = {}
     sources: dict[str, SourceConfig] = {}
     source_datasets: dict[str, dict[str, SourceDatasetConfig]] = {}
+    precedence: dict[str, list[str]] = {}
 
 
 _config: RootConfig | None = None

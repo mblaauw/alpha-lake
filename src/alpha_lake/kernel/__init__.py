@@ -8,50 +8,36 @@ if TYPE_CHECKING:
 
 _SQL_DIR = pathlib.Path(__file__).parent / "sql"
 
+# Cache SQL file contents at import time so register_kernel doesn't
+# read from disk on every call (issue #365).
+_SQL_FILES: list[str] = [p.read_text() for p in sorted(_SQL_DIR.glob("*.sql"))]
+
 
 def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
-    from alpha_lake.source_registry import _SOURCE_PRECEDENCE
+    from alpha_lake.source_registry import get_source_precedence
 
     con.execute(
         "CREATE TABLE IF NOT EXISTS _kernel_source_priority ("
         "dataset VARCHAR, source_id VARCHAR, priority INT)"
     )
     con.execute("DELETE FROM _kernel_source_priority")
-    for dataset, sources in _SOURCE_PRECEDENCE.items():
+    values = []
+    for dataset in ("bars_daily",):
+        sources = get_source_precedence(dataset)
         for i, source_id in enumerate(sources):
-            con.execute(
-                "INSERT INTO _kernel_source_priority VALUES (?, ?, ?)",
-                [dataset, source_id, i],
-            )
+            values.append(f"('{dataset}', '{source_id}', {i})")
+    if values:
+        con.execute("INSERT INTO _kernel_source_priority VALUES " + ", ".join(values))
 
     # Ensure referenced tables exist so SQL macros compile at parse time.
     # In production the DuckLake catalog provides them; in tests we create
     # minimal stubs that writes replace with the proper schema later.
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS lake_bars (
-            security_id VARCHAR,
-            effective_date DATE,
-            available_at TIMESTAMPTZ,
-            source_id VARCHAR,
-            open DOUBLE,
-            high DOUBLE,
-            low DOUBLE,
-            close DOUBLE,
-            volume BIGINT,
-            source_fetch_id VARCHAR,
-            raw_payload_hash VARCHAR,
-            ingestion_run_id VARCHAR,
-            content_hash VARCHAR,
-            version_hash VARCHAR,
-            schema_version INTEGER,
-            parser_version INTEGER,
-            normalization_version INTEGER DEFAULT 1,
-            quality_status VARCHAR,
-            source_published_at TIMESTAMPTZ,
-            ingested_at TIMESTAMPTZ,
-            validated_at TIMESTAMPTZ
-        )
-    """)
+    # DDL is derived from the Patito model to keep BarFact as the single
+    # schema authority (see epic-308 / issue #364).
+    from alpha_lake.interop import generate_ddl
+    from alpha_lake.models.bar_fact import BarFact
+
+    con.execute(generate_ddl(BarFact, "lake_bars"))
     con.execute(
         "CREATE OR REPLACE TEMPORARY VIEW _spine AS "
         "SELECT CAST(NULL AS VARCHAR) AS security_id, "
@@ -59,5 +45,5 @@ def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
         "CAST(NULL AS TIMESTAMPTZ) AS as_of WHERE 1=0"
     )
 
-    for path in sorted(_SQL_DIR.glob("*.sql")):
-        con.execute(path.read_text())
+    for sql in _SQL_FILES:
+        con.execute(sql)

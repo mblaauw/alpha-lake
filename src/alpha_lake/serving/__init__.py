@@ -6,7 +6,7 @@ import duckdb
 import polars as pl
 
 from alpha_lake.clock import get_clock
-from alpha_lake.interop import duckdb_to_polars, polars_to_duckdb
+from alpha_lake.interop import duckdb_to_polars
 
 
 def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> None:
@@ -18,11 +18,16 @@ def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> No
 
 def _ensure_kernel(con: duckdb.DuckDBPyConnection) -> None:
     try:
-        con.execute("SELECT bars_asof([], '2000-01-01'::TIMESTAMPTZ)")
+        row = con.execute(
+            "SELECT 1 FROM duckdb_functions() WHERE function_name = 'bars_asof' LIMIT 1"
+        ).fetchone()
+        if row:
+            return
     except Exception:
-        from alpha_lake.kernel import register_kernel
+        pass
+    from alpha_lake.kernel import register_kernel
 
-        register_kernel(con)
+    register_kernel(con)
 
 
 def pit_read(
@@ -141,6 +146,7 @@ def read_bars_adjusted(
         price_mode: 'raw' (no adjustment), 'split_adjusted' (apply splits),
                     'total_return' (apply splits + dividends).
     """
+    _ensure_kernel(con)
     if price_mode == "raw":
         return read_bars_asof(
             con,
@@ -151,57 +157,11 @@ def read_bars_adjusted(
             snapshot_id=snapshot_id,
         )
 
-    raw = read_bars_asof(
+    return duckdb_to_polars(
         con,
-        security_ids,
-        as_of,
-        start_date,
-        end_date,
-        snapshot_id=snapshot_id,
+        "SELECT * FROM bars_adjusted_asof(?, ?, ?, ?)",
+        [security_ids, as_of, start_date, end_date],
     )
-    if raw.height == 0:
-        return raw
-
-    con.execute("DROP TABLE IF EXISTS _raw_bars")
-    polars_to_duckdb(con, raw, "_raw_bars")
-
-    adj_query = """
-        WITH factors AS (
-            SELECT
-                ca.security_id,
-                EXP(SUM(LN(ca.ratio_numerator / NULLIF(ca.ratio_denominator, 0)))
-                    OVER (PARTITION BY ca.security_id ORDER BY ca.effective_date
-                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                ) AS cumulative_factor
-            FROM corp_actions ca
-            WHERE ca.action_type = 'split'
-              AND ca.available_at <= CAST(? AS TIMESTAMPTZ)
-        ),
-        latest_factor AS (
-            SELECT security_id, MAX(cumulative_factor) AS factor
-            FROM factors
-            GROUP BY security_id
-        )
-        SELECT
-            b.security_id,
-            b.effective_date,
-            b.available_at,
-            b.source_id,
-            round(b.open   / COALESCE(lf.factor, 1.0), 4) AS open,
-            round(b.high   / COALESCE(lf.factor, 1.0), 4) AS high,
-            round(b.low    / COALESCE(lf.factor, 1.0), 4) AS low,
-            round(b.close  / COALESCE(lf.factor, 1.0), 4) AS close,
-            CAST(round(b.volume * COALESCE(lf.factor, 1.0), 0) AS BIGINT) AS volume,
-            b.version_hash,
-            b.quality_status,
-            COALESCE(lf.factor, 1.0) AS adjustment_factor
-        FROM _raw_bars b
-        LEFT JOIN latest_factor lf ON lf.security_id = b.security_id
-        ORDER BY b.security_id, b.effective_date
-    """
-    result = duckdb_to_polars(con, adj_query, [as_of])
-    con.execute("DROP TABLE IF EXISTS _raw_bars")
-    return result
 
 
 def read_bars_latest(

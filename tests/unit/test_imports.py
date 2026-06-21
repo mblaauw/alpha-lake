@@ -23,6 +23,9 @@ def test_obs_imports():
 
 
 def test_source_registry():
+    from alpha_lake.config import load_config
+
+    load_config("config/stack.toml")
     from alpha_lake.source_registry import get_source_precedence
 
     assert get_source_precedence("bars_daily") == ["eodhd", "tiingo"]
