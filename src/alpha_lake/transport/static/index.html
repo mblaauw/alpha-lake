@@ -12,11 +12,16 @@
   <header id="header">
     <h1>Lake Watch</h1>
     <div class="header-controls">
+      <select id="priceModeSelect">
+        <option value="raw">raw</option>
+        <option value="split_adjusted">split</option>
+        <option value="total_return">total</option>
+      </select>
       <label class="as_of-label">
         as_of
         <input type="datetime-local" id="asOfInput" step="1">
       </label>
-      <select id="snapshotSelect"><option value="">snapshot — live</option></select>
+      <select id="snapshotSelect"><option value="">live</option></select>
     </div>
   </header>
   <nav id="tabs">

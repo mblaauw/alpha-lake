@@ -77,3 +77,32 @@ th { color: var(--text2); font-weight: 600; position: sticky; top: 0; background
 /* Loading / empty states */
 .empty { text-align: center; padding: 40px 16px; color: var(--text2); }
 .error { text-align: center; padding: 20px; color: var(--red); }
+
+/* Bar search */
+.bar-search { margin-bottom: 8px; }
+.bar-search input {
+  width: 100%; padding: 10px 12px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; font-size: 16px; outline: none;
+}
+.bar-search input:focus { border-color: var(--blue); }
+
+/* Watchlist strip */
+#watchlistStrip { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+
+/* Ticker pills */
+.ticker-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px 4px 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  flex: 0 0 auto;
+}
+.ticker-pill:hover { background: var(--surface2); }
+.ticker-mono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; background: var(--surface2);
+  font-size: 11px; font-weight: 700; color: var(--blue);
+}
+
+/* SVG charts container */
+#barChart { margin: 8px 0; }
+#barChart svg { display: block; }
