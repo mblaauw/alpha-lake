@@ -124,6 +124,58 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
     return rows[0][0] if rows else None
 
 
+def search(
+    con: Any,
+    query: str,
+    limit: int = 20,
+    as_of: date | None = None,
+) -> list[dict[str, str]]:
+    """Search security symbols by prefix or substring match.
+
+    Returns ``[{symbol, security_id, name}]`` matching *query*.
+    Prefix matches first (sorted by symbol), then substring matches.
+    Honors *as_of* for PIT-bounded resolution.
+    """
+    as_of_clause = (
+        "AND (effective_start IS NULL OR effective_start <= ?)"
+        " AND (effective_end IS NULL OR effective_end >= ?)"
+    )
+    params = []
+    if as_of:
+        params = [as_of, as_of]
+
+    prefix_results: list[dict[str, str]] = []
+    substring_results: list[dict[str, str]] = []
+
+    prefix_q = f"{query}%"
+    sql = f"""SELECT symbol, security_id, name FROM security_master
+              WHERE symbol LIKE ? {as_of_clause if as_of else ""}
+              ORDER BY symbol LIMIT ?"""
+    args = [prefix_q]
+    if as_of:
+        args.extend(params)
+    args.append(limit)
+    rows = con.execute(sql, args).fetchall()
+    prefix_results = [{"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows]
+
+    remaining = limit - len(prefix_results)
+    if remaining > 0:
+        sub_q = f"%{query}%"
+        sql = f"""SELECT symbol, security_id, name FROM security_master
+                  WHERE symbol LIKE ? AND symbol NOT LIKE ? {as_of_clause if as_of else ""}
+                  ORDER BY symbol LIMIT ?"""
+        args = [sub_q, prefix_q]
+        if as_of:
+            args.extend(params)
+        args.append(remaining)
+        rows = con.execute(sql, args).fetchall()
+        substring_results = [
+            {"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows
+        ]
+
+    return prefix_results + substring_results
+
+
 def register(
     con: Any,
     symbol: str,
