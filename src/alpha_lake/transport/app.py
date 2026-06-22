@@ -4,21 +4,25 @@ import hashlib
 import hmac
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from pathlib import Path
 from time import monotonic
 from typing import Any
 
 import duckdb
 import polars as pl
 from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-import]
-from fastapi.responses import JSONResponse  # type: ignore[unresolved-import]
+from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
+from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
 from alpha_lake.calendar_ import shift_trading_days
 from alpha_lake.catalog import catalog_health, connect
-from alpha_lake.config import load_config
+from alpha_lake.config import get_config, load_config
 from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
 from alpha_lake.secrets import get_store
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.serving import read_bars_asof
+
+_STATIC = Path(__file__).parent / "static"
 
 _INDICATOR_MAP: dict[str, Callable[..., Any]] = {
     "sma": sma,
@@ -252,3 +256,47 @@ def _v(val: Any) -> Any:
     if isinstance(val, datetime | date):
         return val.isoformat()
     return val
+
+
+# ── Dashboard / static —─────────────────────────────────────────────────────
+
+_DASHBOARD_ENABLED: bool | None = None
+
+
+def _dashboard_enabled() -> bool:
+    global _DASHBOARD_ENABLED
+    if _DASHBOARD_ENABLED is None:
+        try:
+            load_config()
+            _DASHBOARD_ENABLED = get_config().transport.dashboard_enabled
+        except Exception:
+            _DASHBOARD_ENABLED = False
+    return _DASHBOARD_ENABLED
+
+
+if _STATIC.is_dir():
+    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+
+
+@app.get("/")
+async def home():
+    if not _dashboard_enabled():
+        raise HTTPException(404)
+    if not (_STATIC / "index.html").exists():
+        raise HTTPException(404)
+    return FileResponse(_STATIC / "index.html")
+
+
+@app.get("/service-worker.js")
+async def service_worker():
+    sw = _STATIC / "service-worker.js"
+    if not sw.exists():
+        raise HTTPException(404)
+    return FileResponse(sw, media_type="application/javascript")
+
+
+# ── Dashboard API router —───────────────────────────────────────────────────
+
+from alpha_lake.transport.dashboard import router as dashboard_router  # noqa: E402
+
+app.include_router(dashboard_router)

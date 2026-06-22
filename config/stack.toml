@@ -395,3 +395,6 @@ bars_daily = ["eodhd", "tiingo"]
 insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
 sentiment = ["marketaux", "finnhub", "stocktwits"]
+
+[transport]
+dashboard_enabled = false

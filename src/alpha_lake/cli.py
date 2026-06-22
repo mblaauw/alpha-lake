@@ -56,6 +56,17 @@ def bootstrap():
     panel("Bootstrap", "Catalog bootstrapped.", style="green")
 
 
+@app.command(rich_help_panel="System")
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", envvar="AL_SERVE_HOST", help="Bind address"),
+    port: int = typer.Option(8000, "--port", envvar="AL_SERVE_PORT", help="Bind port"),
+):
+    """Start the FastAPI server (REST API + dashboard)."""
+    import uvicorn  # type: ignore[unresolved-import]
+
+    uvicorn.run("alpha_lake.transport.app:app", host=host, port=port, reload=False)
+
+
 @app.command(rich_help_panel="Data")
 def ingest(
     security_id: str = typer.Option(..., help="Security ID to ingest"),

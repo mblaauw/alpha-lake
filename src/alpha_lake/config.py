@@ -71,9 +71,14 @@ class LakeConfig(pydantic.BaseModel):
     calendar_version: str = ""
 
 
+class TransportConfig(pydantic.BaseModel):
+    dashboard_enabled: bool = False
+
+
 class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
     s3: S3Config = S3Config()
+    transport: TransportConfig = TransportConfig()
     quality: dict[str, QualityConfig] = {}
     reconcile: dict[str, ReconciliationConfig] = {}
     datasets: dict[str, DatasetPostureConfig] = {}

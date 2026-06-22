@@ -132,4 +132,6 @@ dev = [
     "dagster>=1.10",
     "dagster-duckdb>=0.25",
     "hypothesis>=6.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
 ]
