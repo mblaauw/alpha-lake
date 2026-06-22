@@ -75,6 +75,7 @@ include = ["tests/**"]
 
 [tool.ty.overrides.rules]
 possibly-unresolved-reference = "warn"
+unresolved-import = "warn"
 
 [tool.importlinter]
 root_package = "alpha_lake"
@@ -112,6 +113,9 @@ layers = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "live: mark test as a live API integration test (skipped unless --run-live is passed)",
+]
 
 [tool.typer]
 app_name = "alpha-lake"
