@@ -76,6 +76,39 @@ def _missing_dates(
     return missing
 
 
+def _dataset_has_coverage(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    id_col: str,
+    sid: str,
+    from_date: str = "",
+    to_date: str = "",
+) -> bool:
+    """Check if canonical *table* already has data for *sid* in [from_date, to_date].
+
+    When both date bounds are empty, checks for *any* row with that ID.
+    Returns ``True`` when all requested data already exists — caller can skip.
+    """
+    try:
+        if from_date or to_date:
+            rows = con.execute(
+                f"""SELECT 1 FROM {table}
+                    WHERE {id_col} = ?
+                      AND (? = '' OR effective_date >= DATE(?))
+                      AND (? = '' OR effective_date <= DATE(?))
+                    LIMIT 1""",
+                [sid, from_date, from_date, to_date, to_date],
+            ).fetchall()
+            return len(rows) > 0
+        rows = con.execute(
+            f"SELECT 1 FROM {table} WHERE {id_col} = ? LIMIT 1",
+            [sid],
+        ).fetchall()
+        return len(rows) > 0
+    except duckdb.CatalogException:
+        return False
+
+
 def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime) -> bytes:
     """Generate synthetic raw payload for offline/CI mode."""
     import json
@@ -429,6 +462,42 @@ def ingest_dataset(
             kwargs["from_date"] = from_date
         if to_date and dataset not in ("analyst_estimates", "insider_tx"):
             kwargs["to_date"] = to_date
+
+    # ── Idempotency guard: skip connector if data already in lake ────────
+    table_aliases = {
+        "news": "news_articles",
+        "sentiment": "sentiment_annotations",
+    }
+    _table = table_aliases.get(dataset, dataset)
+    _id_col: str | None = None
+    _id_val: str | None = None
+    if dataset == "macro_series":
+        _id_col = "series_id"
+        _id_val = series_id or "GDP"
+    elif dataset in ("news", "sentiment", "insider_tx", "analyst_estimates", "attention_metrics"):
+        _id_col = "security_id"
+        _id_val = security_id or "AAPL"
+    elif dataset == "economic_calendar":
+        _id_col = "event_id"
+        _id_val = ""
+    elif dataset == "fundamentals":
+        _id_col = "security_id"
+        _id_val = security_id or "AAPL"
+    elif dataset == "earnings_calendar":
+        _id_col = "security_id"
+        _id_val = security_id or ""
+
+    if _id_col and _id_val:
+        covered = _dataset_has_coverage(
+            con,
+            _table,
+            _id_col,
+            _id_val,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if covered:
+            return 0
 
     raw_fetch = asyncio.run(connector(**kwargs))
     raw_bytes = raw_fetch.body
