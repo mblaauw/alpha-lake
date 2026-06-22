@@ -16,7 +16,7 @@ async def fetch_news(symbol: str, from_date: str, to_date: str) -> RawFetch:
         "limit": 50,
     }
     async with build_client(cfg) as client:
-        endpoint = "/v1/news/all"
+        endpoint = "/news/all"
         response = await fetch_with_retry(client, endpoint, params=params)
         manifest = build_manifest(
             "marketaux",

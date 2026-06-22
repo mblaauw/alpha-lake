@@ -286,10 +286,10 @@ parser_version = 1
 
 [source_datasets.marketaux]
 [source_datasets.marketaux.news]
-enabled = false
+enabled = true
 parser_version = 1
 [source_datasets.marketaux.sentiment]
-enabled = false
+enabled = true
 parser_version = 1
 
 [source_datasets.fmp]
