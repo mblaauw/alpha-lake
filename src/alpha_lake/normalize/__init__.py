@@ -225,6 +225,106 @@ def sentiment_from_news(
     )
 
 
+def marketaux_news_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        art_id = record.get("uuid")
+        if not art_id:
+            continue
+        pub = record.get("published_at", "")
+        rows.append(
+            {
+                "article_id": f"{source_id}_{art_id}",
+                "effective_date": pub[:10] if pub else "",
+                "available_at": available_at,
+                "source_id": source_id,
+                "title": record.get("title", ""),
+                "description": (record.get("description") or record.get("snippet") or ""),
+                "url": record.get("url", ""),
+                "text_hash": _text_hash(record.get("title", ""), record.get("description", "")),
+                "published_at": _parse_iso_dt(pub) if pub else available_at,
+                "source_name": record.get("source", ""),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("published_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def marketaux_sentiment_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        art_id = record.get("uuid")
+        if not art_id:
+            continue
+        pub = record.get("published_at", "")
+        effective_date = pub[:10] if pub else ""
+        entities = record.get("entities") or []
+        input_hash = _text_hash(record.get("title", ""), record.get("description", ""))
+        for entity in entities:
+            symbol = entity.get("symbol", "")
+            ann_id = f"{source_id}_{art_id}_{symbol}" if symbol else f"{source_id}_{art_id}"
+            rows.append(
+                {
+                    "annotation_id": ann_id,
+                    "effective_date": effective_date,
+                    "available_at": available_at,
+                    "source_id": source_id,
+                    "annotation_kind": "news_sentiment",
+                    "sentiment_score": entity.get("sentiment_score"),
+                    "sentiment_label": "",
+                    "model_version": None,
+                    "prompt_version": None,
+                    "taxonomy_version": None,
+                    "input_text_hash": input_hash,
+                    "source_dataset_version": None,
+                    "security_id": symbol,
+                    "source_fetch_id": source_fetch_id,
+                    "raw_payload_hash": content_hash,
+                    "ingestion_run_id": ingestion_run_id,
+                    "content_hash": content_hash,
+                    "version_hash": "",
+                    "schema_version": 1,
+                    "parser_version": 1,
+                    "quality_status": "valid",
+                }
+            )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
 def analyst_estimates_from_json(
     raw: list[dict[str, Any]],
     security_id: str,
@@ -324,3 +424,7 @@ def _epoch_to_dt(epoch: int) -> datetime:
 
 def _text_hash(*parts: str) -> str:
     return hashlib.sha256("".join(parts).encode()).hexdigest()
+
+
+def _parse_iso_dt(iso: str) -> datetime:
+    return datetime.fromisoformat(iso.replace("Z", ""))

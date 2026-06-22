@@ -418,6 +418,8 @@ def ingest_dataset(
         records = raw_data.get("observations", [raw_data])
     elif dataset == "insider_tx" and isinstance(raw_data, dict):
         records = raw_data.get("data", [raw_data])
+    elif src == "marketaux" and isinstance(raw_data, dict):
+        records = raw_data.get("data", [raw_data])
     elif isinstance(raw_data, dict):
         records = [raw_data]
     else:
@@ -438,27 +440,51 @@ def ingest_dataset(
             available_at=clock_now,
         )
     elif dataset == "news":
-        from alpha_lake.normalize import news_from_json
+        if src == "marketaux":
+            from alpha_lake.normalize import marketaux_news_from_json
 
-        df = news_from_json(
-            raw=records,
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
+            df = marketaux_news_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            from alpha_lake.normalize import news_from_json
+
+            df = news_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
     elif dataset == "sentiment":
-        from alpha_lake.normalize import sentiment_from_news
+        if src == "marketaux":
+            from alpha_lake.normalize import marketaux_sentiment_from_json
 
-        df = sentiment_from_news(
-            raw=records,
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
+            df = marketaux_sentiment_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            from alpha_lake.normalize import sentiment_from_news
+
+            df = sentiment_from_news(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
     elif dataset == "analyst_estimates":
         from alpha_lake.normalize import analyst_estimates_from_json
 
@@ -491,4 +517,6 @@ def ingest_dataset(
         "sentiment": "sentiment_annotations",
     }
     table = table_aliases.get(dataset, dataset)
+    if df.is_empty():
+        return 0
     return write_dataset(con, table, df)
