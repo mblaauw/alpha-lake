@@ -127,3 +127,35 @@ con = connect(cfg)  # register_kernel(con) runs inside
 ```
 
 The kernel consists of `CREATE OR REPLACE MACRO ... AS TABLE` definitions in `src/alpha_lake/kernel/sql/`. Each dataset contract produces one `.sql` file (e.g. `bars_pit.sql`, `bars_adjusted.sql`). CI validates kernel output schema against `contracts/*.yaml`.
+
+## Dashboard API (dev-only)
+
+When `[transport] dashboard_enabled = true` in `config/stack.toml`, the following
+read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
+
+| Endpoint | Params | Returns |
+|---|---|---|
+| `GET /v1/dashboard/datasets` | — | Array of `{dataset, tier, rows, latest_effective_date, ...}` |
+| `GET /v1/dashboard/dataset/{name}` | `limit`, `as_of` | Recent rows with lineage columns |
+| `GET /v1/dashboard/securities` | `q`, `limit`, `as_of` | Symbol autocomplete results |
+| `GET /v1/dashboard/security/{symbol}` | `as_of` | Aggregated view across all datasets |
+| `GET /v1/dashboard/snapshots` | — | Snapshot list |
+| `GET /v1/dashboard/bars` | `symbol`, `start`, `end`, `as_of`, `snapshot_id` | PIT bar data |
+| `GET /v1/dashboard/bars/indicators` | `symbol`, `indicators`, `start`, `end`, `as_of` | Bars with indicators |
+
+These endpoints mirror the authenticated `/v1/*` endpoints but are gated by the
+`dashboard_enabled` config flag. When disabled they return 404.
+
+## Serve command
+
+```bash
+# Start the FastAPI server (also started by just up via compose.yaml)
+just serve
+# Or manually:
+alpha-lake serve --host 0.0.0.0 --port 8000
+```
+
+The server serves:
+- The REST API at `/v1/*`
+- The Lake Watch dashboard SPA at `http://localhost:8000/`
+- Static files at `/static/`

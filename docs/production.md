@@ -23,6 +23,8 @@ just bootstrap
 
 # 4. Verify health
 just health
+
+# 5. Open the dashboard at http://localhost:8000/
 ```
 
 ## Environment Setup
@@ -65,21 +67,29 @@ export ALPHA_LAKE_CONFIG=config/embedded.toml
 ## Stack Architecture
 
 ```
-┌─────────────┐    ┌──────────┐    ┌───────────┐
-│  app (CLI)  │───▶│ DuckDB   │───▶│  Postgres │
-│             │    │ (engine) │    │ (catalog) │
-└─────────────┘    └──────────┘    └───────────┘
-                         │
-                    ┌────▼────┐
-                    │ RustFS  │
-                    │  (S3)   │
-                    └─────────┘
+┌──────────────┐    ┌──────────┐    ┌───────────┐
+│  app (CLI)   │───▶│ DuckDB   │───▶│  Postgres │
+│  app (server)│    │ (engine) │    │ (catalog) │
+│   :8000      │    └──────────┘    └───────────┘
+└──────┬───────┘         │
+       │                 │
+       │            ┌────▼────┐
+       │            │ RustFS  │
+       │            │  (S3)   │
+       │            └─────────┘
+       │
+  ┌────▼────┐
+  │  Lake   │
+  │  Watch  │
+  │  (SPA)  │
+  └─────────┘
 ```
 
 - **Postgres**: Metadata catalog (schemas, snapshots, source priorities)
 - **RustFS**: S3-compatible object storage for raw archives and canonical data
+- **App**: FastAPI server + CLI — runs `serve` by default (port 8000). Use `docker compose run --rm app <cmd>` for CLI tasks.
 - **DuckDB**: Query engine (embedded or via Postgres adapter)
-- **App**: CLI container — stateless, exits after each command
+- **Lake Watch**: SPA dashboard at `http://localhost:8000/` — data-validation UI
 
 ## Running Ingestion
 
@@ -220,10 +230,10 @@ Rate limit exceeded. Check `just health` for configured limits and
 wait before retrying. Reduce concurrency or increase `rate_limit_per_sec`
 in `config/stack.toml` if you have a higher-tier API plan.
 
-### Container exits immediately
+### CLI commands exit immediately
 
-The `app` container is stateless — it runs the CLI command and exits.
-Use `docker compose run --rm app <command>` instead of `exec`.
+The `app` container runs the FastAPI server by default. For one-off CLI tasks
+(ingestion, dataset, health), use `docker compose run --rm app <command>` instead of `exec`.
 
 ## Dagster Integration (Optional)
 

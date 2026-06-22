@@ -31,6 +31,10 @@ ingest *args:
 health:
     docker compose run --rm app health
 
+# Start the FastAPI server + dashboard
+serve:
+    docker compose run --rm --service-ports app serve
+
 # Run tests (embedded harness)
 test *args:
     uv run pytest {{ args }}

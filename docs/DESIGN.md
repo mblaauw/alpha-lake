@@ -536,7 +536,16 @@ The kernel is loaded by `register_kernel(con)` inside `catalog.connect()` — ev
 
 ### 18.2 REST transport
 
-FastAPI (optional `[server]` extra) with endpoints `GET /v1/bars`, `GET /v1/bars/indicators`, `GET /v1/health`. API key auth (`X-API-Key`, prefix `al_live_`/`al_test_`), in-pod token bucket rate limiting, and a configurable `max_lookback_days` enforced at the transport layer. `latest_*` endpoints explicitly document PIT-unsafety and still apply `available_at <= now()`.
+FastAPI with endpoints:
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /v1/bars` | API key | PIT bar data with `as_of`, `snapshot_id`, lookback cap |
+| `GET /v1/bars/indicators` | API key | Bars with computed indicators (SMA, EMA, RSI, MACD, Bollinger, ATR) |
+| `GET /v1/health` | API key | Catalog health (snapshots, latest ID) |
+| `GET /v1/dashboard/*` | None when `dashboard_enabled=true` | Dev-only data-validation API (see §18.5) |
+
+API key auth (`X-API-Key`, prefix `al_live_`/`al_test_`), in-pod token bucket rate limiting (10/s, burst 20), and a configurable `max_lookback_days` enforced at the transport layer. `latest_*` endpoints explicitly document PIT-unsafety and still apply `available_at <= now()`. The dashboard router is gated behind the `dashboard_enabled` config flag; when `false` all dashboard paths return 404.
 
 ### 18.3 Python library
 
@@ -546,9 +555,36 @@ Reader contracts (`read_bars_asof`, `read_bars_adjusted`, `read_panel`, `read_as
 
 | Phase | Transport | Status |
 |-------|-----------|--------|
-| v1 | REST (FastAPI) with API key auth | Building |
+| v1 | REST (FastAPI) with API key auth | Shipping |
+| v1.5 | Lake Watch data-validation dashboard (SPA, same-origin) | Shipping |
 | v2 | Python SDK wrapping REST transport | Future |
 | v3 | Arrow Flight SQL / ADBC (bulk optimization) | Future |
+
+### 18.5 Lake Watch dashboard
+
+A single-page HTML/CSS/JS dashboard served by the same FastAPI process at `http://localhost:8000/`.
+Read-only, dev-only, air-gap safe. No build step, no CDN, no npm.
+
+**Source:** `src/alpha_lake/transport/static/` — vanilla HTML, CSS, JS with hand-rolled SVG charts.
+
+**Gate:** `[transport] dashboard_enabled = false` in `config/stack.toml`. Compose sets it `true`.
+
+**Dashboard API** (all under `/v1/dashboard/`, no auth required when enabled):
+
+| Endpoint | Wraps | Purpose |
+|---|---|---|
+| `GET /v1/dashboard/datasets` | `catalog.list_datasets` + `dataset_health` | Dataset health cards with tier, rows, staleness |
+| `GET /v1/dashboard/dataset/{name}` | PIT read | Recent rows with lineage columns, `as_of` filter |
+| `GET /v1/dashboard/securities` | `security_master.search` | Symbol autocomplete (prefix + substring) |
+| `GET /v1/dashboard/security/{symbol}` | `resolve` + per-dataset queries | Aggregated symbol view across all datasets |
+| `GET /v1/dashboard/snapshots` | `catalog.list_snapshots` | Snapshot list for reproducible inspection |
+| `GET /v1/dashboard/bars` | `read_bars_asof` | PIT bar data (mirrors `/v1/bars` without auth) |
+| `GET /v1/dashboard/bars/indicators` | Indicators pipeline | Bar data with indicator overlays (mirrors `/v1/bars/indicators` without auth) |
+
+**Tabs:** Overview (dataset health) | Bars (chart + indicators + watchlist) | Datasets (lineage rows) | Securities (per-symbol aggregation) | PIT (as_of playground with snapshots)
+
+**PWA:** Service worker caches static shell and last API responses. Icons at `/static/icons/`.
+`manifest.webmanifest` for installable standalone mode.
 
 ## 19. Orchestration — flow functions, thin shells †
 

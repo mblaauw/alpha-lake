@@ -25,6 +25,15 @@ temp directory has enough free space (at least 2× the dataset working set).
 | fundamentals | ~20 MB | 256 MB | 512 MB | 512 MB |
 | corp_actions | ~5 MB | 128 MB | 256 MB | 256 MB |
 
+### Ports
+
+| Service | Port |
+|---------|------|
+| Postgres | 5432 |
+| RustFS S3 | 9000 |
+| RustFS console | 9001 |
+| FastAPI (REST API + Lake Watch dashboard) | 8000 |
+
 ### Container Sizing
 
 | Operation | Minimum memory | Recommended |
@@ -33,6 +42,23 @@ temp directory has enough free space (at least 2× the dataset working set).
 | Compact | 1 GB | 2 GB |
 | Replay | 1 GB | 4 GB |
 | Serving | 256 MB | 512 MB |
+
+### Starting the server
+
+```bash
+# Via Docker Compose (starts automatically with just up):
+docker compose up -d
+
+# Manually (one-off, with port forwarding):
+docker compose run --rm --service-ports app serve
+
+# Just the server (without compose stack):
+just serve
+```
+
+The FastAPI server serves the REST API at `/v1/*` and the Lake Watch dashboard
+at `http://localhost:8000/`. The dashboard is enabled via `ALPHA_LAKE_DASHBOARD_ENABLED=true`
+(set in `compose.yaml`).
 
 ### Pushdown vs Pull
 

@@ -17,7 +17,7 @@ validates, and serves **point-in-time-correct** market facts. It owns facts; it 
 
 Stack: Python 3.13+ · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
 httpx connectors · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
-Dagster (optional).
+FastAPI / Uvicorn server · Lake Watch dashboard · Dagster (optional).
 
 Secrets via `SecretStore` ABC (`EnvSecretStore` / `StaticSecretStore`); see `@src/alpha_lake/secrets.py`.
 
@@ -53,6 +53,7 @@ Use these; do not invent commands and do not install Postgres / RustFS / DuckDB 
 ```
 just up | down | reset | logs        # reference stack lifecycle
 just bootstrap | ingest | health     # operate the lake
+just serve                           # start FastAPI server + dashboard on :8000
 just test *[path]                    # unit + integration (embedded)
 just test-integration *[path]        # live API tests (--run-live)
 just replay *[path]                  # golden replay (tests/replay/)
@@ -61,12 +62,18 @@ just lint                            # ruff + ty + import-linter
 just vendor                          # offline wheelhouse + images (online step)
 ```
 
-**CRITICAL — running one-off CLI commands against the stack.** The `app` Compose service exits
-immediately (its entrypoint prints CLI help and returns). Do **not** use `docker compose exec app …`
-— there is no long-running container to exec into. Use:
+**Running CLI commands against the stack.** The `app` Compose service runs the FastAPI server
+by default. For one-off CLI commands (ingestion, bootstrap, dataset, health), use:
 
 ```
 docker compose run --rm app <subcommand> [args]
+```
+
+To start the server (also started by `just up + compose.yaml`):
+
+```
+just serve
+# or: docker compose run --rm --service-ports app serve
 ```
 
 **Config changes require rebuild.** When you modify `config/stack.toml` or `src/` files, run

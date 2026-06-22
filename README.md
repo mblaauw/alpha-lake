@@ -12,18 +12,22 @@ Stack-first, bitemporal market-data lakehouse. Ingests, archives, validates, and
 ## Quick start
 
 ```bash
-just up        # start the reference stack (Postgres + RustFS)
+just up        # start the reference stack (Postgres + RustFS + app server)
 just bootstrap # initialize the catalog
-just ingest    # ingest market data (synthetic by default — see below)
 just health    # check dataset freshness and status
+
+# Once the stack is running, open http://localhost:8000/ for the Lake Watch dashboard
 ```
 
-**`just ingest` produces synthetic bars by default.** No API keys are needed. The synthetic
-pipeline generates deterministic market-data samples that pass all validation gates and
-let you exercise the full ingest → PIT-read path. To ingest **live** market data, set the
-corresponding `*_API_KEY` environment variables for your sources (see [Data suppliers](#datasets--data-suppliers))
-and the connector is activated automatically. Only sources with configured API keys are
-exercised end-to-end against real endpoints.
+**`just up` starts the FastAPI server with the Lake Watch dashboard on port 8000.**
+For one-off CLI commands (ingestion, dataset inspection), use:
+
+```bash
+docker compose run --rm app <command>
+# e.g. docker compose run --rm app dataset --dataset macro_series --series-id GDP
+```
+
+**Without Docker**: use `just serve` to start just the server, or `docker compose run --rm app <command>` for CLI tasks.
 
 ### Live ingestion
 
@@ -63,6 +67,9 @@ exercised end-to-end against real endpoints.
 | Epic 6 | Phase 6 | Orchestration: Dagster, CLI parity, gap-fill, backfill | P1 ✅ |
 | Epic 7 | Phase 7 | Cloud-native hardening: secrets, snapshot pinning, observability, docs | P2 ✅ |
 | Epic 300 | Storage Collapse | Unified blob store, Patito-derived DDL, mode-parity guard | P0 ✅ |
+| Epic 374 | Source Expansion | Source expansion, derived metrics, multi-source reconciliation | P0 ✅ |
+| Epic 400 | Live Ops | Live API ingestion, integration tests, operational readiness | P0 ✅ |
+| Epic 415 | Lake Watch | Data-validation dashboard, REST server, serve command, PWA | P1 ✅ |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
 
@@ -82,6 +89,8 @@ All work is tracked on the [Alpha-Lake Project Board](https://github.com/users/m
 ## Design
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the full systems design and implementation reference (v3.1).  
+The [REST API](docs/serving-api.md) documents the `/v1/*` endpoints and dashboard API.  
+See [docs/production.md](docs/production.md) for deployment instructions.
 See [docs/operations.md](docs/operations.md) for operations guidance, memory sizing, and monitoring thresholds.
 
 ## Architecture Decision Records

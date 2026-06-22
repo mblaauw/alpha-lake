@@ -52,6 +52,16 @@ warmup_start = shift_trading_days(start, -(window * multiplier), exchange="XNYS"
 | `GET /v1/bars` | Required | symbol, start, end, as_of, snapshot_id |
 | `GET /v1/bars/indicators` | Required | symbol, indicators, start, end, as_of |
 | `GET /v1/health` | None | — |
+| `GET /v1/dashboard/datasets` | None (gated) | — |
+| `GET /v1/dashboard/dataset/{name}` | None (gated) | limit, as_of |
+| `GET /v1/dashboard/securities` | None (gated) | q, limit, as_of |
+| `GET /v1/dashboard/security/{symbol}` | None (gated) | as_of |
+| `GET /v1/dashboard/snapshots` | None (gated) | — |
+| `GET /v1/dashboard/bars` | None (gated) | symbol, start, end, as_of, snapshot_id |
+| `GET /v1/dashboard/bars/indicators` | None (gated) | symbol, indicators, start, end, as_of |
+
+Dashboard endpoints are defined in `transport/dashboard.py` (separate `APIRouter`) and are
+gated behind the `[transport] dashboard_enabled` config flag. When disabled they return 404.
 
 ## Forbidden
 
