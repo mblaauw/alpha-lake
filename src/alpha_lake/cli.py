@@ -170,19 +170,26 @@ def cli_ingest_dataset(
     con = connect(get_config())
     from alpha_lake.flows import ingest_dataset as _ingest
 
-    count = _ingest(
-        con,
-        dataset=dataset,
-        series_id=series_id,
-        security_id=security_id,
-        from_date=from_date,
-        to_date=to_date,
-        source_id=source,
-    )
-    panel(
-        "Ingest", f"Ingested [bold]{count}[/] rows for dataset [bold]{dataset}[/].", style="green"
-    )
-    con.close()
+    try:
+        count = _ingest(
+            con,
+            dataset=dataset,
+            series_id=series_id,
+            security_id=security_id,
+            from_date=from_date,
+            to_date=to_date,
+            source_id=source,
+        )
+        panel(
+            "Ingest",
+            f"Ingested [bold]{count}[/] rows for dataset [bold]{dataset}[/].",
+            style="green",
+        )
+    except ValueError as e:
+        fail(str(e))
+        raise typer.Exit(code=1) from e
+    finally:
+        con.close()
 
 
 @app.command(rich_help_panel="Data")
