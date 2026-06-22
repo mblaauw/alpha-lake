@@ -35,6 +35,10 @@ health:
 test *args:
     uv run pytest {{ args }}
 
+# Run live API integration tests (skipped by default)
+test-integration *args:
+    uv run pytest tests/integration/ --run-live {{ args }}
+
 # Run type checks
 typecheck:
     uv run ty check --output-format full
