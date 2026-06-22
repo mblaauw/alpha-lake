@@ -317,7 +317,7 @@ parser_version = 1
 
 [source_datasets.fred]
 [source_datasets.fred.macro_series]
-enabled = false
+enabled = true
 parser_version = 1
 
 [datasets.analyst_estimates]
