@@ -221,7 +221,9 @@ server = [
 dev = [
     { name = "dagster" },
     { name = "dagster-duckdb" },
+    { name = "fastapi" },
     { name = "hypothesis" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
@@ -258,7 +260,9 @@ provides-extras = ["otel", "server", "dev"]
 dev = [
     { name = "dagster", specifier = ">=1.10" },
     { name = "dagster-duckdb", specifier = ">=0.25" },
+    { name = "fastapi", specifier = ">=0.115" },
     { name = "hypothesis", specifier = ">=6.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 
 [[package]]

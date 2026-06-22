@@ -5,11 +5,11 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev --no-install-project --extra server
 
 COPY src/ src/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --extra server
 
 FROM python:3.13-slim AS runtime
 WORKDIR /app
