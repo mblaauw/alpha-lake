@@ -83,12 +83,18 @@ def _dataset_has_coverage(
     sid: str,
     from_date: str = "",
     to_date: str = "",
+    source_id: str | None = None,
 ) -> bool:
     """Check if canonical *table* already has data for *sid* in [from_date, to_date].
 
     When both date bounds are empty, checks for *any* row with that ID.
+    When *source_id* is given, also checks ``source_id`` column — this
+    prevents source-blind false positives (e.g. Finnhub news causing
+    Marketaux news to be skipped).
     Returns ``True`` when all requested data already exists — caller can skip.
     """
+    source_clause = " AND source_id = ?" if source_id else ""
+    source_params = [source_id] if source_id else []
     try:
         if from_date or to_date:
             rows = con.execute(
@@ -96,16 +102,17 @@ def _dataset_has_coverage(
                     WHERE {id_col} = ?
                       AND (? = '' OR effective_date >= DATE(?))
                       AND (? = '' OR effective_date <= DATE(?))
+                      {source_clause}
                     LIMIT 1""",
-                [sid, from_date, from_date, to_date, to_date],
+                [sid, from_date, from_date, to_date, to_date, *source_params],
             ).fetchall()
             return len(rows) > 0
         rows = con.execute(
-            f"SELECT 1 FROM {table} WHERE {id_col} = ? LIMIT 1",
-            [sid],
+            f"SELECT 1 FROM {table} WHERE {id_col} = ? {source_clause} LIMIT 1",
+            [sid, *source_params],
         ).fetchall()
         return len(rows) > 0
-    except duckdb.CatalogException:
+    except Exception:
         return False
 
 
@@ -474,18 +481,28 @@ def ingest_dataset(
     if dataset == "macro_series":
         _id_col = "series_id"
         _id_val = series_id or "GDP"
-    elif dataset in ("news", "sentiment", "insider_tx", "analyst_estimates", "attention_metrics"):
+    elif dataset in ("insider_tx", "analyst_estimates", "fundamentals"):
         _id_col = "security_id"
         _id_val = security_id or "AAPL"
     elif dataset == "economic_calendar":
         _id_col = "event_id"
         _id_val = ""
-    elif dataset == "fundamentals":
-        _id_col = "security_id"
-        _id_val = security_id or "AAPL"
     elif dataset == "earnings_calendar":
         _id_col = "security_id"
         _id_val = security_id or ""
+
+    # News and sentiment don't have a security_id column — check by source + date
+    if dataset in ("news", "sentiment", "attention_metrics"):
+        covered = _dataset_has_coverage(
+            con,
+            _table,
+            "source_id",
+            src,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if covered:
+            return 0
 
     if _id_col and _id_val:
         covered = _dataset_has_coverage(
@@ -495,6 +512,7 @@ def ingest_dataset(
             _id_val,
             from_date=from_date,
             to_date=to_date,
+            source_id=src,
         )
         if covered:
             return 0
