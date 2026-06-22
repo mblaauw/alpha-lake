@@ -6,6 +6,8 @@ A standalone, tri-temporal, replayable **market-data lakehouse**. It ingests, ar
 
 **Current architectural decision:** Alpha-Lake is **stack-first**. The Compose stack is the v0.1 reference runtime. Embedded local execution is retained only for tests, debugging, fixture generation, and golden replay.
 
+> **Note on aspirational content:** Sections marked with a dagger (†) describe target architecture not yet fully built. The source of truth for what's shipped is the actual code in `src/` and `config/`.
+
 ### How to read this document
 
 Two registers, one source of truth:
@@ -161,7 +163,7 @@ Each stage maps to a Part II section: fetch §7–8, parse/validate §13, canoni
 
 # Part II — Implementation Reference
 
-## 7. Source registry (Zone 0)
+## 7. Source registry (Zone 0) †
 
 All source behavior is data, not code. One source row drives connector mechanics; one dataset-source row drives dataset-specific precedence, freshness, parser, contract, and reconciliation behavior.
 
@@ -548,7 +550,7 @@ Reader contracts (`read_bars_asof`, `read_bars_adjusted`, `read_panel`, `read_as
 | v2 | Python SDK wrapping REST transport | Future |
 | v3 | Arrow Flight SQL / ADBC (bulk optimization) | Future |
 
-## 19. Orchestration — flow functions, thin shells
+## 19. Orchestration — flow functions, thin shells †
 
 Pipeline logic lives once in `flows/`. Shells wrap the same flow functions with no duplicated logic. The **Typer CLI inside the app container is the first operational shell** because it is the simplest way to prove the vertical slice against the real stack. Dagster is added after the core ingestion and PIT reader are correct.
 
@@ -587,7 +589,7 @@ Observability is lightweight and dependency-light:
 
 **Mode-parity guard:** `tests/integration/test_mode_parity.py` verifies that the embedded and stack runtimes produce identical canonical values after ingesting the same data, and that stack-mode raw archive blobs are *not* present on the local filesystem (they live in RustFS). This test is the structural guard against storage split-brain regressions. It runs only when the Docker stack is available; otherwise it skips.
 
-## 22. Configuration & secrets
+## 22. Configuration & secrets †
 
 Configuration is explicit about runtime shape. `stack` is the default; `embedded` is accepted only for tests, replay, and debugging.
 
@@ -731,7 +733,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 
 Each phase ships only when the golden replay hash is stable and boundary tests are green. See [`docs/adr/README.md`](docs/adr/README.md) and the [Alpha-Lake Project Board](https://github.com/users/mblaauw/projects/4) for the current phase and completed milestones. The build order is: stack skeleton → bars vertical slice → embedded replay harness → identity & actions → remaining datasets → serving surface → orchestration → packaging & air-gap.
 
-## 29. Tech stack
+## 29. Tech stack †
 
 | Concern | Choice |
 |---|---|

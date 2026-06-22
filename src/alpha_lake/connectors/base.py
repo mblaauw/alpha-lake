@@ -59,7 +59,7 @@ def _load_ledger() -> None:
             data = json.load(f)
             for source_id, timestamps in data.items():
                 _CALL_LEDGER[source_id] = timestamps
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError, json.JSONDecodeError:
         pass
 
 
@@ -124,10 +124,10 @@ def check_budget(cfg: SourceConfig) -> None:
 
 
 def call_ledger_summary(source_id: str | None = None) -> dict[str, dict[str, int]]:
-    """Return per-source call counts and remaining budgets.
+    """Return per-source call counts.
 
     Returns dict mapping source_id -> {calls_this_run, calls_last_min,
-    calls_last_day, remaining_daily_budget}.
+    calls_last_day}.
     """
     _load_ledger()
     now = time.time()
@@ -297,7 +297,7 @@ async def fetch_windowed(
                         if val:
                             seen.add(val)
                     rf.body = json.dumps(data).encode()
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError, TypeError:
                 pass
 
     return chunks
