@@ -272,16 +272,16 @@ max_retries = 3
 
 [source_datasets.finnhub]
 [source_datasets.finnhub.news]
-enabled = false
+enabled = true
 parser_version = 1
 [source_datasets.finnhub.sentiment]
-enabled = false
+enabled = true
 parser_version = 1
 [source_datasets.finnhub.analyst_estimates]
-enabled = false
+enabled = true
 parser_version = 1
 [source_datasets.finnhub.insider_tx]
-enabled = false
+enabled = true
 parser_version = 1
 
 [source_datasets.marketaux]

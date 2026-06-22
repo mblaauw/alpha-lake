@@ -402,14 +402,12 @@ def ingest_dataset(
     elif dataset == "economic_calendar":
         kwargs["from_date"] = from_date or ""
         kwargs["to_date"] = to_date or ""
-    elif security_id:
-        kwargs["symbol"] = security_id
-        kwargs["from_date"] = from_date
-        kwargs["to_date"] = to_date
     else:
         kwargs["symbol"] = security_id or "AAPL"
-        kwargs["from_date"] = from_date
-        kwargs["to_date"] = to_date
+        if from_date:
+            kwargs["from_date"] = from_date
+        if to_date:
+            kwargs["to_date"] = to_date
 
     raw_fetch = asyncio.run(connector(**kwargs))
     raw_bytes = raw_fetch.body
@@ -418,8 +416,14 @@ def ingest_dataset(
     raw_data = json.loads(raw_bytes)
     if dataset == "macro_series" and isinstance(raw_data, dict):
         records = raw_data.get("observations", [raw_data])
+    elif dataset == "insider_tx" and isinstance(raw_data, dict):
+        records = raw_data.get("data", [raw_data])
+    elif isinstance(raw_data, dict):
+        records = [raw_data]
     else:
-        records = raw_data if isinstance(raw_data, list) else [raw_data]
+        records = raw_data
+
+    fetch_id = raw_fetch.manifest.get("request_params_hash", f"fetch_{run_id}")
 
     if dataset == "macro_series":
         from alpha_lake.normalize import macro_series_from_json
@@ -428,7 +432,53 @@ def ingest_dataset(
             raw=records,
             series_id=kwargs.get("series_id", series_id or "GDP"),
             source_id=src,
-            source_fetch_id=raw_fetch.manifest.get("request_params_hash", f"fetch_{run_id}"),
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "news":
+        from alpha_lake.normalize import news_from_json
+
+        df = news_from_json(
+            raw=records,
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "sentiment":
+        from alpha_lake.normalize import sentiment_from_news
+
+        df = sentiment_from_news(
+            raw=records,
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "analyst_estimates":
+        from alpha_lake.normalize import analyst_estimates_from_json
+
+        df = analyst_estimates_from_json(
+            raw=records,
+            security_id=kwargs.get("symbol", security_id or "AAPL"),
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "insider_tx":
+        from alpha_lake.normalize import insider_tx_from_json
+
+        df = insider_tx_from_json(
+            raw=records,
+            security_id=kwargs.get("symbol", security_id or "AAPL"),
+            source_id=src,
+            source_fetch_id=fetch_id,
             ingestion_run_id=run_id,
             content_hash=content_hash,
             available_at=clock_now,
@@ -436,4 +486,9 @@ def ingest_dataset(
     else:
         raise ValueError(f"No normalize function wired for dataset '{dataset}'")
 
-    return write_dataset(con, dataset, df)
+    table_aliases = {
+        "news": "news_articles",
+        "sentiment": "sentiment_annotations",
+    }
+    table = table_aliases.get(dataset, dataset)
+    return write_dataset(con, table, df)
