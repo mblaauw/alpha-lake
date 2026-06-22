@@ -146,16 +146,20 @@ cross_source_enabled = false
 [sources.eodhd]
 base_url = "https://eodhd.com/api"
 rate_limit_per_sec = 10.0
+rate_limit_per_day = 1000
 max_retries = 3
 
 [sources.tiingo]
 base_url = "https://api.tiingo.com"
-rate_limit_per_sec = 5.0
+rate_limit_per_sec = 0.5
+rate_limit_per_min = 30
+rate_limit_per_day = 500
 max_retries = 3
 
 [sources.alpaca]
 base_url = "https://data.alpaca.markets"
-rate_limit_per_sec = 20.0
+rate_limit_per_sec = 1.0
+rate_limit_per_min = 200
 max_retries = 3
 
 [sources.sec]
@@ -165,12 +169,14 @@ max_retries = 5
 
 [sources.openfigi]
 base_url = "https://api.openfigi.com/v3"
-rate_limit_per_sec = 10.0
+rate_limit_per_sec = 0.33
+rate_limit_per_min = 20
 max_retries = 3
 
 [sources.reddit]
 base_url = "https://oauth.reddit.com"
 rate_limit_per_sec = 1.0
+rate_limit_per_min = 10
 max_retries = 3
 
 [sources.stocktwits]
