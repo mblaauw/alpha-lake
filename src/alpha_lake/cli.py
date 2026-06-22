@@ -273,6 +273,25 @@ def health():
             checks.setdefault("datasets_list", []).append(ds)
         if ds_rows:
             table("Catalog Tables", ["Dataset", "Schema", "Rows"], ds_rows)
+
+        # Per-source last ingestion timestamps
+        from alpha_lake.canonical import DATASETS
+
+        ingest_rows = []
+        for dname, ds in sorted(DATASETS.items()):
+            table_name = ds.table
+            try:
+                r = con.execute(
+                    f"SELECT source_id, MAX(available_at)::varchar FROM {table_name} "
+                    f"WHERE available_at IS NOT NULL GROUP BY source_id ORDER BY source_id"
+                ).fetchall()
+                for src_id, last_at in r:
+                    ingest_rows.append([dname, src_id, last_at[:19] if last_at else "-"])
+                    checks.setdefault("last_ingestion", {}).setdefault(src_id, {})[dname] = last_at
+            except Exception:
+                pass
+        if ingest_rows:
+            table("Last Ingestion", ["Dataset", "Source", "Last Ingested At"], ingest_rows)
         con.close()
     except Exception:
         pass
