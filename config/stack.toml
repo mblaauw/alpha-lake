@@ -294,20 +294,20 @@ parser_version = 1
 
 [source_datasets.fmp]
 [source_datasets.fmp.economic_calendar]
-enabled = false
+enabled = true
 parser_version = 1
 [source_datasets.fmp.analyst_estimates]
-enabled = false
+enabled = true
 parser_version = 1
 
 [source_datasets.stocktwits]
 [source_datasets.stocktwits.sentiment]
-enabled = false
+enabled = true
 parser_version = 1
 
 [source_datasets.apewisdom]
 [source_datasets.apewisdom.attention_metrics]
-enabled = false
+enabled = true
 parser_version = 1
 
 [source_datasets.quiver]

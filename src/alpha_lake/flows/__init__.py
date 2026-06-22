@@ -402,6 +402,10 @@ def ingest_dataset(
     elif dataset == "economic_calendar":
         kwargs["from_date"] = from_date or ""
         kwargs["to_date"] = to_date or ""
+    elif dataset == "attention_metrics":
+        kwargs["ticker"] = security_id or "AAPL"
+    elif dataset == "sentiment" and src == "stocktwits":
+        kwargs["symbol"] = security_id or "AAPL"
     else:
         kwargs["symbol"] = security_id or "AAPL"
         if from_date:
@@ -418,6 +422,10 @@ def ingest_dataset(
         records = raw_data.get("observations", [raw_data])
     elif dataset == "insider_tx" and isinstance(raw_data, dict):
         records = raw_data.get("data", [raw_data])
+    elif dataset == "sentiment" and src == "stocktwits" and isinstance(raw_data, dict):
+        records = raw_data.get("messages", [raw_data])
+    elif dataset == "attention_metrics" and src == "apewisdom" and isinstance(raw_data, dict):
+        records = raw_data.get("results", [raw_data])
     elif src == "marketaux" and isinstance(raw_data, dict):
         records = raw_data.get("data", [raw_data])
     elif isinstance(raw_data, dict):
@@ -474,6 +482,18 @@ def ingest_dataset(
                 content_hash=content_hash,
                 available_at=clock_now,
             )
+        elif src == "stocktwits":
+            from alpha_lake.normalize import stocktwits_sentiment_from_json
+
+            df = stocktwits_sentiment_from_json(
+                raw=records,
+                symbol=kwargs.get("symbol", security_id or "AAPL"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
         else:
             from alpha_lake.normalize import sentiment_from_news
 
@@ -485,6 +505,29 @@ def ingest_dataset(
                 content_hash=content_hash,
                 available_at=clock_now,
             )
+    elif dataset == "economic_calendar":
+        from alpha_lake.normalize import economic_calendar_from_json
+
+        df = economic_calendar_from_json(
+            raw=records,
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "attention_metrics":
+        from alpha_lake.normalize import apewisdom_attention_from_json
+
+        df = apewisdom_attention_from_json(
+            raw=records,
+            ticker=kwargs.get("ticker", security_id or "AAPL"),
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
     elif dataset == "analyst_estimates":
         from alpha_lake.normalize import analyst_estimates_from_json
 

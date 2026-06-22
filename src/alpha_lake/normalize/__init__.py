@@ -79,6 +79,8 @@ def economic_calendar_from_json(
         )
 
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -219,6 +221,8 @@ def sentiment_from_news(
             }
         )
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -364,6 +368,8 @@ def analyst_estimates_from_json(
             }
         )
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -407,6 +413,100 @@ def insider_tx_from_json(
                 "quality_status": "valid",
             }
         )
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def stocktwits_sentiment_from_json(
+    raw: list[dict[str, Any]],
+    symbol: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        msg_id = record.get("id")
+        if not msg_id:
+            continue
+        sentiment_map = {"Bullish": 1.0, "Bearish": -1.0}
+        sent = record.get("sentiment")
+        sent_score = sentiment_map.get(sent, 0.0)
+        body = record.get("body", "")
+        created = (record.get("created_at") or "").replace("Z", "")
+        rows.append(
+            {
+                "annotation_id": f"{source_id}_{msg_id}",
+                "effective_date": created[:10] if created else "",
+                "available_at": available_at,
+                "source_id": source_id,
+                "annotation_kind": "social_sentiment",
+                "sentiment_score": sent_score,
+                "sentiment_label": sent or "Neutral",
+                "model_version": None,
+                "prompt_version": None,
+                "taxonomy_version": None,
+                "input_text_hash": _text_hash(body),
+                "source_dataset_version": None,
+                "security_id": symbol,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def apewisdom_attention_from_json(
+    raw: list[dict[str, Any]],
+    ticker: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        rows.append(
+            {
+                "security_id": ticker,
+                "effective_date": available_at.strftime("%Y-%m-%d"),
+                "available_at": available_at,
+                "source_id": source_id,
+                "cohort": "all",
+                "mentions": int(record.get("mentions", 0)),
+                "mentions_24h_ago": int(record.get("mentions_24h_ago", 0)),
+                "rank": record.get("rank"),
+                "rank_24h_ago": record.get("rank_24h_ago"),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
     df = pl.DataFrame(rows)
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
