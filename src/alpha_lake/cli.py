@@ -201,6 +201,28 @@ def health():
     else:
         checks["runtime_check"] = "embedded"
 
+    from alpha_lake.connectors import has_api_key
+
+    source_rows = []
+    for source_id, sc in sorted(cfg.sources.items()):
+        has = has_api_key(source_id)
+        if sc.requires_key and not has:
+            icon = "[red]\u2717[/]"
+            status = "missing API key"
+        elif sc.requires_key and has:
+            icon = "[green]\u2713[/]"
+            status = "configured (keyed)"
+        else:
+            icon = "[green]\u2713[/]"
+            status = "configured (keyless)"
+        source_rows.append([source_id, f"{icon} {status}"])
+        checks.setdefault("sources", {})[source_id] = {
+            "has_key": has,
+            "requires_key": sc.requires_key,
+        }
+    if source_rows:
+        table("Sources", ["Source", "Status"], source_rows)
+
     rows = []
     for name, qc in cfg.quality.items():
         rows.append([name, str(qc.max_staleness_days) + "d", "", ""])
