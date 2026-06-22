@@ -406,11 +406,28 @@ def ingest_dataset(
         kwargs["ticker"] = security_id or "AAPL"
     elif dataset == "sentiment" and src == "stocktwits":
         kwargs["symbol"] = security_id or "AAPL"
-    else:
-        kwargs["symbol"] = security_id or "AAPL"
+    elif dataset == "social_posts" and src == "reddit":
+        kwargs["subreddit"] = security_id or "wallstreetbets"
+    elif dataset in ("insider_tx", "fundamentals") and src == "sec":
+        kwargs["cik"] = security_id or "0000320193"
+    elif dataset == "news" and src == "tiingo":
+        kwargs["tickers"] = security_id or "AAPL"
+        if from_date:
+            kwargs["start_date"] = from_date
+        if to_date:
+            kwargs["end_date"] = to_date
+    elif dataset in ("earnings_calendar",) and not security_id:
         if from_date:
             kwargs["from_date"] = from_date
         if to_date:
+            kwargs["to_date"] = to_date
+    elif dataset == "congress_trades":
+        pass
+    else:
+        kwargs["symbol"] = security_id or "AAPL"
+        if from_date and dataset not in ("analyst_estimates", "insider_tx"):
+            kwargs["from_date"] = from_date
+        if to_date and dataset not in ("analyst_estimates", "insider_tx"):
             kwargs["to_date"] = to_date
 
     raw_fetch = asyncio.run(connector(**kwargs))

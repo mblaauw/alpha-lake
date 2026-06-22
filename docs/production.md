@@ -90,7 +90,7 @@ export ALPHA_LAKE_CONFIG=config/embedded.toml
 just ingest --security-id AAPL --from-date 2026-01-01 --to-date 2026-06-22
 
 # Backfill date range
-just run python -m alpha_lake.cli backfill-bars --security-ids AAPL,MSFT --start-date 2026-01-01 --end-date 2026-06-01
+docker compose run --rm app backfill-bars --security-ids AAPL,MSFT --start-date 2026-01-01 --end-date 2026-06-01
 ```
 
 ### Generic Datasets
@@ -171,8 +171,8 @@ docker compose exec -T postgres psql -U lake lake_catalog < backup_catalog.sql
 ### Raw Archives & Canonical Data (RustFS/S3)
 
 ```bash
-# Snapshot the RustFS data volume
-docker compose run --rm -v $(pwd):/backup rustfs tar czf /backup/rustfs_backup.tar.gz /data
+# Back up the RustFS data volume
+docker run --rm -v alpha-lake_rustfs-data:/data -v $(pwd):/backup alpine tar czf /backup/rustfs_backup.tar.gz /data
 
 # Or use AWS CLI for S3-backed storage:
 aws s3 sync s3://lake/backups/ s3://lake/ --profile alpha-lake
@@ -180,7 +180,7 @@ aws s3 sync s3://lake/backups/ s3://lake/ --profile alpha-lake
 
 ### Point-in-Time Recovery
 
-Canonical data is bitemporal — historical queries using `as_of` work automatically.
+Canonical data is tri-temporal — historical queries using `as_of` work automatically.
 Full replay from raw archives is supported:
 
 ```bash
@@ -227,12 +227,11 @@ Use `docker compose run --rm app <command>` instead of `exec`.
 
 ## Dagster Integration (Optional)
 
-```bash
-# Start Dagster
-docker compose -f docker-compose.yml -f docker-compose.dagster.yml up -d
+Dagster support is defined in ``src/alpha_lake/dagster_assets.py`` but the
+Dagster Compose overlay is not yet published. To run Dagster:
 
-# Access UI at http://localhost:3000
+```bash
+# TBD — dagster compose overlay not yet implemented
 ```
 
-Dagster assets mirror the CLI commands and run on a schedule.
-See `src/alpha_lake/dagster_assets.py` for defined assets.
+See ``src/alpha_lake/dagster_assets.py`` for the defined assets.

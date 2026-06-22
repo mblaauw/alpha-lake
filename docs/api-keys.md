@@ -139,19 +139,19 @@ Each source's rate limits are configured in `config/stack.toml` under `[sources.
 
 | Source | Rate limit (sec) | Rate limit (min) | Rate limit (day) | Max retries |
 |--------|------------------|------------------|------------------|-------------|
-| EODHD | 10/s | — | — | 3 |
-| Tiingo | 5/s | — | — | 3 |
-| Alpaca | 20/s | — | — | 3 |
+| EODHD | 10/s | — | 1000/day | 3 |
+| Tiingo | 0.5/s | 30/min | 500/day | 3 |
+| Alpaca | 1/s | 200/min | — | 3 |
 | SEC | 10/s | — | — | 5 |
-| OpenFIGI | 10/s | — | — | 3 |
-| Reddit | 1/s | — | — | 3 |
+| OpenFIGI | 0.33/s | 20/min | — | 3 |
+| Reddit | 1/s | 10/min | — | 3 |
 | StockTwits | 1/s | — | — | 3 |
 | ApeWisdom | 1/s | — | — | 3 |
-| Quiver | 1/s | — | 100 | 3 |
-| Marketaux | 1/s | — | 100 | 3 |
+| Quiver | 1/s | — | 100/day | 3 |
+| Marketaux | 1/s | — | 100/day | 3 |
 | Finnhub | 1/s | 55/min | — | 3 |
-| FMP | 5/s | — | 250 | 3 |
-| FRED | 5/s | — | 120000 | 3 |
+| FMP | 5/s | — | 250/day | 3 |
+| FRED | 5/s | — | 120000/day | 3 |
 
 Rate-limit budgets are enforced client-side; hitting the daily quota produces a
 `data_gap` outcome rather than a hard failure.

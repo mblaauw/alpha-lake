@@ -75,7 +75,7 @@ def test_sentiment_ratios():
     )
     result = compute_sentiment_ratios(data, as_of=datetime(2024, 1, 20, tzinfo=UTC))
     assert not result.is_empty()
-    assert result["bull_ratio"][0] == 0.5
+    assert result["positive_ratio"][0] == 0.5
     assert result["mean_score"][0] == pytest.approx(0.1)
 
 

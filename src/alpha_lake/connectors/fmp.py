@@ -1,3 +1,9 @@
+"""Financial Modeling Prep connector.
+
+Note: Both analyst-estimates and economic-calendar endpoints require a paid
+FMP subscription. Free-tier keys will receive 402/403 responses.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,7 +26,7 @@ async def fetch_analyst_ratings(symbol: str) -> RawFetch:
         "symbol": symbol,
     }
     async with build_client(cfg) as client:
-        endpoint = "/v3/analyst-stock-recommendations"
+        endpoint = "/analyst-estimates"
         response = await fetch_with_retry(client, endpoint, params=params)
         manifest = build_manifest(
             "fmp",
@@ -39,9 +45,11 @@ async def fetch_economic_calendar(
 ) -> RawFetch:
     """Fetch economic calendar events from Financial Modeling Prep.
 
-    Uses the keyed endpoint at ``/v3/economic-calendar`` with ``apikey``
+    Uses the keyed endpoint at ``/economic-calendar`` with ``apikey``
     as a query parameter. Returns a single ``RawFetch`` with the full
     window; callers should use ``fetch_windowed()`` for large ranges.
+
+    Note: Requires a paid FMP subscription. Free-tier keys return 402.
     """
     cfg = get_source("fmp")
     check_budget(cfg)
@@ -55,7 +63,7 @@ async def fetch_economic_calendar(
         params["to"] = to_date
 
     async with build_client(cfg) as client:
-        endpoint = "/v3/economic-calendar"
+        endpoint = "/economic-calendar"
         response = await fetch_with_retry(client, endpoint, params=params)
         manifest = build_manifest(
             "fmp",

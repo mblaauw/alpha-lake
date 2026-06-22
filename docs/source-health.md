@@ -20,7 +20,7 @@ status. This file is the single source of truth for source availability.
 | SEC EDGAR | `https://data.sec.gov` | live | 2026-06-21 | Fundamentals + insider filings. UA required. |
 | OpenFIGI | `https://api.openfigi.com/v3` | live | 2026-06-21 | Identifier resolution. |
 | FRED | `https://api.stlouisfed.org/fred` | live | 2026-06-21 | Macro series. Keyless fallback available. |
-| FMP | `https://financialmodelingprep.com/api/v3` | live | 2026-06-21 | Economic calendar + analyst ratings. |
+| FMP | `https://financialmodelingprep.com/stable` | live (paid) | 2026-06-21 | Economic calendar + analyst ratings. Requires paid plan. |
 | Finnhub | `https://finnhub.io/api/v1` | live | 2026-06-21 | News, analyst estimates, insider sentiment. |
 | Marketaux | `https://api.marketaux.com/v1` | live | 2026-06-21 | News + sentiment. Strict daily quota (100). |
 | StockTwits | `https://api.stocktwits.com/api/2` | live | 2026-06-21 | Keyless social sentiment tags. |

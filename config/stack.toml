@@ -263,7 +263,7 @@ rate_limit_per_min = 55
 max_retries = 3
 
 [sources.fmp]
-base_url = "https://financialmodelingprep.com/api/v3"
+base_url = "https://financialmodelingprep.com/stable"
 rate_limit_per_sec = 5.0
 rate_limit_per_day = 250
 max_retries = 3

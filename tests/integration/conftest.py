@@ -1,3 +1,6 @@
+import pytest
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--run-live",
@@ -14,6 +17,3 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip_live)
-
-
-import pytest  # noqa: E402 (needed for the skip marker above)

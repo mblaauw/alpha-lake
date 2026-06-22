@@ -12,10 +12,10 @@ context on **every** turn. Detail lives in skills (pull) and `@`-referenced file
 
 ## Project snapshot
 
-Alpha-Lake is a stack-first, bitemporal, replayable **market-data lakehouse**. It ingests, archives,
+Alpha-Lake is a stack-first, tri-temporal, replayable **market-data lakehouse**. It ingests, archives,
 validates, and serves **point-in-time-correct** market facts. It owns facts; it knows nothing about strategy.
 
-Stack: Python 3.14 · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
+Stack: Python 3.13+ · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
 httpx connectors · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
 Dagster (optional).
 
@@ -54,6 +54,7 @@ Use these; do not invent commands and do not install Postgres / RustFS / DuckDB 
 just up | down | reset | logs        # reference stack lifecycle
 just bootstrap | ingest | health     # operate the lake
 just test *[path]                    # unit + integration (embedded)
+just test-integration *[path]        # live API tests (--run-live)
 just replay *[path]                  # golden replay (tests/replay/)
 just freeze-fixtures                 # freeze golden replay fixtures
 just lint                            # ruff + ty + import-linter
@@ -71,7 +72,7 @@ docker compose run --rm app <subcommand> [args]
 **Config changes require rebuild.** When you modify `config/stack.toml` or `src/` files, run
 `docker compose build app` before `just up` so the container picks up the changes.
 
-Air-gap: `just vendor` online → copy `vendor/` → `just up --offline`. Nothing touches the network at runtime.
+Air-gap: `just vendor` online → copy `vendor/` → `just up` (no network at runtime).
 
 ## Invariants — mandatory, every turn
 

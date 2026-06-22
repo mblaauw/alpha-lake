@@ -40,6 +40,8 @@ def macro_series_from_json(
         )
 
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -125,6 +127,8 @@ def bars_from_json(
         )
 
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -172,6 +176,8 @@ def news_from_json(
             }
         )
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
@@ -508,6 +514,8 @@ def apewisdom_attention_from_json(
     if not rows:
         return pl.DataFrame()
     df = pl.DataFrame(rows)
+    if df.is_empty():
+        return pl.DataFrame()
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),

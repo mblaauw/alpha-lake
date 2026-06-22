@@ -138,14 +138,14 @@ def compute_sentiment_ratios(
     sentiment: pl.DataFrame,
     as_of: datetime,
 ) -> pl.DataFrame:
-    """Per-symbol per-day bull/bear tag ratio and mean news score.
+    """Per-symbol per-day positive/negative tag ratio and mean news score.
 
     ``sentiment`` must contain ``security_id``, ``effective_date``,
     ``available_at``, ``annotation_kind``, ``sentiment_score``,
     ``sentiment_label``.
 
     Returns:
-        ``bull_ratio`` (bullish / total tagged messages),
+        ``positive_ratio`` (positive / total tagged messages),
         ``mean_score`` (average sentiment score) per
         ``(security_id, effective_date)``.
     """
@@ -159,10 +159,10 @@ def compute_sentiment_ratios(
             total = len(day_rows)
             if total == 0:
                 continue
-            bullish = day_rows.filter(
+            tagged_positive = day_rows.filter(
                 pl.col("sentiment_label").str.to_lowercase().str.contains("bullish")
             )
-            bull_ratio = len(bullish) / total if total > 0 else None
+            positive_ratio = len(tagged_positive) / total if total > 0 else None
             mean_score = day_rows["sentiment_score"].mean()
 
             rows.append(
@@ -171,7 +171,7 @@ def compute_sentiment_ratios(
                     "effective_date": dt,
                     "available_at": as_of,
                     "source_id": "derived",
-                    "bull_ratio": bull_ratio,
+                    "positive_ratio": positive_ratio,
                     "mean_score": mean_score,
                     "total_messages": total,
                     "source_fetch_id": "",

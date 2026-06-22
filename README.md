@@ -31,8 +31,8 @@ exercised end-to-end against real endpoints.
 |--------|---------|
 | EODHD | `ALPHA_LAKE_EODHD_API_KEY` |
 | Tiingo | `ALPHA_LAKE_TIINGO_API_KEY` |
-| Alpaca | `ALPHA_LAKE_ALPACA_API_KEY` |
-| Reddit | `ALPHA_LAKE_REDDIT_CLIENT_ID`, `ALPHA_LAKE_REDDIT_CLIENT_SECRET` |
+| Alpaca | `ALPHA_LAKE_ALPACA_API_KEY_ID`, `ALPHA_LAKE_ALPACA_API_SECRET_KEY` |
+| Reddit | `ALPHA_LAKE_REDDIT_API_KEY` |
 
 ## Datasets & data suppliers
 
@@ -105,14 +105,15 @@ See [docs/operations.md](docs/operations.md) for operations guidance, memory siz
 | 0015 | Embedded mode demoted to test/debug/golden-replay harness | Accepted |
 | 0016 | Kubernetes is future target, not v0.1 development substrate | Accepted |
 | 0017 | Derived technical indicator library | Accepted |
-| 0018 | Derived news & social analytics layer | Accepted |
+| 0018 | Derived news & social analytics layer | Refined by ADR-0025 |
 | 0019 | Polars + Patito for DataFrame processing and model validation | Accepted |
 | 0020 | Trading calendar and timezone policy | Accepted |
 | 0021 | Snapshot retention, compaction, and pinned reproducibility | Accepted |
 | 0022 | Blob store — unified raw archive interface | Accepted |
 | 0023 | Dataset descriptor for unified canonical write | Accepted |
-| 0024 | SQL kernel macros over inline stored procedures | Accepted |
+| 0024 | Serving architecture — versioned SQL kernel, REST transport, API key auth | Accepted |
 | 0025 | Dataset support tiers | Accepted |
+| 0026 | Idempotent ingestion | Accepted |
 | 0027 | Structured JSON logging replaces OpenTelemetry as default observability | Accepted |
 
 ## Development
