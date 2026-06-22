@@ -22,7 +22,7 @@ def _load_ticker_cik_cache() -> None:
     try:
         with open(_TICKER_CIK_PATH) as f:
             _TICKER_CIK_CACHE = json.load(f)
-    except FileNotFoundError, json.JSONDecodeError:
+    except (FileNotFoundError, json.JSONDecodeError):
         _TICKER_CIK_CACHE = {}
 
 
@@ -99,29 +99,32 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
     Returns:
         security_id or None if not found.
     """
-    if as_of:
-        rows = con.execute(
-            """
-            SELECT security_id FROM security_master
-            WHERE symbol = ?
-              AND effective_start <= ?
-              AND (effective_end IS NULL OR effective_end > ?)
-            ORDER BY available_at DESC
-            LIMIT 1
-            """,
-            [symbol, as_of, as_of],
-        ).fetchall()
-    else:
-        rows = con.execute(
-            """
-            SELECT security_id FROM security_master
-            WHERE symbol = ?
-            ORDER BY available_at DESC
-            LIMIT 1
-            """,
-            [symbol],
-        ).fetchall()
-    return rows[0][0] if rows else None
+    try:
+        if as_of:
+            rows = con.execute(
+                """
+                SELECT security_id FROM security_master
+                WHERE symbol = ?
+                  AND effective_start <= ?
+                  AND (effective_end IS NULL OR effective_end > ?)
+                ORDER BY available_at DESC
+                LIMIT 1
+                """,
+                [symbol, as_of, as_of],
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                SELECT security_id FROM security_master
+                WHERE symbol = ?
+                ORDER BY available_at DESC
+                LIMIT 1
+                """,
+                [symbol],
+            ).fetchall()
+        return rows[0][0] if rows else None
+    except Exception:
+        return None
 
 
 def search(
@@ -147,31 +150,34 @@ def search(
     prefix_results: list[dict[str, str]] = []
     substring_results: list[dict[str, str]] = []
 
-    prefix_q = f"{query}%"
-    sql = f"""SELECT symbol, security_id, name FROM security_master
-              WHERE symbol LIKE ? {as_of_clause if as_of else ""}
-              ORDER BY symbol LIMIT ?"""
-    args = [prefix_q]
-    if as_of:
-        args.extend(params)
-    args.append(limit)
-    rows = con.execute(sql, args).fetchall()
-    prefix_results = [{"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows]
-
-    remaining = limit - len(prefix_results)
-    if remaining > 0:
-        sub_q = f"%{query}%"
+    try:
+        prefix_q = f"{query}%"
         sql = f"""SELECT symbol, security_id, name FROM security_master
-                  WHERE symbol LIKE ? AND symbol NOT LIKE ? {as_of_clause if as_of else ""}
+                  WHERE symbol LIKE ? {as_of_clause if as_of else ""}
                   ORDER BY symbol LIMIT ?"""
-        args = [sub_q, prefix_q]
+        args = [prefix_q]
         if as_of:
             args.extend(params)
-        args.append(remaining)
+        args.append(str(limit))
         rows = con.execute(sql, args).fetchall()
-        substring_results = [
-            {"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows
-        ]
+        prefix_results = [{"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows]
+
+        remaining = limit - len(prefix_results)
+        if remaining > 0:
+            sub_q = f"%{query}%"
+            sql = f"""SELECT symbol, security_id, name FROM security_master
+                      WHERE symbol LIKE ? AND symbol NOT LIKE ? {as_of_clause if as_of else ""}
+                      ORDER BY symbol LIMIT ?"""
+            args = [sub_q, prefix_q]
+            if as_of:
+                args.extend(params)
+            args.append(str(remaining))
+            rows = con.execute(sql, args).fetchall()
+            substring_results = [
+                {"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows
+            ]
+    except Exception:
+        pass
 
     return prefix_results + substring_results
 

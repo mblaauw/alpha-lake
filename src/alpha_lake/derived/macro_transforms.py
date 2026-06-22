@@ -96,7 +96,7 @@ def _date_shift_yearly(iso_date: str) -> str:
         parts = iso_date.split("-")
         year = int(parts[0]) - 1
         return f"{year}-{parts[1]}-{parts[2]}"
-    except IndexError, ValueError:
+    except (IndexError, ValueError):
         return ""
 
 
@@ -109,7 +109,7 @@ def _prev_month(iso_date: str) -> str:
             year -= 1
             month = 12
         return f"{year}-{month:02d}-{parts[2]}"
-    except IndexError, ValueError:
+    except (IndexError, ValueError):
         return ""
 
 
@@ -122,5 +122,5 @@ def _date_shift_monthly(iso_date: str) -> str:
             year -= 1
             month = 12
         return f"{year}-{month:02d}-{parts[2]}"
-    except IndexError, ValueError:
+    except (IndexError, ValueError):
         return ""

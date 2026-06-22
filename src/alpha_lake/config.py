@@ -74,6 +74,14 @@ class LakeConfig(pydantic.BaseModel):
 class TransportConfig(pydantic.BaseModel):
     dashboard_enabled: bool = False
 
+    @pydantic.model_validator(mode="after")
+    def _from_env(self) -> TransportConfig:
+        if not self.dashboard_enabled:
+            val = os.environ.get("ALPHA_LAKE_DASHBOARD_ENABLED", "").lower()
+            if val in ("1", "true", "yes"):
+                self.dashboard_enabled = True
+        return self
+
 
 class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
