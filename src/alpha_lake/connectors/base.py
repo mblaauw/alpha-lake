@@ -59,7 +59,7 @@ def _load_ledger() -> None:
             data = json.load(f)
             for source_id, timestamps in data.items():
                 _CALL_LEDGER[source_id] = timestamps
-    except FileNotFoundError, json.JSONDecodeError:
+    except (FileNotFoundError, json.JSONDecodeError):
         pass
 
 
@@ -297,7 +297,7 @@ async def fetch_windowed(
                         if val:
                             seen.add(val)
                     rf.body = json.dumps(data).encode()
-            except json.JSONDecodeError, TypeError:
+            except (json.JSONDecodeError, TypeError):
                 pass
 
     return chunks

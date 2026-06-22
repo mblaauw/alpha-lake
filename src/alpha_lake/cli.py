@@ -145,6 +145,35 @@ def reparse(
     con.close()
 
 
+@app.command(name="dataset", rich_help_panel="Data")
+def cli_ingest_dataset(
+    dataset: str = typer.Option(..., help="Dataset name (e.g. macro_series)"),
+    series_id: str = typer.Option(None, help="Series ID (for macro_series)"),
+    security_id: str = typer.Option(None, help="Security ID (for security-based datasets)"),
+    from_date: str = typer.Option("", help="Start date (YYYY-MM-DD)"),
+    to_date: str = typer.Option("", help="End date (YYYY-MM-DD)"),
+    source: str = typer.Option(None, help="Source ID"),
+):
+    """Ingest a dataset from its connector (macro_series, news, etc.)."""
+    _require_infra(get_config())
+    con = connect(get_config())
+    from alpha_lake.flows import ingest_dataset as _ingest
+
+    count = _ingest(
+        con,
+        dataset=dataset,
+        series_id=series_id,
+        security_id=security_id,
+        from_date=from_date,
+        to_date=to_date,
+        source_id=source,
+    )
+    panel(
+        "Ingest", f"Ingested [bold]{count}[/] rows for dataset [bold]{dataset}[/].", style="green"
+    )
+    con.close()
+
+
 @app.command(rich_help_panel="Data")
 def compact(table: str = typer.Option(..., help="Table to compact")):
     """Compact a canonical table by removing duplicate versions."""

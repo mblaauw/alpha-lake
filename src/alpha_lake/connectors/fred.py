@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 from datetime import date
 from typing import Any
 
@@ -44,9 +47,21 @@ async def fetch_macro_series(
         endpoint = "/fred/series/observations"
     else:
         endpoint = "/fredgraph.csv"
+        params.pop("file_type", None)
+        params.pop("realtime_start", None)
+        params.pop("realtime_end", None)
+        params["id"] = params.pop("series_id")
 
     async with build_client(cfg) as client:
         response = await fetch_with_retry(client, endpoint, params=params)
+        body = response.content
+        if not cfg.api_key:
+            raw = body.decode()
+            reader = csv.DictReader(io.StringIO(raw))
+            observations = [
+                {"date": row["observation_date"], "value": row.get(series_id, "")} for row in reader
+            ]
+            body = json.dumps({"observations": observations}).encode()
         manifest = build_manifest(
             "fred",
             endpoint,
@@ -56,4 +71,4 @@ async def fetch_macro_series(
             1,
             key_mode="keyed" if cfg.api_key else "keyless",
         )
-        return RawFetch(manifest=manifest, body=response.content)
+        return RawFetch(manifest=manifest, body=body)

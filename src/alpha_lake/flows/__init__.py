@@ -7,13 +7,13 @@ from typing import Any
 
 import duckdb
 
-from alpha_lake.canonical import DATASETS, write_bars
+from alpha_lake.canonical import DATASETS, write_bars, write_dataset
 from alpha_lake.clock import get_clock
 from alpha_lake.connectors import ConnectorFn, get_connector, has_api_key
 from alpha_lake.normalize import bars_from_json
 from alpha_lake.quality import check_market_sanity
 from alpha_lake.raw import archive
-from alpha_lake.source_registry import get_primary_source
+from alpha_lake.source_registry import get_primary_source, get_source_precedence
 
 StepCallback = Callable[[int, int | None, str], None]
 """``fn(current, total, label)`` called after each processing step.
@@ -355,3 +355,85 @@ def compact_dataset(con: duckdb.DuckDBPyConnection, table: str) -> int:
 
     _r = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     return _r[0] if _r else 0
+
+
+def ingest_dataset(
+    con: duckdb.DuckDBPyConnection,
+    dataset: str,
+    series_id: str | None = None,
+    security_id: str | None = None,
+    from_date: str = "",
+    to_date: str = "",
+    source_id: str | None = None,
+) -> int:
+    """Run the full ingestion pipeline for a generic dataset.
+
+    Fetches from the connector, archives raw data, normalizes to a
+    Polars DataFrame, and writes to the canonical table.
+    """
+    src = source_id
+    if not src:
+        precedence = get_source_precedence(dataset)
+        if precedence:
+            src = precedence[0]
+        else:
+            from alpha_lake.source_registry import get_dataset_sources
+
+            sources = get_dataset_sources(dataset)
+            if sources:
+                src = next(iter(sources))
+    if not src:
+        raise ValueError(f"No source configured for {dataset}")
+
+    connector = get_connector(src, dataset)
+    if not connector:
+        raise ValueError(f"No connector registered for {src}/{dataset}")
+
+    clock_now = get_clock().now()
+    run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
+
+    import json
+
+    kwargs: dict = {}
+    if dataset == "macro_series":
+        kwargs["series_id"] = series_id or "GDP"
+        kwargs["from_date"] = from_date
+        kwargs["to_date"] = to_date
+    elif dataset == "economic_calendar":
+        kwargs["from_date"] = from_date or ""
+        kwargs["to_date"] = to_date or ""
+    elif security_id:
+        kwargs["symbol"] = security_id
+        kwargs["from_date"] = from_date
+        kwargs["to_date"] = to_date
+    else:
+        kwargs["symbol"] = security_id or "AAPL"
+        kwargs["from_date"] = from_date
+        kwargs["to_date"] = to_date
+
+    raw_fetch = asyncio.run(connector(**kwargs))
+    raw_bytes = raw_fetch.body
+    content_hash = archive(raw_bytes)
+
+    raw_data = json.loads(raw_bytes)
+    if dataset == "macro_series" and isinstance(raw_data, dict):
+        records = raw_data.get("observations", [raw_data])
+    else:
+        records = raw_data if isinstance(raw_data, list) else [raw_data]
+
+    if dataset == "macro_series":
+        from alpha_lake.normalize import macro_series_from_json
+
+        df = macro_series_from_json(
+            raw=records,
+            series_id=kwargs.get("series_id", series_id or "GDP"),
+            source_id=src,
+            source_fetch_id=raw_fetch.manifest.get("request_params_hash", f"fetch_{run_id}"),
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    else:
+        raise ValueError(f"No normalize function wired for dataset '{dataset}'")
+
+    return write_dataset(con, dataset, df)
