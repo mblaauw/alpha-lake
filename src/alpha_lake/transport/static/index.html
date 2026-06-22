@@ -1,37 +1,70 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lake Watch</title>
+<meta name="description" content="Alpha-Lake data-validation dashboard">
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="manifest" href="/static/manifest.webmanifest">
 </head>
 <body>
-<div id="app">
-  <header id="header">
-    <h1>Lake Watch</h1>
-    <div class="header-controls">
-      <select id="priceModeSelect">
+<div class="lw-page">
+  <header class="lw-masthead">
+    <div class="lw-mast-top">
+      <h1 class="lw-wordmark">
+        <span class="lw-wordmark-word">LAKE</span><span class="lw-wordmark-word">WATCH</span>
+      </h1>
+      <div class="lw-settings-wrap">
+        <button class="lw-settings-btn" id="lw-settings-btn" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <div class="lw-settings-pop" id="lw-settings-pop">
+          <div class="lw-settings-section">
+            <div class="lw-settings-label">Theme</div>
+            <div class="lw-settings-options">
+              <button class="lw-theme-btn" data-theme="dark">Dark</button>
+              <button class="lw-theme-btn" data-theme="light">Light</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lw-mast-date lw-mono" id="lw-header-time"></div>
+    <div class="lw-header-controls">
+      <select id="lw-price-mode">
         <option value="raw">raw</option>
         <option value="split_adjusted">split</option>
         <option value="total_return">total</option>
       </select>
-      <label class="as_of-label">
-        as_of
-        <input type="datetime-local" id="asOfInput" step="1">
-      </label>
-      <select id="snapshotSelect"><option value="">live</option></select>
+      <label>as_of <input type="datetime-local" id="lw-asof" step="1"></label>
+      <select id="lw-snapshot"><option value="">live</option></select>
     </div>
   </header>
-  <nav id="tabs">
-    <button class="tab active" data-tab="overview">Overview</button>
-    <button class="tab" data-tab="bars">Bars</button>
-    <button class="tab" data-tab="datasets">Datasets</button>
-    <button class="tab" data-tab="securities">Securities</button>
-    <button class="tab" data-tab="pit">PIT</button>
+
+  <nav id="lw-tabs">
+    <div class="lw-tabs" role="tablist">
+      <button class="lw-tab is-active" role="tab" data-tab="overview">
+        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Overview
+      </button>
+      <button class="lw-tab" role="tab" data-tab="bars">
+        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Bars
+      </button>
+      <button class="lw-tab" role="tab" data-tab="datasets">
+        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>Datasets
+      </button>
+      <button class="lw-tab" role="tab" data-tab="securities">
+        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>Securities
+      </button>
+      <button class="lw-tab" role="tab" data-tab="pit">
+        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>PIT
+      </button>
+    </div>
   </nav>
-  <main id="content"></main>
+
+  <main id="lw-content">
+    <div class="lw-loading">Loading</div>
+  </main>
 </div>
 <script src="/static/app.js"></script>
 </body>
