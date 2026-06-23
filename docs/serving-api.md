@@ -142,6 +142,11 @@ read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
 | `GET /v1/dashboard/snapshots` | — | Snapshot list |
 | `GET /v1/dashboard/bars` | `symbol`, `start`, `end`, `as_of`, `snapshot_id` | PIT bar data |
 | `GET /v1/dashboard/bars/indicators` | `symbol`, `indicators`, `start`, `end`, `as_of` | Bars with indicators |
+| `GET /v1/dashboard/bars/summary` | `symbol`, `as_of`, `price_mode` | Per-symbol card (last, RSI, SMA50, ATR, MACD, trend) |
+| `GET /v1/dashboard/attention/leaderboard` | `limit`, `as_of` | Sentiment leaderboard ranked by mentions |
+| `GET /v1/dashboard/macro/{series_id}` | `as_of`, `start`, `end` | FRED macro series observations |
+| `GET /v1/dashboard/insider/{symbol}` | `as_of`, `limit` | Insider transactions by ticker |
+| `GET /v1/dashboard/analyst/{symbol}` | `as_of`, `limit` | Analyst estimate consensus (strong_buy … target_low) |
 
 These endpoints mirror the authenticated `/v1/*` endpoints but are gated by the
 `dashboard_enabled` config flag. When disabled they return 404.

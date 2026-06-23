@@ -70,6 +70,7 @@ docker compose run --rm app <command>
 | Epic 374 | Source Expansion | Source expansion, derived metrics, multi-source reconciliation | P0 ✅ |
 | Epic 400 | Live Ops | Live API ingestion, integration tests, operational readiness | P0 ✅ |
 | Epic 415 | Lake Watch | Data-validation dashboard, REST server, serve command, PWA | P1 ✅ |
+| Epic 424 | Endpoint Gaps | price_mode toggle, macro/insider/analyst endpoints, docs sweep | P1 ✅ |
 
 Each epic closes with a cross-functional refinement gate (Dev, PO, Architect, UX, Systems Designer, Data Architect, Data Engineer) before the next epic begins. Gate checklists are in [docs/gates/](docs/gates/).
 

@@ -339,7 +339,7 @@ raw price 2025-01-01; split effective 2025-06-01; split available_at 2025-06-02
   as_of 2025-06-03 ⇒ split MAY be applied
 ```
 
-`price_mode ∈ {raw, split_adjusted, total_return_adjusted}`. Dividends are recorded; cash dividends do not restructure the raw OHLCV series. Adjustment is a pure function over the PIT action set.
+`price_mode ∈ {raw, split_adjusted, total_return}`. Dividends are recorded; cash dividends do not restructure the raw OHLCV series. Adjustment is a pure function over the PIT action set.
 
 ## 13. Validation, quarantine, reconciliation
 
@@ -580,6 +580,11 @@ Read-only, dev-only, air-gap safe. No build step, no CDN, no npm.
 | `GET /v1/dashboard/snapshots` | `catalog.list_snapshots` | Snapshot list for reproducible inspection |
 | `GET /v1/dashboard/bars` | `read_bars_asof` | PIT bar data (mirrors `/v1/bars` without auth) |
 | `GET /v1/dashboard/bars/indicators` | Indicators pipeline | Bar data with indicator overlays (mirrors `/v1/bars/indicators` without auth) |
+| `GET /v1/dashboard/bars/summary` | `read_bars_adjusted` + indicators | Per-symbol card (last, RSI, SMA50, ATR, MACD, vol, trend) |
+| `GET /v1/dashboard/attention/leaderboard` | `compute_attention_deltas` + `compute_sentiment_ratios` | Sentiment leaderboard ranked by mentions |
+| `GET /v1/dashboard/macro/{series_id}` | `read_macro_series_asof` | FRED macro series PIT observations |
+| `GET /v1/dashboard/insider/{symbol}` | `pit_read` (insider_tx) | Insider transactions by ticker |
+| `GET /v1/dashboard/analyst/{symbol}` | `pit_read` (analyst_estimates) | Analyst estimate consensus |
 
 **Tabs:** Overview (dataset health) | Bars (chart + indicators + watchlist) | Datasets (lineage rows) | Securities (per-symbol aggregation) | PIT (as_of playground with snapshots)
 
