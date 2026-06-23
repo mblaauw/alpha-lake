@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+import duckdb  # type: ignore[unresolved-import]
 import polars as pl  # type: ignore[unresolved-import]
 from fastapi import APIRouter, HTTPException  # type: ignore[unresolved-import]
 from fastapi.responses import JSONResponse  # type: ignore[unresolved-import]
@@ -36,13 +37,19 @@ from alpha_lake.transport._shared import (
 router = APIRouter(prefix="/v1/dashboard")
 
 
+_connection: duckdb.DuckDBPyConnection | None = None
+
+
 def _check_enabled() -> None:
     if not get_config().transport.dashboard_enabled:
         raise HTTPException(404)
 
 
-def _get_con():
-    return connect(get_config())
+def _get_con() -> duckdb.DuckDBPyConnection:
+    global _connection
+    if _connection is None:
+        _connection = connect(get_config())
+    return _connection
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -99,13 +106,14 @@ async def dataset_detail(
     cap = min(limit, 500)
     as_of_filter = ""
     if as_of:
-        as_of_filter = f" WHERE available_at <= TIMESTAMP '{as_of.isoformat()}'"
+        tz_naive = as_of.replace(tzinfo=None)
+        as_of_filter = f" WHERE available_at <= TIMESTAMP '{tz_naive.isoformat()}'"
     query = (
-        f"SELECT * FROM {name}{as_of_filter} ORDER BY effective_date DESC NULLS LAST LIMIT {cap}"
+        f'SELECT * FROM "{name}"{as_of_filter} ORDER BY effective_date DESC NULLS LAST LIMIT {cap}'
     )
     try:
         rows = con.execute(query).fetchall()
-        cols = [c[0] for c in con.execute(f"DESCRIBE {name}").fetchall()]
+        cols = [c[0] for c in con.execute(f'DESCRIBE "{name}"').fetchall()]
         result = [dict(zip(cols, r, strict=False)) for r in rows]
     except Exception:
         cols = []
@@ -161,10 +169,10 @@ async def security_detail(
     for ds_name in list_datasets(con):
         ds_name_str = str(ds_name["dataset"])
         try:
-            cols_row = con.execute(f"DESCRIBE {ds_name_str}").fetchall()
+            cols_row = con.execute(f'DESCRIBE "{ds_name_str}"').fetchall()
             id_col = "security_id" if ds_name_str != "macro_series" else "series_id"
             query = (
-                f"SELECT * FROM {ds_name_str} WHERE {id_col} = ?"
+                f'SELECT * FROM "{ds_name_str}" WHERE {id_col} = ?'
                 f" AND available_at <= ? ORDER BY effective_date DESC LIMIT 10"
             )
             rows = con.execute(
@@ -461,6 +469,8 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
                 "cohort": r.get("cohort"),
                 "mention_delta_pct": r.get("mention_delta_pct"),
                 "positive_ratio": r.get("positive_ratio"),
+                "neutral_ratio": r.get("neutral_ratio")
+                or (1 - r.get("positive_ratio", 0) if r.get("positive_ratio") else None),
                 "mean_score": r.get("mean_score"),
                 "total_messages": r.get("total_messages"),
                 "trend": trends.get(sid, []),
