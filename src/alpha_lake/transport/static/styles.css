@@ -414,7 +414,12 @@ html, body {
 
 /* ── Sentiment leaderboard ── */
 .lw-lead { background: var(--lw-bg-2); border: 1px solid var(--lw-rule); border-radius: 12px; overflow: hidden; }
-.lw-lead-cols, .lw-lead-row { display: grid; grid-template-columns: 30px 1fr 132px 74px 200px 22px; align-items: center; gap: 10px; }
+.lw-lead-head {
+  display: grid; grid-template-columns: 1fr 100px 60px 140px 22px; align-items: center; gap: 10px;
+  padding: 10px 14px 6px; font-family: var(--lw-mono); font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--lw-ink-3);
+}
+.lw-lead-cols, .lw-lead-row { display: grid; grid-template-columns: 1fr 100px 60px 140px 22px; align-items: center; gap: 10px; }
 .lw-lead-cols { padding: 0 14px 0; font-family: var(--lw-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lw-ink-3); margin-bottom: 6px; }
 .lw-lead-row { padding: 11px 14px; cursor: pointer; }
 .lw-lead-item { border-bottom: 1px solid var(--lw-rule); }

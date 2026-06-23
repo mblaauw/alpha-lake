@@ -164,6 +164,9 @@ def cli_ingest_dataset(
     from_date: str = typer.Option("", help="Start date (YYYY-MM-DD)"),
     to_date: str = typer.Option("", help="End date (YYYY-MM-DD)"),
     source: str = typer.Option(None, help="Source ID"),
+    cohort: str = typer.Option(
+        "all-stocks", "--cohort", help="Cohort/channel (for attention_metrics)"
+    ),
 ):
     """Ingest a dataset from its connector (macro_series, news, etc.)."""
     _require_infra(get_config())
@@ -179,6 +182,7 @@ def cli_ingest_dataset(
             from_date=from_date,
             to_date=to_date,
             source_id=source,
+            cohort=cohort,
         )
         panel(
             "Ingest",

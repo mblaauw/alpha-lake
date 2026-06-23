@@ -487,6 +487,7 @@ def apewisdom_attention_from_json(
     ingestion_run_id: str,
     content_hash: str,
     available_at: datetime,
+    cohort: str = "all-stocks",
 ) -> pl.DataFrame:
     rows = []
     for record in raw:
@@ -496,7 +497,7 @@ def apewisdom_attention_from_json(
                 "effective_date": available_at.strftime("%Y-%m-%d"),
                 "available_at": available_at,
                 "source_id": source_id,
-                "cohort": "all",
+                "cohort": cohort,
                 "mentions": int(record.get("mentions", 0)),
                 "mentions_24h_ago": int(record.get("mentions_24h_ago", 0)),
                 "rank": record.get("rank"),

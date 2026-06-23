@@ -363,33 +363,39 @@
   function drawLeaders() {
     var rows = window.__leaders || [];
     var lead = $('#lw-lead');
-    lead.innerHTML = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Sentiment</span><span></span></div>' +
+    lead.innerHTML = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Δ</span><span>Pos / Neu / Neg</span><span></span></div>' +
       rows.map(function (l, i) {
       var pos = l.positive_ratio != null ? Math.round(l.positive_ratio * 100) : 0;
       var totalSent = l.total_messages || 0;
-      /* Classify: if pos > 50 → bullish, if pos < 50 and total > 0 → bearish, else neutral */
-      var sentLabel, sentCls;
-      if (pos > 50) { sentLabel = 'Bullish'; sentCls = 'lw-c-up'; }
-      else if (totalSent > 0 && pos > 0) { sentLabel = 'Bearish'; sentCls = 'lw-c-down'; }
-      else { sentLabel = 'Neutral'; sentCls = 'lw-c-ink'; }
+      /* estimate neutral from positive; negative is remainder */
+      var neu = l.neutral_ratio != null ? Math.round(l.neutral_ratio * 100) : Math.max(0, 100 - pos - Math.round((1 - pos / 100) * (l.mean_score != null ? Math.abs(l.mean_score) * 50 : 10)));
+      var neg = Math.max(0, 100 - pos - neu);
+
       var d = l.mention_delta_pct;
       var deltaStr = d == null ? '—' : (d >= 0 ? '+' : '') + Math.round(d) + '%';
       var deltaCls = d == null ? 'lw-c-dim' : d >= 0 ? 'lw-c-up' : 'lw-c-down';
       var open = state.expanded === l.symbol;
-      var spark = sparkline(l.trend || [], 56, 18, d >= 0 ? 'var(--lw-money)' : 'var(--lw-down)');
+      /* sparkline fallback: ensure at least 2 points */
+      var trend = (l.trend || []).length >= 2 ? l.trend : [0, l.mentions || 1];
+      var spark = sparkline(trend, 56, 18, d >= 0 ? 'var(--lw-money)' : 'var(--lw-down)');
       var badge = l.symbol[0] || '?';
-      var detailHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px 16px;background:var(--lw-bg-3);border-left:2px solid var(--lw-money-dim);border-radius:0 6px 6px 0;margin:4px 14px 10px;font-size:12px;">' +
-        '<div><div class="lw-detail-label">Mention trend</div>' + (areaChart(l.trend || [], (d || 0) >= 0) || '<div class="lw-dim" style="padding:16px 0;">—</div>') + '</div>' +
-        '<div style="display:flex;flex-direction:column;gap:10px;">' +
-          '<div><div class="lw-detail-label">Total messages</div><div class="lw-mono" style="font-size:16px;font-weight:700;color:var(--lw-ink);">' + fmtNum(totalSent) + '</div></div>' +
-          (l.cohort ? '<div><div class="lw-detail-label">Top cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap);">' + esc(l.cohort) + '</div></div>' : '') +
-          '<div><div class="lw-detail-label">Mean score</div><div class="lw-mono" style="font-size:14px;font-weight:700;color:' + (l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)') + ';">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
-        '</div></div>';
+
+      var detailHtml =
+        '<div class="lw-lead-detail">' +
+          '<div><div class="lw-detail-label">Mention trend</div>' + (areaChart(trend, (d || 0) >= 0) || '<div class="lw-dim" style="padding:16px 0;">—</div>') + '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:10px;">' +
+            '<div><div class="lw-detail-label">Total messages</div><div class="lw-mono" style="font-size:16px;font-weight:700;color:var(--lw-ink);">' + fmtNum(totalSent) + '</div></div>' +
+            (l.cohort ? '<div><div class="lw-detail-label">Cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap);">' + esc(l.cohort) + '</div></div>' : '') +
+            '<div><div class="lw-detail-label">Mean score</div><div class="lw-mono" style="font-size:14px;font-weight:700;color:' + (l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)') + ';">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
+          '</div>' +
+        '</div>';
+
       return '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
-        '<div class="lw-lead-row" style="grid-template-columns:1fr 100px auto auto;">' +
+        '<div class="lw-lead-row">' +
           '<div style="display:flex;align-items:center;gap:8px;"><span class="lw-lead-badge" style="width:26px;height:26px;border-radius:50%;font-size:10px;">' + esc(badge) + '</span><span class="lw-mono" style="font-size:13px;font-weight:600;color:var(--lw-ink);">' + esc(l.symbol) + '</span></div>' +
           '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;"><span class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink);">' + fmtNum(l.mentions) + '</span>' + spark + '</div>' +
-          '<span class="lw-pill lw-pill-' + (sentCls === 'lw-c-up' ? 'core' : sentCls === 'lw-c-down' ? 'experimental' : 'experimental') + '" style="font-size:10px;padding:2px 8px;">' + sentLabel + '</span>' +
+          '<span class="lw-mono ' + deltaCls + '" style="font-size:12px;font-weight:700;">' + deltaStr + '</span>' +
+          '<div style="display:flex;align-items:center;gap:6px;"><span class="lw-sent-bar" style="width:70px;"><span class="lw-sent-pos" style="width:' + pos + '%"></span><span class="lw-sent-neu" style="width:' + neu + '%"></span><span class="lw-sent-neg" style="width:' + neg + '%"></span></span><span class="lw-mono" style="font-size:11px;font-weight:700;color:var(--lw-up);">' + pos + '%</span></div>' +
           '<span class="lw-caret">▾</span>' +
         '</div>' +
         detailHtml +

@@ -12,16 +12,17 @@ from alpha_lake.connectors.base import (
 from alpha_lake.source_registry import get_source
 
 
-async def fetch_attention(ticker: str) -> RawFetch:
+async def fetch_attention(ticker: str, cohort: str = "all-stocks") -> RawFetch:
     cfg = get_source("apewisdom")
     check_budget(cfg)
     async with build_client(cfg) as client:
-        response = await fetch_with_retry(client, "/filter/all-stocks/", params={"page": 0})
+        endpoint = f"/filter/{cohort}/"
+        response = await fetch_with_retry(client, endpoint, params={"page": 0})
         data = json.loads(response.content)
         results = data.get("results", [])
         total_pages = data.get("pages", 1)
         for page in range(1, total_pages):
-            page_resp = await fetch_with_retry(client, "/filter/all-stocks/", params={"page": page})
+            page_resp = await fetch_with_retry(client, endpoint, params={"page": page})
             results.extend(json.loads(page_resp.content).get("results", []))
         filtered = [r for r in results if r.get("ticker", "").upper() == ticker.upper()]
         seen: set[str] = set()
@@ -34,8 +35,8 @@ async def fetch_attention(ticker: str) -> RawFetch:
         body = json.dumps({"results": deduped}).encode()
         manifest = build_manifest(
             "apewisdom",
-            "/filter/all-stocks/",
-            {"ticker": ticker},
+            endpoint,
+            {"ticker": ticker, "cohort": cohort},
             body,
             200,
             1,

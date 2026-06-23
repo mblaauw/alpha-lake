@@ -429,6 +429,7 @@ def ingest_dataset(
     from_date: str = "",
     to_date: str = "",
     source_id: str | None = None,
+    cohort: str = "all-stocks",
 ) -> int:
     """Run the full ingestion pipeline for a generic dataset.
 
@@ -468,6 +469,7 @@ def ingest_dataset(
         kwargs["to_date"] = to_date or ""
     elif dataset == "attention_metrics":
         kwargs["ticker"] = security_id or "AAPL"
+        kwargs["cohort"] = cohort
     elif dataset == "sentiment" and src == "stocktwits":
         kwargs["symbol"] = security_id or "AAPL"
     elif dataset == "social_posts" and src == "reddit":
@@ -516,7 +518,20 @@ def ingest_dataset(
         _id_val = security_id or ""
 
     # News and sentiment don't have a security_id column — check by source + date
-    if dataset in ("news", "sentiment", "attention_metrics"):
+    if dataset in ("news", "sentiment"):
+        covered = _dataset_has_coverage(
+            con,
+            _table,
+            "source_id",
+            src,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if covered:
+            return 0
+
+    # Attention metrics: allow per-cohort ingestion (cohort != default → always fetch)
+    if dataset == "attention_metrics" and cohort == "all-stocks":
         covered = _dataset_has_coverage(
             con,
             _table,
@@ -650,6 +665,7 @@ def ingest_dataset(
         df = apewisdom_attention_from_json(
             raw=records,
             ticker=kwargs.get("ticker", security_id or "AAPL"),
+            cohort=kwargs.get("cohort", cohort),
             source_id=src,
             source_fetch_id=fetch_id,
             ingestion_run_id=run_id,
