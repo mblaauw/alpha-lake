@@ -23,7 +23,7 @@ from alpha_lake.derived.event_aggregations import (
 )
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
-from alpha_lake.serving import read_bars_asof
+from alpha_lake.serving import read_bars_adjusted, read_bars_asof
 
 router = APIRouter(prefix="/v1/dashboard")
 
@@ -250,6 +250,7 @@ async def bars(
     end: date | None = None,
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
+    price_mode: str = "raw",
 ):
     _check_enabled()
 
@@ -270,8 +271,13 @@ async def bars(
         kwargs["end_date"] = end
     if snapshot_id:
         kwargs["snapshot_id"] = snapshot_id
+    if price_mode != "raw":
+        kwargs["price_mode"] = price_mode
 
-    df = read_bars_asof(_get_con(), **kwargs)
+    if price_mode != "raw":
+        df = read_bars_adjusted(_get_con(), **kwargs)
+    else:
+        df = read_bars_asof(_get_con(), **kwargs)
     return JSONResponse(_pl_to_dicts(df))
 
 
@@ -346,7 +352,11 @@ async def bars_indicators(
 
 
 @router.get("/bars/summary")
-async def bars_summary(symbol: str, as_of: datetime | None = None):
+async def bars_summary(
+    symbol: str,
+    as_of: datetime | None = None,
+    price_mode: str = "raw",
+):
     _check_enabled()
     if as_of is None:
         as_of = _now()
@@ -355,7 +365,10 @@ async def bars_summary(symbol: str, as_of: datetime | None = None):
     if sec_id is None:
         sec_id = symbol  # fallback: use symbol as security_id (synthetic path)
     start = shift_trading_days(as_of.date(), -180)
-    df = read_bars_asof(con, security_ids=[sec_id], as_of=as_of, start_date=start)
+    kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
+    if price_mode != "raw":
+        kwargs["price_mode"] = price_mode
+    df = read_bars_adjusted(con, **kwargs) if price_mode != "raw" else read_bars_asof(con, **kwargs)
     con.close()
     if df.height < 1:
         raise HTTPException(404, f"No bars for '{symbol}'")
