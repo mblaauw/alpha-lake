@@ -62,7 +62,9 @@ def _get_con() -> duckdb.DuckDBPyConnection:
 @router.get("/health")
 async def health():
     _check_enabled()
-    return catalog_health(_get_con())
+    hlth = catalog_health(_get_con())
+    hlth["synthetic_mode"] = get_config().lake.synthetic_mode
+    return hlth
 
 
 # ── Datasets ──────────────────────────────────────────────────────────────────

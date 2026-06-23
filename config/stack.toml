@@ -4,6 +4,7 @@ catalog = "ducklake:postgres:dbname=lake_catalog host=postgres port=5432 user=la
 canonical_data_path = "s3://lake/"
 raw_archive_uri = "s3://lake/raw/"
 calendar_version = "4.13.2"
+synthetic_mode = false
 
 [s3]
 endpoint = "rustfs:9000"

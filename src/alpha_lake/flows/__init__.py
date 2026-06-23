@@ -8,6 +8,7 @@ from typing import Any
 import duckdb
 
 from alpha_lake.canonical import DATASETS, write_bars, write_dataset
+from alpha_lake.cli_ui import warn
 from alpha_lake.clock import get_clock
 from alpha_lake.connectors import ConnectorFn, get_connector, has_api_key
 from alpha_lake.normalize import bars_from_json
@@ -116,22 +117,43 @@ def _dataset_has_coverage(
         return False
 
 
-def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime) -> bytes:
-    """Generate synthetic raw payload for offline/CI mode."""
-    import json
+def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime, sid: str = "") -> bytes:
+    """Generate synthetic raw payload for offline/CI mode.
 
-    return json.dumps(
-        [
+    When *sid* is given, uses a deterministic seed so the same symbol
+    always produces the same OHLCV series. The ``source_id`` is set to
+    ``"demo"`` so the data is clearly distinguishable from real data.
+    """
+    import hashlib
+    import json
+    import random
+
+    seed = int(hashlib.sha256(sid.encode()).hexdigest()[:8], 16) if sid else 42
+    rng = random.Random(seed)
+
+    date_str = from_date or to_date or clock_now.date().isoformat()
+    base = 50.0 + rng.uniform(0, 400)
+    records = []
+    for day_offset in range(252):
+        d = date.fromisoformat(date_str) - timedelta(days=day_offset)
+        daily_vol = base * (0.95 + rng.random() * 0.1)
+        o = round(daily_vol, 2)
+        high_v = round(o * (1 + rng.random() * 0.03), 2)
+        low_v = round(o * (1 - rng.random() * 0.03), 2)
+        close_v = round(o + rng.uniform(-0.5, 0.5), 2)
+        v = int(1e6 + rng.random() * 1e7)
+        records.append(
             {
-                "date": from_date or to_date or clock_now.date().isoformat(),
-                "open": 100.0,
-                "high": 101.0,
-                "low": 99.0,
-                "close": 100.5,
-                "volume": 10000,
+                "date": d.isoformat(),
+                "open": o,
+                "high": high_v,
+                "low": low_v,
+                "close": close_v,
+                "volume": v,
             }
-        ]
-    ).encode()
+        )
+    records.sort(key=lambda r: r["date"])
+    return json.dumps(records).encode()
 
 
 async def _fetch_and_ingest(
@@ -171,14 +193,13 @@ async def _fetch_and_ingest(
 def _ingest_synthetic(
     con: duckdb.DuckDBPyConnection,
     sid: str,
-    src: str,
     from_date: str,
     to_date: str,
     run_id: str,
     clock_now: datetime,
 ) -> int:
     """Synthetic data path for offline/CI mode."""
-    raw_bytes = _synthetic_payload(from_date, to_date, clock_now)
+    raw_bytes = _synthetic_payload(from_date, to_date, clock_now, sid)
     content_hash = archive(raw_bytes)
 
     import json
@@ -189,12 +210,11 @@ def _ingest_synthetic(
     df = bars_from_json(
         raw=records,
         security_id=sid,
-        source_id=src,
+        source_id="demo",
         source_fetch_id=f"fetch_{sid}",
         ingestion_run_id=run_id,
         content_hash=content_hash,
         available_at=clock_now,
-        ingested_at=clock_now,
     )
     df = check_market_sanity(df)
     return write_bars(con, df)
@@ -254,13 +274,17 @@ def ingest_bars(
 
         total = asyncio.run(_run_all())
     else:
+        warn(
+            f"No API key for {src} — generating synthetic data. "
+            "Set {src}_API_KEY in .env for real ingestion."
+        )
         for i, sid in enumerate(security_ids):
             if on_step:
                 on_step(i, n, sid)
             missing = _missing_dates(con, "lake_bars", sid, from_date, to_date)
             if not missing:
                 continue
-            total += _ingest_synthetic(con, sid, src, missing[0], missing[-1], run_id, clock_now)
+            total += _ingest_synthetic(con, sid, missing[0], missing[-1], run_id, clock_now)
 
     if on_step:
         on_step(n, n, f"done — {total} bars")

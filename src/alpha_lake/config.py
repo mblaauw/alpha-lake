@@ -69,6 +69,7 @@ class LakeConfig(pydantic.BaseModel):
     canonical_data_path: str = ""
     raw_archive_uri: str = ""
     calendar_version: str = ""
+    synthetic_mode: bool = False
 
 
 class TransportConfig(pydantic.BaseModel):

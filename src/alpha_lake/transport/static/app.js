@@ -122,6 +122,9 @@
 
     api('/health').then(function (h) {
       $('#lw-health-summary').innerHTML = esc((h.snapshots || 0) + ' snapshots · latest: ' + (h.latest_snapshot_id || '—'));
+      /* synthetic mode banner */
+      var banner = $('#lw-syn-banner');
+      if (banner) banner.style.display = h.synthetic_mode ? 'flex' : 'none';
     }).catch(function () { $('#lw-health-summary').textContent = 'health endpoint unavailable'; });
 
     api('/datasets').then(function (data) {

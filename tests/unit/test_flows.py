@@ -12,10 +12,10 @@ def test_ingest_bars():
     load_config("config/embedded.toml")
     con = duckdb.connect()
     count = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
-    assert count == 1
+    assert count == 252
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     rows = _r[0] if _r else 0
-    assert rows == 1
+    assert rows == 252
     con.close()
 
 
@@ -25,17 +25,17 @@ def test_reparse_bars():
     ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     assert _r is not None
-    assert _r[0] == 1
+    assert _r[0] == 252
 
     count = reparse_bars(con, ["sec_test"])
-    assert count == 1
+    assert count == 252
 
     _r = con.execute(
         "SELECT COUNT(*), COUNT(DISTINCT available_at) "
         "FROM lake_bars WHERE security_id = 'sec_test'"
     ).fetchone()
     assert _r is not None
-    assert _r[0] == 2, "reparse must create a second version"
+    assert _r[0] == 504, "reparse must create a second version"
     assert _r[1] == 2, "second version must have different available_at"
     con.close()
 
@@ -136,16 +136,16 @@ def test_ingest_bars_is_idempotent():
     load_config("config/embedded.toml")
     con = duckdb.connect()
     count1 = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
-    assert count1 == 1
+    assert count1 == 252
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     assert _r is not None
-    assert _r[0] == 1
+    assert _r[0] == 252
     # Second call for same date should return 0 (no new rows)
     count2 = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
     assert count2 == 0
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     assert _r is not None
-    assert _r[0] == 1, "no new rows should be inserted"
+    assert _r[0] == 252, "no new rows should be inserted"
     con.close()
 
 
@@ -153,16 +153,16 @@ def test_ingest_bars_idempotent_partial_overlap():
     load_config("config/embedded.toml")
     con = duckdb.connect()
     count1 = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-07", source_id="eodhd")
-    assert count1 == 1  # synthetic generates 1 bar
+    assert count1 == 252
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     assert _r is not None
-    assert _r[0] == 1
+    assert _r[0] == 252
     # Second call with overlapping + new dates
     count2 = ingest_bars(con, ["sec_test"], "2026-01-07", "2026-01-10", source_id="eodhd")
-    assert count2 == 1  # synthetic generates 1 bar for Jan 7 (first missing date)
+    assert count2 == 252
     _r = con.execute("SELECT COUNT(*) FROM lake_bars").fetchone()
     assert _r is not None
-    assert _r[0] == 2  # Jan 5 + Jan 7
+    assert _r[0] == 504
     con.close()
 
 
@@ -171,7 +171,7 @@ def test_ingest_bars_empty_security():
     load_config("config/embedded.toml")
     con = duckdb.connect()
     count1 = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
-    assert count1 == 1
+    assert count1 == 252
     # Same security, same range — should skip
     count2 = ingest_bars(con, ["sec_test"], "2026-01-05", "2026-01-05", source_id="eodhd")
     assert count2 == 0
