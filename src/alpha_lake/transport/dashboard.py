@@ -49,6 +49,10 @@ def _get_con() -> duckdb.DuckDBPyConnection:
     global _connection
     if _connection is None:
         _connection = connect(get_config())
+    try:
+        _connection.execute("SELECT 1")
+    except Exception:
+        _connection = connect(get_config())
     return _connection
 
 
@@ -87,7 +91,6 @@ async def datasets():
                 "schema_version": ds.get("schema_version", 0),
             }
         )
-    con.close()
     return result
 
 
@@ -101,7 +104,6 @@ async def dataset_detail(
     con = _get_con()
     names = {str(d["dataset"]) for d in list_datasets(con)}
     if name not in names:
-        con.close()
         raise HTTPException(404, f"Dataset '{name}' not found")
     cap = min(limit, 500)
     as_of_filter = ""
@@ -118,7 +120,6 @@ async def dataset_detail(
     except Exception:
         cols = []
         result = []
-    con.close()
     return {
         "dataset": name,
         "columns": cols,
@@ -141,7 +142,6 @@ async def securities(
         return []
     con = _get_con()
     results = search_securities(con, q, limit=limit, as_of=as_of)
-    con.close()
     return results
 
 
@@ -156,7 +156,6 @@ async def security_detail(
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
-        con.close()
         raise HTTPException(404, f"Symbol '{symbol}' not found")
 
     agg: dict[str, Any] = {
@@ -184,7 +183,6 @@ async def security_detail(
                 agg["datasets"][ds_name_str] = [dict(zip(col_names, r, strict=False)) for r in rows]
         except Exception:
             pass
-    con.close()
     return agg
 
 
@@ -196,7 +194,6 @@ async def snapshots():
     _check_enabled()
     con = _get_con()
     result = list_snapshots(con)
-    con.close()
     return result
 
 
@@ -329,7 +326,6 @@ async def bars_summary(
     if price_mode != "raw":
         kwargs["price_mode"] = price_mode
     df = read_bars_adjusted(con, **kwargs) if price_mode != "raw" else read_bars_asof(con, **kwargs)
-    con.close()
     if df.height < 1:
         raise HTTPException(404, f"No bars for '{symbol}'")
 
@@ -406,11 +402,9 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
             "SELECT * FROM sentiment_annotations WHERE available_at <= ?", [as_of]
         ).pl()
     except Exception:
-        con.close()
         return JSONResponse([])
 
     if att.height == 0:
-        con.close()
         return JSONResponse([])
 
     deltas = compute_attention_deltas(att, as_of)
@@ -476,7 +470,6 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
                 "trend": trends.get(sid, []),
             }
         )
-    con.close()
     return JSONResponse(rows)
 
 
@@ -501,7 +494,6 @@ async def macro_series(
         start_date=start,
         end_date=end,
     )
-    con.close()
     if df.is_empty():
         return JSONResponse([])
     df = df.sort("effective_date", descending=True)
@@ -521,7 +513,6 @@ async def insider_tx(symbol: str, as_of: datetime | None = None, limit: int = 50
     if sec_id is None:
         sec_id = symbol
     df = pit_read(con, table="insider_tx", security_ids=[sec_id], as_of=as_of)
-    con.close()
     if df.is_empty():
         return JSONResponse([])
     df = df.sort("effective_date", descending=True).head(min(limit, 500))
@@ -541,7 +532,6 @@ async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: i
     if sec_id is None:
         sec_id = symbol
     df = pit_read(con, table="analyst_estimates", security_ids=[sec_id], as_of=as_of)
-    con.close()
     if df.is_empty():
         return JSONResponse([])
     df = df.sort("effective_date", descending=True).head(min(limit, 500))
