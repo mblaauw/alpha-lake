@@ -17,6 +17,10 @@ from alpha_lake.catalog import (
 )
 from alpha_lake.config import get_config
 from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
+from alpha_lake.derived.event_aggregations import (
+    compute_attention_deltas,
+    compute_sentiment_ratios,
+)
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
 from alpha_lake.serving import read_bars_asof
@@ -336,3 +340,165 @@ async def bars_indicators(
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
     return JSONResponse(result)
+
+
+# ── Per-symbol card bundle ─────────────────────────────────────────────────
+
+
+@router.get("/bars/summary")
+async def bars_summary(symbol: str, as_of: datetime | None = None):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol  # fallback: use symbol as security_id (synthetic path)
+    start = shift_trading_days(as_of.date(), -180)
+    df = read_bars_asof(con, security_ids=[sec_id], as_of=as_of, start_date=start)
+    con.close()
+    if df.height < 1:
+        raise HTTPException(404, f"No bars for '{symbol}'")
+
+    df = df.sort("effective_date")
+    close, high, low, vol = df["close"], df["high"], df["low"], df["volume"]
+    last = float(close[-1])
+    prev = float(close[-2]) if df.height >= 2 else last
+
+    def _last(series) -> float | None:
+        for x in reversed(list(series)):
+            if x is not None:
+                return float(x)
+        return None
+
+    macd_bands = macd(close)
+    mean_vol_20d = sum(vol.tail(20)) / max(len(vol.tail(20)), 1)
+    summary: dict[str, Any] = {
+        "symbol": symbol,
+        "security_id": sec_id,
+        "last": last,
+        "change_pct": (last / prev - 1) * 100 if prev else 0.0,
+        "rsi": _last(rsi(close, 14)),
+        "sma50": _last(sma(close, 50)),
+        "atr": _last(atr(high, low, close, 14)),
+        "macd": _last(macd_bands.get("macd")) if isinstance(macd_bands, dict) else None,
+        "vol_ratio": (float(vol[-1]) / (float(mean_vol_20d) or 1.0))
+        if vol[-1] is not None
+        else None,
+        "latest_date": str(df["effective_date"][-1]),
+        "quality_status": df["quality_status"][-1] if "quality_status" in df.columns else "valid",
+        "source_id": df["source_id"][-1] if "source_id" in df.columns else None,
+        "trend": [float(c) for c in close.tail(120) if c is not None],
+    }
+    return JSONResponse(summary)
+
+
+# ── Attention + Sentiment leaderboard ──────────────────────────────────────
+
+
+_SYMBOL_CACHE: dict[str, str] = {}
+
+
+def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
+    if security_id in _SYMBOL_CACHE:
+        return _SYMBOL_CACHE[security_id]
+    try:
+        row = con.execute(
+            "SELECT symbol FROM security_master "
+            "WHERE security_id = ? AND effective_start <= ? "
+            "ORDER BY effective_start DESC LIMIT 1",
+            [security_id, as_of.date()],
+        ).fetchone()
+    except Exception:
+        row = None
+    sym = row[0] if row else None
+    if sym:
+        _SYMBOL_CACHE[security_id] = sym
+    return sym
+
+
+@router.get("/attention/leaderboard")
+async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+
+    try:
+        att = con.execute("SELECT * FROM attention_metrics WHERE available_at <= ?", [as_of]).pl()
+        sent = con.execute(
+            "SELECT * FROM sentiment_annotations WHERE available_at <= ?", [as_of]
+        ).pl()
+    except Exception:
+        con.close()
+        return JSONResponse([])
+
+    if att.height == 0:
+        con.close()
+        return JSONResponse([])
+
+    deltas = compute_attention_deltas(att, as_of)
+    ratios = compute_sentiment_ratios(sent, as_of) if sent.height > 0 else None
+
+    import polars as pl  # type: ignore[unresolved-import]
+
+    latest_att = (
+        att.sort("effective_date")
+        .group_by("security_id")
+        .agg(
+            pl.col("mentions").last().alias("mentions"),
+            pl.col("rank").last().alias("rank"),
+            pl.col("cohort").last().alias("cohort"),
+        )
+    )
+    latest_delta = (
+        deltas.sort("effective_date")
+        .group_by("security_id")
+        .agg(pl.col("mention_delta_pct").last())
+        if deltas.height > 0
+        else None
+    )
+    latest_ratio = (
+        ratios.sort("effective_date")
+        .group_by("security_id")
+        .agg(
+            pl.col("positive_ratio").last(),
+            pl.col("mean_score").last(),
+            pl.col("total_messages").last(),
+        )
+        if (ratios is not None and ratios.height > 0)
+        else None
+    )
+
+    board = latest_att
+    if latest_delta is not None:
+        board = board.join(latest_delta, on="security_id", how="left")
+    if latest_ratio is not None:
+        board = board.join(latest_ratio, on="security_id", how="left")
+    board = board.sort("mentions", descending=True).head(limit)
+
+    trends: dict[str, list[float]] = {}
+    for sid in board["security_id"]:
+        s = att.filter(pl.col("security_id") == sid).sort("effective_date").tail(30)
+        trends[sid] = [float(m) for m in s["mentions"] if m is not None]
+
+    rows: list[dict[str, Any]] = []
+    for r in board.iter_rows(named=True):
+        sid = r["security_id"]
+        rows.append(
+            {
+                "security_id": sid,
+                "symbol": _symbol_for(con, sid, as_of) or str(sid),
+                "name": "",
+                "mentions": int(r["mentions"]) if r["mentions"] is not None else 0,
+                "rank": r.get("rank"),
+                "cohort": r.get("cohort"),
+                "mention_delta_pct": r.get("mention_delta_pct"),
+                "positive_ratio": r.get("positive_ratio"),
+                "mean_score": r.get("mean_score"),
+                "total_messages": r.get("total_messages"),
+                "trend": trends.get(sid, []),
+            }
+        )
+    con.close()
+    return JSONResponse(rows)
