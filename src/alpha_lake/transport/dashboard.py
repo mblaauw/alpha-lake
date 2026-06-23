@@ -563,3 +563,23 @@ async def insider_tx(symbol: str, as_of: datetime | None = None, limit: int = 50
         return JSONResponse([])
     df = df.sort("effective_date", descending=True).head(min(limit, 500))
     return JSONResponse(_pl_to_dicts(df))
+
+
+# ── Analyst estimates ─────────────────────────────────────────────────────
+
+
+@router.get("/analyst/{symbol}")
+async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: int = 50):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol
+    df = pit_read(con, table="analyst_estimates", security_ids=[sec_id], as_of=as_of)
+    con.close()
+    if df.is_empty():
+        return JSONResponse([])
+    df = df.sort("effective_date", descending=True).head(min(limit, 500))
+    return JSONResponse(_pl_to_dicts(df))
