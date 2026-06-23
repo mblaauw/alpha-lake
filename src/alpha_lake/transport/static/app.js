@@ -176,43 +176,103 @@
 
   function loadRealCard(grid, sym) {
     var slot = document.createElement('div'); slot.className = 'lw-sym-card'; slot.innerHTML = '<div class="lw-loading">Loading ' + esc(sym) + '</div>'; grid.appendChild(slot);
-    api('/security/' + sym).then(function (agg) {
-      var ds = agg.datasets || {};
-      var insider = ds.insider_tx || [];
-      var sent = ds.sentiment_annotations || [];
-      var news = ds.news_articles || [];
-      var attn = ds.attention_metrics || [];
-      var macro = ds.macro_series || [];
+    var closes, vols, up;
+    /* fetch bars/summary first (fast, single call with indicators) */
+    barApi('/bars/summary', sym).then(function (s) {
+      closes = s.trend || [];
+      up = s.change_pct >= 0;
+      var chartHtml = closes.length >= 2 ? areaChart(closes, up) : '';
+      var volHtml = (s.vol_ratio != null && closes.length >= 2) ? volBars(closes) : '';
 
-      var tiles = '';
-      if (insider.length) {
-        var dirs = insider.filter(function (r) { return r.transaction_code === 'P' || r.transaction_code === 'S'; });
-        var buys = dirs.filter(function (r) { return r.transaction_code === 'P'; }).length;
-        var sells = dirs.filter(function (r) { return r.transaction_code === 'S'; }).length;
-        tiles += '<div class="lw-metric"><div class="lw-metric-label">Insider</div><div class="lw-metric-val lw-c-up">' + buys + 'B</div><div class="lw-metric-sub">' + sells + 'S &middot; ' + insider.length + ' tx</div></div>';
-      }
-      if (sent.length) {
-        var pos = sent.filter(function (r) { return r.sentiment_score > 0; }).length;
-        var neg = sent.filter(function (r) { return r.sentiment_score < 0; }).length;
-        tiles += '<div class="lw-metric"><div class="lw-metric-label">Sentiment</div><div class="lw-metric-val lw-c-up">' + pos + ' pos</div><div class="lw-metric-sub">' + neg + ' neg &middot; ' + sent.length + ' total</div></div>';
-      }
-      if (news.length) {
-        tiles += '<div class="lw-metric"><div class="lw-metric-label">News</div><div class="lw-metric-val lw-c-ink">' + news.length + '</div><div class="lw-metric-sub">articles</div></div>';
-      }
-      if (attn.length) {
-        var top = attn[0];
-        tiles += '<div class="lw-metric"><div class="lw-metric-label">Attention</div><div class="lw-metric-val lw-c-ink">' + (top.mentions || 0) + '</div><div class="lw-metric-sub">' + (top.rank ? 'rank ' + top.rank : 'mentions') + '</div></div>';
-      }
-      if (macro.length) {
-        tiles += '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Macro</div><div class="lw-metric-val lw-c-ink">' + macro.length + '</div><div class="lw-metric-sub">observations</div></div>';
-      }
-      if (!tiles) {
-        tiles = '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No data for ' + esc(sym) + '</div></div>';
-      }
+      /* then fetch security aggregation for other datasets */
+      api('/security/' + sym).then(function (agg) {
+        var ds = agg.datasets || {};
+        var insider = ds.insider_tx || [];
+        var sent = ds.sentiment_annotations || [];
+        var news = ds.news_articles || [];
+        var attn = ds.attention_metrics || [];
+        var macro = ds.macro_series || [];
 
-      slot.innerHTML = '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div></div></div><div style="text-align:right;flex:none;font-size:12px;color:var(--lw-ink-3);">' + agg.security_id + '</div></div><div class="lw-metric-grid">' + tiles + '</div><div class="lw-sym-foot"><span>as_of: ' + agg.as_of + '</span></div>';
+        /* derive bar metrics */
+        var cc = colorChange(s.change_pct);
+        var rsi = s.rsi, rsiMeta = colorRsi(rsi);
+        var sma = s.sma50 != null ? ((s.last - s.sma50) / s.sma50 * 100) : null;
+        var smaMeta = sma != null ? colorSma(sma) : { cls: 'lw-c-ink', sub: '' };
+        var macdVal = s.macd, macdMeta = macdVal != null ? colorMacd(macdVal) : { cls: 'lw-c-ink', sub: '' };
+        var atrVal = s.atr;
+
+        var tiles = '';
+        /* bar metrics first */
+        if (s.last != null) {
+          tiles += metricTile('RSI', rsi != null ? rsi.toFixed(1) : '—', rsiMeta.cls, rsiMeta.sub);
+          tiles += metricTile('SMA50', sma != null ? sma.toFixed(1) + '%' : '—', smaMeta.cls, smaMeta.sub);
+          tiles += metricTile('ATR', atrVal != null ? '$' + atrVal.toFixed(2) : '—', 'lw-c-ink', 'volatility');
+          tiles += metricTile('MACD', macdVal != null ? macdVal.toFixed(2) : '—', macdMeta.cls, macdMeta.sub);
+          tiles += metricTile('vol ratio', s.vol_ratio != null ? s.vol_ratio.toFixed(2) : '—', 'lw-c-ink', 'vs 20d avg');
+        }
+        /* other dataset metrics */
+        if (insider.length) {
+          var dirs = insider.filter(function (r) { return r.transaction_code === 'P' || r.transaction_code === 'S'; });
+          var buys = dirs.filter(function (r) { return r.transaction_code === 'P'; }).length;
+          var sells = dirs.filter(function (r) { return r.transaction_code === 'S'; }).length;
+          tiles += metricTile('Insider', buys + 'B', 'lw-c-up', sells + 'S · ' + insider.length + ' tx');
+        }
+        if (sent.length) {
+          var pos = sent.filter(function (r) { return r.sentiment_score > 0; }).length;
+          var neg = sent.filter(function (r) { return r.sentiment_score < 0; }).length;
+          tiles += metricTile('Sentiment', pos + ' pos', 'lw-c-up', neg + ' neg · ' + sent.length + ' total');
+        }
+        if (news.length) {
+          tiles += metricTile('News', news.length, 'lw-c-ink', 'articles');
+        }
+        if (attn.length) {
+          var top = attn[0];
+          tiles += metricTile('Attention', top.mentions || 0, 'lw-c-ink', top.rank ? 'rank ' + top.rank : 'mentions');
+        }
+        if (macro.length) {
+          tiles += '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Macro</div><div class="lw-metric-val lw-c-ink">' + macro.length + '</div><div class="lw-metric-sub">observations</div></div>';
+        }
+        if (!tiles) {
+          tiles = '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No data for ' + esc(sym) + '</div></div>';
+        }
+
+        /* build card */
+        var priceHtml = s.last != null
+          ? '<div style="text-align:right;flex:none;"><div class="lw-sym-price">' + fmtMoney(s.last) + '</div><div class="lw-chg ' + (s.change_pct >= 0 ? 'lw-chg-up' : 'lw-chg-down') + '">' + (s.change_pct >= 0 ? '+' : '') + s.change_pct.toFixed(2) + '%</div></div>'
+          : '';
+        var chartSection = chartHtml
+          ? '<div class="lw-sym-chart">' + chartHtml + '<div class="lw-chart-axis"><span>1y close</span><span>' + (closes.length + ' days') + '</span></div></div>'
+          : '';
+        slot.innerHTML = '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div><div class="lw-sym-name">' + (s.source_id || '—') + '</div></div></div>' + priceHtml + '</div>' + chartSection + '<div class="lw-metric-grid">' + tiles + '</div><div class="lw-sym-foot"><span>EODHD</span><span style="display:flex;align-items:center;gap:10px;"><span>fresh <span class="lw-c-up" style="font-weight:700;">' + (s.latest_date ? ago(s.latest_date) + ' ago' : '') + '</span></span></span></div>';
+      }).catch(function () {
+        /* security endpoint failed — show bar-only card */
+        var cc = colorChange(s.change_pct);
+        var chartHtml = closes.length >= 2 ? areaChart(closes, up) : '';
+        var tiles = s.last != null
+          ? metricTile('RSI', s.rsi != null ? s.rsi.toFixed(1) : '—', 'lw-c-ink', '') +
+            metricTile('Vol ratio', s.vol_ratio != null ? s.vol_ratio.toFixed(2) : '—', 'lw-c-ink', '')
+          : '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No data for ' + esc(sym) + '</div></div>';
+        slot.innerHTML = '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div></div></div>' + (s.last != null ? '<div style="text-align:right;flex:none;"><div class="lw-sym-price">' + fmtMoney(s.last) + '</div><div class="lw-chg ' + (s.change_pct >= 0 ? 'lw-chg-up' : 'lw-chg-down') + '">' + (s.change_pct >= 0 ? '+' : '') + s.change_pct.toFixed(2) + '%</div></div>' : '') + '</div><div class="lw-sym-chart">' + chartHtml + '</div><div class="lw-metric-grid">' + tiles + '</div><div class="lw-sym-foot"><span>EODHD</span></div>';
+      });
     }).catch(function () {
-      slot.outerHTML = '<div class="lw-sym-card is-empty"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2);">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px;">No data in lake for this symbol yet.</div></div>';
+      /* bars/summary failed — fallback to security-only card */
+      api('/security/' + sym).then(function (agg) {
+        var ds = agg.datasets || {};
+        var insider = ds.insider_tx || [];
+        var sent = ds.sentiment_annotations || [];
+        var news = ds.news_articles || [];
+        var attn = ds.attention_metrics || [];
+        var macro = ds.macro_series || [];
+        var tiles = '';
+        if (insider.length) tiles += metricTile('Insider', insider.length + ' tx', 'lw-c-ink', insider[0].source_id || '');
+        if (sent.length) tiles += metricTile('Sentiment', sent.length, 'lw-c-ink', '');
+        if (news.length) tiles += metricTile('News', news.length, 'lw-c-ink', '');
+        if (attn.length) tiles += metricTile('Attention', attn[0].mentions || 0, 'lw-c-ink', '');
+        if (!tiles) tiles = '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No data</div></div>';
+        slot.innerHTML = '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div></div></div></div><div class="lw-metric-grid">' + tiles + '</div>';
+      }).catch(function () {
+        slot.outerHTML = '<div class="lw-sym-card is-empty"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2);">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px;">No data in lake for this symbol yet.</div></div>';
+      });
     });
   }
 
