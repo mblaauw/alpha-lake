@@ -23,7 +23,7 @@ from alpha_lake.derived.event_aggregations import (
 )
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
-from alpha_lake.serving import read_bars_adjusted, read_bars_asof, read_macro_series_asof
+from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
 
 router = APIRouter(prefix="/v1/dashboard")
 
@@ -542,4 +542,24 @@ async def macro_series(
     if df.is_empty():
         return JSONResponse([])
     df = df.sort("effective_date", descending=True)
+    return JSONResponse(_pl_to_dicts(df))
+
+
+# ── Insider transactions ──────────────────────────────────────────────────
+
+
+@router.get("/insider/{symbol}")
+async def insider_tx(symbol: str, as_of: datetime | None = None, limit: int = 50):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol
+    df = pit_read(con, table="insider_tx", security_ids=[sec_id], as_of=as_of)
+    con.close()
+    if df.is_empty():
+        return JSONResponse([])
+    df = df.sort("effective_date", descending=True).head(min(limit, 500))
     return JSONResponse(_pl_to_dicts(df))
