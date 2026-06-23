@@ -7,6 +7,7 @@
 
   var API = '/v1/dashboard';
   var state = { asOf: null, snapshotId: '', priceMode: 'raw', tab: 'overview', symbol: '', dataset: '', expanded: null, indCat: 'All' };
+  var _leaders = [];
 
   /* ── Theme ── */
   var themePref = (function () { try { return localStorage.getItem('lw_theme') || 'dark'; } catch (e) { return 'dark'; } })();
@@ -300,7 +301,7 @@
 
     api('/attention/leaderboard?limit=20').then(function (rows) {
       if (!rows || !rows.length) { $('#lw-lead').innerHTML = emptySentiment(); return; }
-      window.__leaders = rows; drawLeaders();
+      _leaders = rows; drawLeaders();
     }).catch(function () { $('#lw-lead').innerHTML = emptySentiment(); });
   }
 
@@ -311,7 +312,7 @@
   }
 
   function drawLeaders() {
-    var rows = window.__leaders || [];
+    var rows = _leaders;
     var lead = $('#lw-lead');
     lead.innerHTML = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Δ</span><span>Bull / Neu / Bear</span><span></span></div>' +
       rows.map(function (l) {
@@ -478,6 +479,8 @@
     { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct' },
     { label: 'RS60', key: 'rs_spy_60d', cat: 'Relative', fmt: 'pct' },
     { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2' },
+    { label: 'R126d', key: 'return_126', cat: 'Structure', fmt: 'pct' },
+    { label: 'R252d', key: 'return_252', cat: 'Structure', fmt: 'pct' },
   ];
   var IND_ALL = IND_DEFS.concat(IND_DEFS_EXTRA);
   var IND_CATS = ['All', 'Trend', 'Momentum', 'Volatility', 'Volume', 'Structure', 'Relative'];

@@ -198,18 +198,11 @@ html, body {
   border-bottom: 1px solid var(--lw-rule); padding: 16px 18px 14px;
   display: flex; flex-direction: column; min-width: 0;
 }
-.lw-card-head {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 12px; padding-bottom: 8px;
-  border-bottom: 1px solid var(--lw-rule);
-}
 .lw-card-title {
   font-family: var(--lw-mono); font-size: var(--lw-size-xs);
   text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--lw-ink-2); font-weight: 700;
 }
-.lw-card-body { flex: 1; }
-.lw-card-value { font-family: var(--lw-mono); font-size: var(--lw-size-h2); font-weight: 700; color: var(--lw-ink); }
 .lw-card-sub {
   font-size: var(--lw-size-small); color: var(--lw-ink-3); margin-top: 2px;
 }
@@ -218,16 +211,6 @@ html, body {
 @media (max-width: 720px) {
   .lw-card { border-radius: 8px; margin-bottom: 8px; border: 1px solid var(--lw-rule); }
 }
-
-/* ── Health cards (single-column) ── */
-.lw-health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.lw-health-card {
-  background: var(--lw-bg-2); border: 1px solid var(--lw-rule);
-  border-radius: 8px; padding: 14px 16px; cursor: pointer;
-  transition: background-color 140ms ease;
-}
-.lw-health-card:hover { background: var(--lw-bg-3); }
-.lw-health-card .lw-card-title { font-size: var(--lw-size-xs); margin-bottom: 4px; }
 
 /* ── Status dots ── */
 .lw-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
@@ -255,26 +238,6 @@ html, body {
 .lw-li-summary:hover { color: var(--lw-ink); }
 .lw-li-label { flex: 1; font-size: var(--lw-size-small); color: var(--lw-ink-2); }
 .lw-li-value { font-size: var(--lw-size-small); font-weight: 600; color: var(--lw-ink); text-align: right; }
-
-/* ── Tables ── */
-.lw-table-wrap { overflow-x: auto; margin: 8px 0; }
-.lw-table { width: 100%; border-collapse: collapse; font-size: var(--lw-size-small); }
-.lw-table th {
-  text-align: left; font-family: var(--lw-mono); font-size: var(--lw-size-label);
-  text-transform: uppercase; letter-spacing: 0.08em; color: var(--lw-ink-3);
-  font-weight: 700; padding: 0 10px 8px 0; border-bottom: 1px solid var(--lw-rule);
-}
-.lw-table th.r, .lw-table td.r { text-align: right; }
-.lw-table td {
-  padding: 8px 10px 8px 0; border-bottom: 1px solid var(--lw-rule);
-  color: var(--lw-ink); font-weight: 500; vertical-align: middle;
-  white-space: nowrap;
-}
-.lw-table tr:last-child td { border-bottom: 0; }
-.lw-table tr:hover td { color: var(--lw-ink); }
-
-/* ── Sparklines ── */
-.lw-sparkline { display: inline-block; vertical-align: middle; }
 
 /* ── Empty / error / loading states ── */
 .lw-empty { text-align: center; padding: 40px 16px; color: var(--lw-ink-3); }
@@ -374,9 +337,7 @@ html, body {
   padding: 10px 14px 6px; font-family: var(--lw-mono); font-size: 9px;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--lw-ink-3);
 }
-.lw-lead-cols, .lw-lead-row { display: grid; grid-template-columns: 1fr 100px 60px 140px 22px; align-items: center; gap: 10px; }
-.lw-lead-cols { padding: 0 14px 0; font-family: var(--lw-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lw-ink-3); margin-bottom: 6px; }
-.lw-lead-row { padding: 11px 14px; cursor: pointer; }
+.lw-lead-row { display: grid; grid-template-columns: 1fr 100px 60px 140px 22px; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; }
 .lw-lead-item { border-bottom: 1px solid var(--lw-rule); }
 .lw-lead-item:last-child { border-bottom: 0; }
 .lw-lead-badge { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; border-radius: 7px; background: var(--lw-bg-3); font-family: var(--lw-mono); font-size: 11px; font-weight: 700; color: var(--lw-money); }
@@ -411,7 +372,7 @@ html, body {
 
 @media (max-width: 720px) {
   .lw-metric-grid { grid-template-columns: repeat(2, 1fr); }
-  .lw-lead-cols, .lw-lead-row { grid-template-columns: 24px 1fr 70px 60px; }
+  .lw-lead-row { grid-template-columns: 24px 1fr 70px 60px; }
   .lw-lead-mentions svg, .lw-lead-cols span:nth-child(5), .lw-lead-row .lw-sent-wrap { display: none; }
   .lw-lead-item.is-open .lw-lead-detail { grid-template-columns: 1fr; }
 }

@@ -399,9 +399,6 @@ _INDICATOR_DASH_MAP: dict[str, str] = {
 }
 """Maps dashboard field names to the canonical TechnicalIndicatorFact column name."""
 
-_REVERSE_INDICATOR_MAP: dict[str, str] = {v: k for k, v in _INDICATOR_DASH_MAP.items()}
-"""Reverse map: model column → dashboard field name."""
-
 # Model column names whose values are boolean
 _BOOL_INDICATOR_COLS = frozenset(
     {
@@ -473,13 +470,16 @@ async def bars_summary(
     }
 
     # ── Try reading from stored technical_indicators first ──────────────
-    _raw = con.execute(
-        "SELECT * FROM technical_indicators"
-        " WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ"
-        " ORDER BY effective_date DESC, available_at DESC LIMIT 1",
-        [sec_id, _aware(as_of)],
-    ).pl()
-    if _raw.height > 0:
+    try:
+        _raw = con.execute(
+            "SELECT * FROM technical_indicators"
+            " WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ"
+            " ORDER BY effective_date DESC, available_at DESC LIMIT 1",
+            [sec_id, _aware(as_of)],
+        ).pl()
+    except Exception:
+        _raw = None
+    if _raw is not None and _raw.height > 0:
         _store_indicators_into(summary, _raw.row(0, named=True))
         return JSONResponse(summary)
 
@@ -617,10 +617,6 @@ def _symbol_name_for(con, security_id: str, as_of: datetime) -> tuple[str | None
     return sym, name
 
 
-def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
-    return _symbol_name_for(con, security_id, as_of)[0]
-
-
 def _sentiment_split(sent: pl.DataFrame, sids: list[str]) -> dict[str, dict[str, float]]:
     """Real bullish/bearish/neutral ratios from raw labels, latest day per symbol.
 
@@ -669,12 +665,15 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
         att = con.execute(
             "SELECT * FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ", [_aware(as_of)]
         ).pl()
+    except Exception:
+        att = pl.DataFrame()
+    try:
         sent = con.execute(
             "SELECT * FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
             [_aware(as_of)],
         ).pl()
     except Exception:
-        return JSONResponse([])
+        sent = pl.DataFrame()
 
     if att.height == 0:
         return JSONResponse([])

@@ -611,6 +611,17 @@ _GLOSSARY: dict[str, dict[str, Any]] = {
         "period": "20",
         "implemented": True,
     },
+    "donchian_middle": {
+        "id": "donchian_middle",
+        "name": "Donchian Mid",
+        "full_name": "Donchian Channel Middle",
+        "category": "Volatility",
+        "description": "Midpoint of the Donchian Channel: (upper + lower) / 2.",
+        "formula": "Middle = (Upper + Lower) / 2",
+        "source": "high, low",
+        "period": "20",
+        "implemented": True,
+    },
     # ── Volume ─────────────────────────────────────────────────────────────
     "obv": {
         "id": "obv",
@@ -623,18 +634,6 @@ _GLOSSARY: dict[str, dict[str, Any]] = {
         "period": "N/A",
         "implemented": True,
     },
-    "donchian_middle": {
-        "id": "donchian_middle",
-        "name": "Donchian Mid",
-        "full_name": "Donchian Channel Middle",
-        "category": "Volatility",
-        "description": "Midpoint of the Donchian Channel: (upper + lower) / 2.",
-        "formula": "Middle = (Upper + Lower) / 2",
-        "source": "high, low",
-        "period": "20",
-        "implemented": True,
-    },
-
     "obv_slope": {
         "id": "obv_slope",
         "name": "OBV Slope",
@@ -845,7 +844,6 @@ _GLOSSARY: dict[str, dict[str, Any]] = {
         "period": "252",
         "implemented": True,
     },
-
     "log_return": {
         "id": "log_return",
         "name": "Log Ret",

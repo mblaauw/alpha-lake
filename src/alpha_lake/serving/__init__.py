@@ -201,6 +201,9 @@ def read_bars_asof(
     )
 
 
+_VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
+
+
 def read_bars_adjusted(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],
@@ -213,9 +216,10 @@ def read_bars_adjusted(
     """Return bars with PIT-bounded price adjustment.
 
     Args:
-        price_mode: 'raw' (no adjustment), 'split_adjusted' (apply splits),
-                    'total_return' (apply splits + dividends).
+        price_mode: 'raw' (no adjustment) or 'split_adjusted' (apply splits).
     """
+    if price_mode not in _VALID_PRICE_MODES:
+        raise ValueError(f"Unknown price_mode '{price_mode}'. Valid: {sorted(_VALID_PRICE_MODES)}")
     _ensure_kernel(con)
     if price_mode == "raw":
         return read_bars_asof(

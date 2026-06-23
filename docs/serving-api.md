@@ -77,7 +77,7 @@ Return PIT-correct OHLCV bars.
 | `start` | date | no | — | Start effective date (inclusive) |
 | `end` | date | no | — | End effective date (inclusive) |
 | `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
-| `price_mode` | string | no | `raw` | `raw`, `split_adjusted`, or `total_return` |
+| `price_mode` | string | no | `raw` | `raw` or `split_adjusted` |
 | `snapshot_id` | string | no | — | DuckLake snapshot for pinned reads |
 
 \* Research reads require `as_of`. The `latest` query parameter provides an explicit non-research convenience path.
@@ -95,8 +95,6 @@ Return PIT-correct bars with computed technical indicators.
 | `start` | date | no | — | Start effective date (inclusive) |
 | `end` | date | no | — | End effective date (inclusive) |
 | `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
-| `price_mode` | string | no | `raw` | `raw`, `split_adjusted`, or `total_return` |
-
 Recursive indicators (RSI, EMA, ATR) receive automatic warm-up via `calendar_.shift_trading_days()` before the requested range; warm-up rows are trimmed from the response.
 
 #### `GET /v1/health`
@@ -147,6 +145,9 @@ read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
 | `GET /v1/dashboard/macro/{series_id}` | `as_of`, `start`, `end` | FRED macro series observations |
 | `GET /v1/dashboard/insider/{symbol}` | `as_of`, `limit` | Insider transactions by ticker |
 | `GET /v1/dashboard/analyst/{symbol}` | `as_of`, `limit` | Analyst estimate consensus (strong_buy … target_low) |
+| `GET /v1/dashboard/bars/symbols` | — | Distinct symbols with data in the lake |
+| `GET /v1/dashboard/indicators/glossary` | — | Full indicator glossary (name, description, formula) |
+| `GET /v1/dashboard/health` | — | Catalog health + synthetic_mode flag |
 
 These endpoints mirror the authenticated `/v1/*` endpoints but are gated by the
 `dashboard_enabled` config flag. When disabled they return 404.
