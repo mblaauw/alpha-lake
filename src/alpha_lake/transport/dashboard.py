@@ -23,7 +23,7 @@ from alpha_lake.derived.event_aggregations import (
 )
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
-from alpha_lake.serving import read_bars_adjusted, read_bars_asof
+from alpha_lake.serving import read_bars_adjusted, read_bars_asof, read_macro_series_asof
 
 router = APIRouter(prefix="/v1/dashboard")
 
@@ -515,3 +515,31 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
         )
     con.close()
     return JSONResponse(rows)
+
+
+# ── Macro series ──────────────────────────────────────────────────────────
+
+
+@router.get("/macro/{series_id}")
+async def macro_series(
+    series_id: str,
+    as_of: datetime | None = None,
+    start: date | None = None,
+    end: date | None = None,
+):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    df = read_macro_series_asof(
+        con,
+        series_ids=[series_id],
+        as_of=as_of,
+        start_date=start,
+        end_date=end,
+    )
+    con.close()
+    if df.is_empty():
+        return JSONResponse([])
+    df = df.sort("effective_date", descending=True)
+    return JSONResponse(_pl_to_dicts(df))
