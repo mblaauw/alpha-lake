@@ -16,6 +16,7 @@ async def fetch_bars_daily(
         "from": from_date,
         "to": to_date,
         "period": "d",
+        "fmt": "json",
         "api_token": cfg.api_key,
     }
     async with build_client(cfg) as client:
