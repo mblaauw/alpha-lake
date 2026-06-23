@@ -341,12 +341,12 @@
   /* ── Sentiment & Mentions leaderboard ── */
   function renderSentiment(container) {
     container.innerHTML =
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;">' +
-        '<div style="display:flex;align-items:center;gap:7px;"><span class="lw-card-title">Attention &amp; Sentiment</span><span class="lw-mono" style="font-size:11px;color:var(--lw-ink-3);">· 24h · most-mentioned</span></div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<span class="lw-card-title">Social Sentiment</span>' +
+        '<span class="lw-mono" style="font-size:10px;color:var(--lw-ink-3);letter-spacing:.06em;">most-mentioned 24h</span>' +
       '</div>' +
-      '<div class="lw-lead-cols"><span>#</span><span>Symbol</span><span>Mentions 24h</span><span>Δ</span><span>Bullish / neutral / bearish</span><span></span></div>' +
       '<div class="lw-lead" id="lw-lead"></div>' +
-      '<div class="lw-mono" style="font-size:10px;color:var(--lw-ink-4);text-align:center;letter-spacing:.04em;margin-top:10px;">source: ApeWisdom attention + Reddit / StockTwits sentiment</div>';
+      '<div class="lw-mono" style="font-size:10px;color:var(--lw-ink-4);text-align:center;margin-top:8px;">ApeWisdom attention + StockTwits sentiment</div>';
 
     api('/attention/leaderboard?limit=20').then(function (rows) {
       if (!rows || !rows.length) { $('#lw-lead').innerHTML = emptySentiment(); return; }
@@ -356,50 +356,43 @@
 
   function emptySentiment() {
     return '<div class="lw-empty" style="padding:36px 16px;">' +
-      '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' +
-      '<div class="lw-mono" style="font-size:12px;color:var(--lw-ink-2);font-weight:700;">No attention data</div>' +
-      '<div style="font-size:12px;margin-top:6px;">Enable <code class="lw-mono" style="color:var(--lw-accent);">/v1/dashboard/attention/leaderboard</code> over <code class="lw-mono" style="color:var(--lw-accent);">attention_metrics</code> + <code class="lw-mono" style="color:var(--lw-accent);">sentiment_annotations</code> to populate this view.</div></div>';
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M2 12a10 10 0 0 1 10-10"/><path d="M12 2v10l4 4"/></svg>' +
+      '<div class="lw-mono" style="font-size:12px;color:var(--lw-ink-3);margin-top:8px;">Awaiting attention data</div></div>';
   }
 
   function drawLeaders() {
     var rows = window.__leaders || [];
     var lead = $('#lw-lead');
-    lead.innerHTML = rows.map(function (l, i) {
-      var pos = Math.round((l.positive_ratio != null ? l.positive_ratio : 0.5) * 100);
-      var neu = l.neutral_ratio != null ? Math.round(l.neutral_ratio * 100) : Math.max(0, Math.round((1 - (l.positive_ratio || 0.5)) * 0.4 * 100));
-      var neg = Math.max(0, 100 - pos - neu);
-      var mean = l.mean_score != null ? l.mean_score : 0;
-      var meanCls = mean > 0.05 ? 'lw-c-up' : mean < -0.05 ? 'lw-c-down' : 'lw-c-ink';
-      var meanPct = ((mean + 1) / 2 * 100).toFixed(1);
+    lead.innerHTML = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Sentiment</span><span></span></div>' +
+      rows.map(function (l, i) {
+      var pos = l.positive_ratio != null ? Math.round(l.positive_ratio * 100) : 0;
+      var totalSent = l.total_messages || 0;
+      /* Classify: if pos > 50 → bullish, if pos < 50 and total > 0 → bearish, else neutral */
+      var sentLabel, sentCls;
+      if (pos > 50) { sentLabel = 'Bullish'; sentCls = 'lw-c-up'; }
+      else if (totalSent > 0 && pos > 0) { sentLabel = 'Bearish'; sentCls = 'lw-c-down'; }
+      else { sentLabel = 'Neutral'; sentCls = 'lw-c-ink'; }
       var d = l.mention_delta_pct;
       var deltaStr = d == null ? '—' : (d >= 0 ? '+' : '') + Math.round(d) + '%';
       var deltaCls = d == null ? 'lw-c-dim' : d >= 0 ? 'lw-c-up' : 'lw-c-down';
       var open = state.expanded === l.symbol;
-      var spark = sparkline(l.trend || [], 70, 22, d >= 0 ? 'var(--lw-money)' : 'var(--lw-down)');
-      var meanColor = mean > 0.05 ? 'var(--lw-up)' : mean < -0.05 ? 'var(--lw-down)' : 'var(--lw-ink-2)';
+      var spark = sparkline(l.trend || [], 56, 18, d >= 0 ? 'var(--lw-money)' : 'var(--lw-down)');
+      var badge = l.symbol[0] || '?';
+      var detailHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px 16px;background:var(--lw-bg-3);border-left:2px solid var(--lw-money-dim);border-radius:0 6px 6px 0;margin:4px 14px 10px;font-size:12px;">' +
+        '<div><div class="lw-detail-label">Mention trend</div>' + (areaChart(l.trend || [], (d || 0) >= 0) || '<div class="lw-dim" style="padding:16px 0;">—</div>') + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<div><div class="lw-detail-label">Total messages</div><div class="lw-mono" style="font-size:16px;font-weight:700;color:var(--lw-ink);">' + fmtNum(totalSent) + '</div></div>' +
+          (l.cohort ? '<div><div class="lw-detail-label">Top cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap);">' + esc(l.cohort) + '</div></div>' : '') +
+          '<div><div class="lw-detail-label">Mean score</div><div class="lw-mono" style="font-size:14px;font-weight:700;color:' + (l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)') + ';">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
+        '</div></div>';
       return '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
-        '<div class="lw-lead-row">' +
-          '<span class="lw-lead-rank">' + (i + 1) + '</span>' +
-          '<div class="lw-lead-sym"><span class="lw-lead-badge">' + esc(l.symbol) + '</span><div style="min-width:0;"><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink);">' + esc(l.symbol) + '</div><div class="lw-sym-name">' + esc(l.name || '') + '</div></div></div>' +
-          '<div class="lw-lead-mentions">' + fmtNum(l.mentions) + spark + '</div>' +
-          '<span class="lw-mono ' + deltaCls + '" style="font-size:12px;font-weight:700;">' + deltaStr + '</span>' +
-          '<div class="lw-sent-wrap" style="display:flex;align-items:center;gap:8px;"><span class="lw-sent-bar"><span class="lw-sent-pos" style="width:' + pos + '%"></span><span class="lw-sent-neu" style="width:' + neu + '%"></span><span class="lw-sent-neg" style="width:' + neg + '%"></span></span><span class="lw-mono lw-c-up" style="font-size:11px;font-weight:700;">' + pos + '%</span></div>' +
+        '<div class="lw-lead-row" style="grid-template-columns:1fr 100px auto auto;">' +
+          '<div style="display:flex;align-items:center;gap:8px;"><span class="lw-lead-badge" style="width:26px;height:26px;border-radius:50%;font-size:10px;">' + esc(badge) + '</span><span class="lw-mono" style="font-size:13px;font-weight:600;color:var(--lw-ink);">' + esc(l.symbol) + '</span></div>' +
+          '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;"><span class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink);">' + fmtNum(l.mentions) + '</span>' + spark + '</div>' +
+          '<span class="lw-pill lw-pill-' + (sentCls === 'lw-c-up' ? 'core' : sentCls === 'lw-c-down' ? 'experimental' : 'experimental') + '" style="font-size:10px;padding:2px 8px;">' + sentLabel + '</span>' +
           '<span class="lw-caret">▾</span>' +
         '</div>' +
-        '<div class="lw-lead-detail">' +
-          '<div><div class="lw-detail-label">Mention trend</div>' + (areaChart(l.trend || [], (d || 0) >= 0)) +
-            '<div style="display:flex;gap:18px;margin-top:12px;" class="lw-mono">' +
-              '<div><div class="lw-detail-label" style="margin:0;">Annotated msgs</div><div style="font-size:14px;font-weight:700;color:var(--lw-ink);margin-top:2px;">' + fmtNum(l.total_messages != null ? l.total_messages : l.samples) + '</div></div>' +
-              '<div><div class="lw-detail-label" style="margin:0;">Top cohort</div><div style="font-size:14px;font-weight:700;color:var(--lw-snap);margin-top:2px;">' + esc(l.cohort || '—') + '</div></div>' +
-            '</div></div>' +
-          '<div style="display:flex;flex-direction:column;gap:14px;">' +
-            '<div><div class="lw-detail-label">Sentiment split</div><div class="lw-sent-bar" style="height:14px;border-radius:4px;"><span class="lw-sent-pos" style="width:' + pos + '%"></span><span class="lw-sent-neu" style="width:' + neu + '%"></span><span class="lw-sent-neg" style="width:' + neg + '%"></span></div>' +
-              '<div style="display:flex;justify-content:space-between;margin-top:7px;" class="lw-mono"><span class="lw-c-up" style="font-size:10px;font-weight:700;">' + pos + '% bull</span><span class="lw-c-dim" style="font-size:10px;">' + neu + '% neu</span><span class="lw-c-down" style="font-size:10px;font-weight:700;">' + neg + '% bear</span></div></div>' +
-            '<div><div class="lw-detail-label">Mean score <span style="color:' + meanColor + ';">' + (mean >= 0 ? '+' : '') + mean.toFixed(2) + '</span></div>' +
-              '<div class="lw-score-track"><span class="lw-score-mark" style="left:' + meanPct + '%;background:' + meanColor + ';"></span></div>' +
-              '<div style="display:flex;justify-content:space-between;margin-top:6px;" class="lw-mono lw-c-dim"><span style="font-size:9px;">−1.0 bearish</span><span style="font-size:9px;">+1.0 bullish</span></div></div>' +
-          '</div>' +
-        '</div>' +
+        detailHtml +
       '</div>';
     }).join('');
     $$('.lw-lead-row', lead).forEach(function (row) {
