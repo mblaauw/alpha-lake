@@ -707,3 +707,86 @@ def ingest_dataset(
     if df.is_empty():
         return 0
     return write_dataset(con, table, df)
+
+
+def compute_indicators(
+    con: duckdb.DuckDBPyConnection,
+    security_ids: list[str] | None = None,
+    as_of: datetime | None = None,
+    on_step: StepCallback | None = None,
+) -> int:
+    """Compute all technical indicators from lake_bars and write to technical_indicators.
+
+    Reads bars for each symbol (with a 300-day lookback to cover 252-period
+    calculations), computes all indicators via single-pass batch, and stores
+    the result PIT in the technical_indicators table.
+
+    When *security_ids* is None (default), processes every symbol in lake_bars.
+    """
+    if as_of is None:
+        as_of = get_clock().now()
+
+    if security_ids is None:
+        rows = con.execute(
+            "SELECT DISTINCT security_id FROM lake_bars"
+            " WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+        ).fetchall()
+        security_ids = [str(r[0]) for r in rows if r[0]]
+
+    if not security_ids:
+        return 0
+
+    from datetime import timedelta
+
+    from alpha_lake.serving import read_bars_asof
+
+    start = (as_of - timedelta(days=400)).date()
+    end = as_of.date()
+
+    bars = read_bars_asof(
+        con,
+        security_ids=security_ids,
+        as_of=as_of,
+        start_date=start,
+        end_date=end,
+    )
+    if bars.is_empty():
+        return 0
+
+    from alpha_lake.derived.compute import _SPY_SECURITY_ID, compute_all_indicators
+    from alpha_lake.security_master import register as _register_security
+
+    try:
+        spy_bars = read_bars_asof(
+            con, security_ids=[_SPY_SECURITY_ID], as_of=as_of, start_date=start, end_date=end
+        )
+    except Exception:
+        spy_bars = None
+
+    if spy_bars is None or spy_bars.is_empty():
+        _register_security(
+            con,
+            symbol="SPY",
+            security_id=_SPY_SECURITY_ID,
+            effective_start=start,
+            name="SPDR S&P 500 ETF Trust",
+            exchange="ARCX",
+        )
+        warn("SPY has no bars yet. Run `just ingest --security-id SPY` first.")
+        spy_bars = None
+
+    df = compute_all_indicators(bars, as_of, benchmark_bars=spy_bars)
+    if df.is_empty():
+        return 0
+
+    n = len(security_ids)
+    for i, sid in enumerate(security_ids):
+        if on_step:
+            on_step(i, n, sid)
+
+    total = write_dataset(con, "technical_indicators", df)
+
+    if on_step:
+        on_step(n, n, f"done — {total} indicator rows")
+
+    return total

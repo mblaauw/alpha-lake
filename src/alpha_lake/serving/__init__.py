@@ -89,6 +89,7 @@ def pit_read(
     if security_ids is not None:
         if as_of is None:
             raise ValueError("as_of is required when security_ids is provided")
+        order_cols = "COALESCE(p.priority, 999), t.available_at DESC"
         if source_precedence_dataset:
             precedence_join = f"""
                 LEFT JOIN _kernel_source_priority p
@@ -97,12 +98,13 @@ def pit_read(
             """
         else:
             precedence_join = ""
+            order_cols = "t.available_at DESC"
         sql = f"""
             SELECT * FROM (
                 SELECT t.*,
                     ROW_NUMBER() OVER (
                         PARTITION BY t.{id_param}, t.effective_date
-                        ORDER BY COALESCE(p.priority, 999), t.available_at DESC
+                        ORDER BY {order_cols}
                     ) AS _pit_rank
                 FROM {table} t
                 {precedence_join}

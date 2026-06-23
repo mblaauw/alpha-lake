@@ -27,6 +27,10 @@ bootstrap:
 ingest *args:
     docker compose run --rm app ingest {{ args }}
 
+# Compute and store technical indicators for all symbols
+compute-indicators *args:
+    docker compose run --rm app compute-indicators {{ args }}
+
 # Run health checks (use run --rm: app container exits immediately)
 health:
     docker compose run --rm app health

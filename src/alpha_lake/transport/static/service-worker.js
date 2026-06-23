@@ -1,11 +1,26 @@
 /* Lake Watch — service worker */
-var CACHE = 'lake-watch-v1';
-var STATIC = ['/', '/static/index.html', '/static/styles.css', '/static/app.js', '/static/manifest.webmanifest'];
+var CACHE = 'lake-watch-v4';
+var STATIC = [
+  '/',
+  '/static/index.html',
+  '/static/styles.css',
+  '/static/app.js',
+  '/static/manifest.webmanifest',
+  '/static/icons/icon-192.svg',
+  '/static/icons/icon-512.svg'
+];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE).then(function (c) {
-      return c.addAll(STATIC);
+      /* Resilient precache: cache each asset independently so a single missing
+         file (404) can't reject the whole install and leave nothing cached.
+         cache.addAll() is atomic and would do exactly that. */
+      return Promise.all(STATIC.map(function (url) {
+        return c.add(url).catch(function (err) {
+          console.warn('[sw] skip precache', url, err);
+        });
+      }));
     }).then(function () { return self.skipWaiting(); })
   );
 });
@@ -19,12 +34,19 @@ self.addEventListener('activate', function (e) {
 });
 
 self.addEventListener('fetch', function (e) {
+  if (e.request.method !== 'GET') return;
   var url = new URL(e.request.url);
 
   /* Static files: cache-first */
   if (STATIC.indexOf(url.pathname) !== -1 || url.pathname.indexOf('/static/') === 0) {
     e.respondWith(
-      caches.match(e.request).then(function (cached) { return cached || fetch(e.request).then(function (r) { var clone = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, clone); }); return r; }); })
+      caches.match(e.request).then(function (cached) {
+        return cached || fetch(e.request).then(function (r) {
+          var clone = r.clone();
+          caches.open(CACHE).then(function (c) { c.put(e.request, clone); });
+          return r;
+        });
+      })
     );
     return;
   }

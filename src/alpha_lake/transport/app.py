@@ -123,7 +123,8 @@ async def bars(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
-    sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
+    # resolve() expects a date (effective_start/effective_end are DATE columns)
+    sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
     if sec_id is None:
         raise HTTPException(404, f"Symbol '{symbol}' not found")
 
@@ -161,7 +162,8 @@ async def bars_indicators(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
-    sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
+    # resolve() expects a date (effective_start/effective_end are DATE columns)
+    sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
     if sec_id is None:
         raise HTTPException(404, f"Symbol '{symbol}' not found")
 
@@ -247,6 +249,14 @@ async def service_worker():
     if not sw.exists():
         raise HTTPException(404)
     return FileResponse(sw, media_type="application/javascript")
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    mf = _STATIC / "manifest.webmanifest"
+    if not mf.exists():
+        raise HTTPException(404)
+    return FileResponse(mf, media_type="application/manifest+json")
 
 
 # ── Dashboard API router —───────────────────────────────────────────────────

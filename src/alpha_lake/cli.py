@@ -21,7 +21,13 @@ from alpha_lake.cli_ui import (
     install_traceback as install_rich_traceback,
 )
 from alpha_lake.config import RootConfig, get_config, load_config
-from alpha_lake.flows import backfill_bars, compact_dataset, ingest_bars, reparse_bars
+from alpha_lake.flows import (
+    backfill_bars,
+    compact_dataset,
+    compute_indicators,
+    ingest_bars,
+    reparse_bars,
+)
 
 app = typer.Typer(name="alpha-lake")
 
@@ -194,6 +200,32 @@ def cli_ingest_dataset(
         raise typer.Exit(code=1) from e
     finally:
         con.close()
+
+
+@app.command(name="compute-indicators", rich_help_panel="Data")
+def cli_compute_indicators(
+    security_id: str = typer.Option(
+        None, help="Security ID (optional; computes for all symbols when omitted)"
+    ),
+):
+    """Compute all technical indicators from lake_bars and store in the lake."""
+    _require_infra(get_config())
+    con = connect(get_config())
+    ids = [security_id] if security_id else None
+    with progress() as p:
+        tid = p.add_task("Computing indicators…", total=1)
+
+        def _on_step(cur: int, total: int | None, label: str) -> None:
+            p.update(tid, completed=cur, total=total or 1, description=label)
+
+        count = compute_indicators(con, security_ids=ids, on_step=_on_step)
+        p.update(tid, completed=1)
+    panel(
+        "Compute Indicators",
+        f"Wrote [bold]{count}[/] indicator rows.",
+        style="green",
+    )
+    con.close()
 
 
 @app.command(rich_help_panel="Data")

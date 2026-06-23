@@ -146,12 +146,27 @@ steps, and always gate behind property tests + cross-check with the `alpha-lake-
 - Patito-derived DDL generation (`_generate_ddl()` schema ↔ database sync) and the `Dataset`/`DATASETS` registry,
 - serving-kernel SQL macro precedence resolution (`_kernel_source_priority`, `COALESCE(priority, 999)` pattern),
 - REST transport lookback cap, auth, and rate-limiting invariants,
+- the batch compute engine (`compute_all_indicators` in `derived/compute.py`) — single-pass computation reusing intermediates across 80+ indicators,
+- the `TechnicalIndicatorFact` model and its `DATASETS` registry entry — adding new indicator columns requires model + compute + glossary sync,
+- the glossary subsystem (`_glossary.py` data + glossary API endpoint + frontend tooltip lookup) — adding a new indicator requires entries in all three layers,
 
 ## Product posture
 
 News and social datasets are **experimental** (tier 3), disabled by default, and not SLA-eligible.
 Do not add or expand text connectors unless explicitly requested and the dataset config posture is
 updated first. Deepen core facts (bars, fundamentals, corp actions, reconciliation) instead.
+
+## Relevant Files
+
+- `src/alpha_lake/derived/indicators.py` — 57+ indicator functions (SMA, EMA, RSI, MACD, Bollinger, ATR, OBV, VWAP, ADX, Aroon, CCI, stochastic, Keltner, Donchian, WMA, KAMA, beta, alpha, etc.)
+- `src/alpha_lake/derived/compute.py` — `compute_all_indicators()` single-pass batch compute; wires all indicators into a TechnicalIndicatorFact DataFrame
+- `src/alpha_lake/derived/__init__.py` — re-exports core indicator functions
+- `src/alpha_lake/models/technical_fact.py` — `TechnicalIndicatorFact` Patito model (80+ indicator columns)
+- `src/alpha_lake/transport/_glossary.py` — machine-readable glossary data (80+ entries, keyed by indicator ID)
+- `src/alpha_lake/transport/dashboard.py` — `/bars/summary` reads from `technical_indicators` table with fallback to on-the-fly compute; `/indicators/glossary` endpoint
+- `src/alpha_lake/transport/static/app.js` — `renderIndicators()` with category submenu, 6×4 tile grid, pin/unpin, glossary tooltip
+- `src/alpha_lake/transport/static/styles.css` — `.lw-ind-cats`, `.lw-ind-grid`, `.lw-ind-tile`, `.lw-gloss-tip`, `.lw-stale` styles
+- `docs/GLOSSARY.md` — full indicator definitions by category
 
 ## Conventions
 

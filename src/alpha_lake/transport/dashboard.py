@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import duckdb  # type: ignore[unresolved-import]
@@ -17,14 +17,31 @@ from alpha_lake.catalog import (
     list_snapshots,
 )
 from alpha_lake.config import get_config
-from alpha_lake.derived import atr, macd, rsi, sma
+from alpha_lake.derived import atr, bollinger_bands, macd, rsi, sma
 from alpha_lake.derived.event_aggregations import (
     compute_attention_deltas,
     compute_sentiment_ratios,
 )
+from alpha_lake.derived.indicators import (
+    atr_pct,
+    avg_dollar_volume,
+    dollar_volume,
+    ema,
+    gap_pct,
+    is_new_high,
+    is_new_low,
+    obv,
+    pct_off_high,
+    pct_off_low,
+    realized_vol,
+    relative_volume,
+    returns,
+    vwap,
+)
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
 from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
+from alpha_lake.transport._glossary import _GLOSSARY
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
@@ -54,6 +71,17 @@ def _get_con() -> duckdb.DuckDBPyConnection:
     except Exception:
         _connection = connect(get_config())
     return _connection
+
+
+def _aware(dt: datetime) -> datetime:
+    """Normalize a datetime to tz-aware UTC for TIMESTAMPTZ comparisons.
+
+    ``available_at`` columns are stored as TIMESTAMPTZ (the connection runs in
+    UTC). Passing a naive datetime into a raw ``?`` parameter mixes types; this
+    guarantees a tz-aware value so every comparison casts to ``::TIMESTAMPTZ``
+    cleanly.
+    """
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -108,15 +136,14 @@ async def dataset_detail(
     if name not in names:
         raise HTTPException(404, f"Dataset '{name}' not found")
     cap = min(limit, 500)
-    as_of_filter = ""
+    where = ""
+    params: list[Any] = []
     if as_of:
-        tz_naive = as_of.replace(tzinfo=None)
-        as_of_filter = f" WHERE available_at <= TIMESTAMP '{tz_naive.isoformat()}'"
-    query = (
-        f'SELECT * FROM "{name}"{as_of_filter} ORDER BY effective_date DESC NULLS LAST LIMIT {cap}'
-    )
+        where = " WHERE available_at <= ?::TIMESTAMPTZ"
+        params = [_aware(as_of)]
+    query = f'SELECT * FROM "{name}"{where} ORDER BY effective_date DESC NULLS LAST LIMIT {cap}'
     try:
-        rows = con.execute(query).fetchall()
+        rows = con.execute(query, params).fetchall()
         cols = [c[0] for c in con.execute(f'DESCRIBE "{name}"').fetchall()]
         result = [dict(zip(cols, r, strict=False)) for r in rows]
     except Exception:
@@ -151,7 +178,15 @@ async def securities(
 async def security_detail(
     symbol: str,
     as_of: datetime | None = None,
+    datasets: str | None = None,
 ):
+    """Per-symbol aggregation across datasets.
+
+    ``datasets`` is an optional comma-separated allow-list. The Bars cards pass
+    only the cross-dataset signals they render (insider/sentiment/news/attention),
+    so we scan ~4 tables instead of all ~18 — a large win on the Bars tab where
+    this is called once per card.
+    """
     _check_enabled()
     if as_of is None:
         as_of = _now()
@@ -159,6 +194,8 @@ async def security_detail(
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
         sec_id = symbol
+
+    wanted = {d.strip() for d in datasets.split(",") if d.strip()} if datasets else None
 
     agg: dict[str, Any] = {
         "symbol": symbol,
@@ -169,16 +206,18 @@ async def security_detail(
 
     for ds_name in list_datasets(con):
         ds_name_str = str(ds_name["dataset"])
+        if wanted is not None and ds_name_str not in wanted:
+            continue
         try:
             cols_row = con.execute(f'DESCRIBE "{ds_name_str}"').fetchall()
             id_col = "security_id" if ds_name_str != "macro_series" else "series_id"
             query = (
                 f'SELECT * FROM "{ds_name_str}" WHERE {id_col} = ?'
-                f" AND available_at <= ? ORDER BY effective_date DESC LIMIT 10"
+                f" AND available_at <= ?::TIMESTAMPTZ ORDER BY effective_date DESC LIMIT 10"
             )
             rows = con.execute(
                 query,
-                [sec_id, as_of],
+                [sec_id, _aware(as_of)],
             ).fetchall()
             if rows:
                 col_names = [c[0] for c in cols_row]
@@ -312,33 +351,72 @@ async def bars_indicators(
 
 @router.get("/bars/symbols")
 async def bars_symbols():
-    """Return distinct security_ids from all populated datasets."""
+    """Return distinct symbols that have data in the lake.
+
+    Scans price/indicator tables FIRST (``lake_bars`` is the canonical source
+    for "symbols with bars" — the Bars tab is a price view), then the social
+    tables so attention-only names still surface. De-duplicated by security_id.
+    """
     _check_enabled()
     con = _get_con()
-    seen: dict[str, str] = {}
+    seen: dict[str, dict[str, str]] = {}
     for table, id_col in [
-        ("insider_tx", "security_id"),
-        ("sentiment_annotations", "security_id"),
+        ("lake_bars", "security_id"),
+        ("technical_indicators", "security_id"),
         ("attention_metrics", "security_id"),
+        ("sentiment_annotations", "security_id"),
+        ("insider_tx", "security_id"),
     ]:
         try:
             ids = con.execute(
                 f"SELECT DISTINCT {id_col} FROM {table}"
-                f" WHERE {id_col} IS NOT NULL AND {id_col} != '' LIMIT 100"
+                f" WHERE {id_col} IS NOT NULL AND {id_col} != '' LIMIT 200"
             ).fetchall()
             for row in ids:
                 sid = str(row[0])
                 if sid and sid not in seen:
-                    sym = _symbol_for(con, sid, _now()) or sid
-                    seen[sid] = sym
+                    sym, name = _symbol_name_for(con, sid, _now())
+                    seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
         except Exception:
             pass
-    result = [{"security_id": sid, "symbol": sym} for sid, sym in seen.items()]
+    result = list(seen.values())
     result.sort(key=lambda x: x["symbol"])
     return JSONResponse(result)
 
 
 # ── Per-symbol card bundle ─────────────────────────────────────────────────
+
+
+_INDICATOR_DASH_MAP: dict[str, str] = {
+    "rsi": "rsi_14",
+    "atr": "atr_14",
+    "macd_hist": "macd_histogram",
+    "return_1d": "return_1",
+    "return_5d": "return_5",
+    "return_21d": "return_21",
+    "return_63d": "return_63",
+    "vol_ratio": "rvol",
+}
+"""Maps dashboard field names to the canonical TechnicalIndicatorFact column name."""
+
+_REVERSE_INDICATOR_MAP: dict[str, str] = {v: k for k, v in _INDICATOR_DASH_MAP.items()}
+"""Reverse map: model column → dashboard field name."""
+
+# Model column names whose values are boolean
+_BOOL_INDICATOR_COLS = frozenset(
+    {
+        "is_new_52w_high",
+        "is_new_52w_low",
+        "above_ma_20",
+        "above_ma_50",
+        "above_ma_200",
+        "volume_spike",
+        "bb_squeeze",
+        "inside_bar",
+        "outside_bar",
+        "gap_fill",
+    }
+)
 
 
 @router.get("/bars/summary")
@@ -353,7 +431,7 @@ async def bars_summary(
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
-        sec_id = symbol  # fallback: use symbol as security_id (synthetic path)
+        sec_id = symbol
     start = shift_trading_days(as_of.date(), -180)
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
     if price_mode != "raw":
@@ -365,7 +443,7 @@ async def bars_summary(
     df = df.sort("effective_date")
     close, high, low, vol = df["close"], df["high"], df["low"], df["volume"]
     last = float(close[-1])
-    prev = float(close[-2]) if df.height >= 2 else last
+    prev = float(close[-2]) if (df.height >= 2 and close[-2] is not None) else last
 
     def _last(series) -> float | None:
         for x in reversed(list(series)):
@@ -373,53 +451,211 @@ async def bars_summary(
                 return float(x)
         return None
 
-    macd_bands = macd(close)
-    mean_vol_20d = sum(vol.tail(20)) / max(len(vol.tail(20)), 1)
+    # aligned trend + volume series
+    pairs = [
+        (c, v)
+        for c, v in zip(list(close.tail(120)), list(vol.tail(120)), strict=False)
+        if c is not None
+    ]
+    sym_disp, name_disp = _symbol_name_for(con, sec_id, as_of)
+
     summary: dict[str, Any] = {
         "symbol": symbol,
         "security_id": sec_id,
+        "name": name_disp or "",
         "last": last,
         "change_pct": (last / prev - 1) * 100 if prev else 0.0,
-        "rsi": _last(rsi(close, 14)),
-        "sma50": _last(sma(close, 50)),
-        "atr": _last(atr(high, low, close, 14)),
-        "macd": _last(macd_bands.get("macd")) if isinstance(macd_bands, dict) else None,
-        "vol_ratio": (float(vol[-1]) / (float(mean_vol_20d) or 1.0))
-        if vol[-1] is not None
-        else None,
         "latest_date": str(df["effective_date"][-1]),
         "quality_status": df["quality_status"][-1] if "quality_status" in df.columns else "valid",
         "source_id": df["source_id"][-1] if "source_id" in df.columns else None,
-        "trend": [float(c) for c in close.tail(120) if c is not None],
+        "trend": [float(c) for c, _ in pairs],
+        "volume": [float(v) if v is not None else 0.0 for _, v in pairs],
     }
+
+    # ── Try reading from stored technical_indicators first ──────────────
+    _raw = con.execute(
+        "SELECT * FROM technical_indicators"
+        " WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ"
+        " ORDER BY effective_date DESC, available_at DESC LIMIT 1",
+        [sec_id, _aware(as_of)],
+    ).pl()
+    if _raw.height > 0:
+        _store_indicators_into(summary, _raw.row(0, named=True))
+        return JSONResponse(summary)
+
+    # ── Fall back to on-the-fly computation ─────────────────────────────
+    macd_bands = macd(close)
+    bb = bollinger_bands(close)
+    open_ = df["open"]
+    atr_series = atr(high, low, close, 14)
+    sma20 = sma(close, 20)
+    sma50 = sma(close, 50)
+    sma200 = sma(close, 200)
+    ema12 = ema(close, 12)
+    ema26 = ema(close, 26)
+    rsi14 = rsi(close, 14)
+    vol_tail20 = vol.tail(20).drop_nulls()
+    _vmean = vol_tail20.mean()
+    mean_vol_20d = _vmean if vol_tail20.len() > 0 and isinstance(_vmean, (int, float)) else 0.0
+    last_vol = float(vol[-1]) if vol[-1] is not None else None
+
+    summary.update(
+        {
+            "sma_20": _last(sma20),
+            "sma_50": _last(sma50),
+            "sma_200": _last(sma200),
+            "ema_12": _last(ema12),
+            "ema_26": _last(ema26),
+            "rsi": _last(rsi14),
+            "macd": _last(macd_bands.get("macd")) if isinstance(macd_bands, dict) else None,
+            "macd_ema": _last(macd_bands.get("macd_ema")) if isinstance(macd_bands, dict) else None,
+            "macd_hist": _last(macd_bands.get("histogram"))
+            if isinstance(macd_bands, dict)
+            else None,
+            "bb_upper": _last(bb.get("upper")) if isinstance(bb, dict) else None,
+            "bb_middle": _last(bb.get("middle")) if isinstance(bb, dict) else None,
+            "bb_lower": _last(bb.get("lower")) if isinstance(bb, dict) else None,
+            "atr": _last(atr_series),
+            "atr_pct": _last(atr_pct(atr_series, close)),
+            "obv": _last(obv(close, vol)),
+            "vwap": _last(vwap(high, low, close, vol)),
+            "vol_ratio": (last_vol / mean_vol_20d)
+            if (last_vol is not None and mean_vol_20d)
+            else None,
+            "dollar_volume": _last(dollar_volume(close, vol)),
+            "avg_dollar_volume_20": _last(avg_dollar_volume(close, vol, 20)),
+            "rvol": _last(relative_volume(vol, 20)),
+            "return_1d": _last(returns(close, 1)),
+            "return_5d": _last(returns(close, 5)),
+            "return_21d": _last(returns(close, 21)),
+            "return_63d": _last(returns(close, 63)),
+            "gap_pct": _last(gap_pct(open_, close)),
+            "pct_off_52w_high": _last(pct_off_high(close, high, 252)),
+            "pct_off_52w_low": _last(pct_off_low(close, low, 252)),
+            "is_new_52w_high": bool(_last(is_new_high(high, 252)))
+            if _last(is_new_high(high, 252)) is not None
+            else None,
+            "is_new_52w_low": bool(_last(is_new_low(low, 252)))
+            if _last(is_new_low(low, 252)) is not None
+            else None,
+            "realized_vol_21": _last(realized_vol(close, 21)),
+            "realized_vol_63": _last(realized_vol(close, 63)),
+        }
+    )
     return JSONResponse(summary)
+
+
+def _store_indicators_into(summary: dict[str, Any], row: dict[str, Any]) -> None:
+    """Copy stored indicator values from a row dict into *summary*."""
+    _model_to_dash: dict[str, str] = {
+        "rsi_14": "rsi",
+        "atr_14": "atr",
+        "macd_histogram": "macd_hist",
+        "return_1": "return_1d",
+        "return_5": "return_5d",
+        "return_21": "return_21d",
+        "return_63": "return_63d",
+        "return_126": "return_126",
+        "return_252": "return_252",
+    }
+    for col, val in row.items():
+        if col in (
+            "effective_date",
+            "available_at",
+            "security_id",
+            "source_id",
+            "version_hash",
+            "content_hash",
+            "source_fetch_id",
+            "raw_payload_hash",
+            "ingestion_run_id",
+            "schema_version",
+            "parser_version",
+            "quality_status",
+            "normalization_version",
+        ):
+            continue
+        dst = _model_to_dash.get(col, col)
+        if val is None or val == "":
+            summary[dst] = None
+        elif col in _BOOL_INDICATOR_COLS:
+            summary[dst] = bool(val)
+        elif isinstance(val, (int, float)):
+            summary[dst] = float(val)
+        else:
+            summary[dst] = val
 
 
 # ── Attention + Sentiment leaderboard ──────────────────────────────────────
 
 
-_SYMBOL_CACHE: dict[str, str] = {}
+_SYMBOL_CACHE: dict[str, tuple[str | None, str | None]] = {}
 _SYMBOL_CACHE_MAX = 10000
 
 
-def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
+def _symbol_name_for(con, security_id: str, as_of: datetime) -> tuple[str | None, str | None]:
+    """Reverse-resolve security_id → (symbol, display name), cached."""
     if security_id in _SYMBOL_CACHE:
         return _SYMBOL_CACHE[security_id]
+    sym: str | None = None
+    name: str | None = None
     try:
         row = con.execute(
-            "SELECT symbol FROM security_master "
+            "SELECT symbol, name FROM security_master "
             "WHERE security_id = ? AND effective_start <= ? "
             "ORDER BY effective_start DESC LIMIT 1",
             [security_id, as_of.date()],
         ).fetchone()
+        if row:
+            sym, name = row[0], row[1]
     except Exception:
-        row = None
-    sym = row[0] if row else None
+        pass
     if sym:
         if len(_SYMBOL_CACHE) >= _SYMBOL_CACHE_MAX:
             _SYMBOL_CACHE.clear()
-        _SYMBOL_CACHE[security_id] = sym
-    return sym
+        _SYMBOL_CACHE[security_id] = (sym, name)
+    return sym, name
+
+
+def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
+    return _symbol_name_for(con, security_id, as_of)[0]
+
+
+def _sentiment_split(sent: pl.DataFrame, sids: list[str]) -> dict[str, dict[str, float]]:
+    """Real bullish/bearish/neutral ratios from raw labels, latest day per symbol.
+
+    ``compute_sentiment_ratios`` only exposes ``positive_ratio``; here we read
+    ``sentiment_label`` directly (same field it keys off) to recover the full
+    three-way split instead of fabricating neutral/negative on the client.
+    """
+    split: dict[str, dict[str, float]] = {}
+    if sent.height == 0 or "sentiment_label" not in sent.columns:
+        return split
+    try:
+        lab = pl.col("sentiment_label").str.to_lowercase()
+        latest = (
+            sent.sort("effective_date")
+            .group_by("security_id")
+            .agg(pl.col("effective_date").max().alias("_ed"))
+        )
+        sj = sent.join(latest, on="security_id").filter(pl.col("effective_date") == pl.col("_ed"))
+        for sid in sids:
+            d = sj.filter(pl.col("security_id") == sid)
+            total = d.height
+            if total == 0:
+                continue
+            bull = d.filter(lab.str.contains("bullish", literal=True)).height
+            bear = d.filter(lab.str.contains("bearish", literal=True)).height
+            neu = max(total - bull - bear, 0)
+            split[sid] = {
+                "positive_ratio": bull / total,
+                "negative_ratio": bear / total,
+                "neutral_ratio": neu / total,
+                "total_messages": float(total),
+            }
+    except Exception:
+        return {}
+    return split
 
 
 @router.get("/attention/leaderboard")
@@ -430,9 +666,12 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     con = _get_con()
 
     try:
-        att = con.execute("SELECT * FROM attention_metrics WHERE available_at <= ?", [as_of]).pl()
+        att = con.execute(
+            "SELECT * FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ", [_aware(as_of)]
+        ).pl()
         sent = con.execute(
-            "SELECT * FROM sentiment_annotations WHERE available_at <= ?", [as_of]
+            "SELECT * FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
+            [_aware(as_of)],
         ).pl()
     except Exception:
         return JSONResponse([])
@@ -478,28 +717,33 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
         board = board.join(latest_ratio, on="security_id", how="left")
     board = board.sort("mentions", descending=True).head(limit)
 
+    board_sids = [str(s) for s in board["security_id"]]
+    split = _sentiment_split(sent, board_sids)
+
     trends: dict[str, list[float]] = {}
     for sid in board["security_id"]:
         s = att.filter(pl.col("security_id") == sid).sort("effective_date").tail(30)
-        trends[sid] = [float(m) for m in s["mentions"] if m is not None]
+        trends[str(sid)] = [float(m) for m in s["mentions"] if m is not None]
 
     rows: list[dict[str, Any]] = []
     for r in board.iter_rows(named=True):
-        sid = r["security_id"]
+        sid = str(r["security_id"])
+        sym, name = _symbol_name_for(con, r["security_id"], as_of)
+        sp = split.get(sid, {})
         rows.append(
             {
                 "security_id": sid,
-                "symbol": _symbol_for(con, sid, as_of) or str(sid),
-                "name": "",
+                "symbol": sym or sid,
+                "name": name or "",
                 "mentions": int(r["mentions"]) if r["mentions"] is not None else 0,
                 "rank": r.get("rank"),
                 "cohort": r.get("cohort"),
                 "mention_delta_pct": r.get("mention_delta_pct"),
-                "positive_ratio": r.get("positive_ratio"),
-                "neutral_ratio": r.get("neutral_ratio")
-                or (1 - r.get("positive_ratio", 0) if r.get("positive_ratio") else None),
+                "positive_ratio": sp.get("positive_ratio", r.get("positive_ratio")),
+                "neutral_ratio": sp.get("neutral_ratio"),
+                "negative_ratio": sp.get("negative_ratio"),
                 "mean_score": r.get("mean_score"),
-                "total_messages": r.get("total_messages"),
+                "total_messages": sp.get("total_messages") or r.get("total_messages"),
                 "trend": trends.get(sid, []),
             }
         )
@@ -569,3 +813,16 @@ async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: i
         return JSONResponse([])
     df = df.sort("effective_date", descending=True).head(min(limit, 500))
     return JSONResponse(_pl_to_dicts(df))
+
+
+# ── Indicators glossary ──────────────────────────────────────────────────
+
+
+@router.get("/indicators/glossary")
+async def indicator_glossary():
+    """Return the full indicator glossary, optionally filtered by category.
+
+    Query param ``?category=Trend`` to filter to one category.
+    """
+    _check_enabled()
+    return _GLOSSARY
