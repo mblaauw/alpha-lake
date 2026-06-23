@@ -516,7 +516,7 @@ else:
 
 **Connector contract:** connectors fetch and archive. They return a `RawFetch` with body + manifest metadata. They must not parse, validate, write canonical, or hide partial failure. Per-entity outcomes (`ok`, `empty`, `failed`, `quarantined`) are recorded as an outcome ledger, not dlt incremental state.
 
-**Synthetic fallback:** when no API credentials are available (CI, offline), `_ingest_synthetic()` generates deterministic sample data that passes market sanity checks. This preserves end-to-end test coverage without live API access.
+**Synthetic fallback:** when no API credentials are available (CI, offline), `_ingest_synthetic()` generates deterministic OHLCV data (252 bars per symbol, symbol-specific prices via hash seed) that passes market sanity checks. Data is tagged with `source_id = "demo"` to distinguish it from real ingestions. The config flag `synthetic_mode` (in `[lake]`) controls whether the dashboard displays a DEMO MODE banner. This preserves end-to-end test coverage without live API access.
 
 **Registry data drives behavior:** per-source auth type, rate limit, retry policy, and parser version come from `source_registry` data — not hardcoded in connector code. See `src/alpha_lake/source_registry.py`, `config/stack.toml`.
 
@@ -642,6 +642,7 @@ runtime   = "stack"                                # stack | embedded
 catalog   = "ducklake:postgres:host=pg dbname=lake_catalog"
 canonical_data_path = "s3://lake/"
 raw_archive_uri     = "s3://lake/raw/"
+synthetic_mode      = false                        # demo banner when true
 
 [s3]
 endpoint  = "rustfs:9000"

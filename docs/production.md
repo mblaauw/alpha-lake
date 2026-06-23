@@ -27,6 +27,16 @@ just health
 # 5. Open the dashboard at http://localhost:8000/
 ```
 
+Docker Compose reads `.env` automatically. Sources with configured keys are
+activated; missing keys fall back to keyless or disabled modes.
+
+### Synthetic data mode
+
+When `[lake] synthetic_mode = true` in `config/stack.toml`, bars are tagged
+with `source_id = "demo"` and the dashboard shows a **DEMO MODE** banner.
+Useful for development without API keys. Set `synthetic_mode = false` in
+production (the default).
+
 ## Environment Setup
 
 ### `.env` File
