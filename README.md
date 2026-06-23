@@ -102,7 +102,9 @@ Copy `.env.example` to `.env` and fill in the keys you need:
 | Reddit | `ALPHA_LAKE_REDDIT_API_KEY` | Social discussion posts |
 | SEC | `ALPHA_LAKE_SEC_CONTACT_EMAIL` (email, not a key) | EDGAR access compliance |
 
-Sources with configured keys are activated automatically. Missing keys fall back to keyless or disabled modes. StockTwits, ApeWisdom, and FRED work without any key.
+Sources with configured keys are activated automatically. Missing keys fall back to keyless or disabled modes.
+
+**Keyless sources** (no API key required): StockTwits (sentiment), ApeWisdom (attention metrics), FRED (macro series).
 
 ---
 
