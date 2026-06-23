@@ -6,7 +6,6 @@
   'use strict';
 
   var API = '/v1/dashboard';
-  var WATCHLIST = ['SPY', 'NVDA'];
   var state = { asOf: null, snapshotId: '', priceMode: 'raw', tab: 'overview', symbol: '', dataset: '', expanded: null };
 
   /* ── Theme ── */
@@ -156,36 +155,61 @@
     setTimeout(function () { var p = $('#lw-ds-picker'); if (p) { p.value = name; renderDatasetDetail(name); } }, 120);
   };
 
-  /* ── Bars: per-symbol data cards ── */
+  /* ── Bars: real-data symbol cards ── */
   function renderBars(container) {
-    container.innerHTML =
-      '<div class="lw-search" style="display:flex;align-items:center;gap:8px;"><input type="text" id="lw-bar-symbol" placeholder="Search symbol…" value="' + esc(state.symbol) + '"><span class="lw-mono" id="lw-sym-count" style="font-size:11px;color:var(--lw-ink-3);white-space:nowrap;"></span></div>' +
+    container.innerHTML = '<div class="lw-search" style="display:flex;align-items:center;gap:8px;"><input type="text" id="lw-bar-symbol" placeholder="Search symbol…" value="' + esc(state.symbol) + '"><span class="lw-mono" id="lw-sym-count" style="font-size:11px;color:var(--lw-ink-3);white-space:nowrap;"></span></div>' +
       '<div class="lw-sym-grid" id="lw-sym-grid"></div>';
-    var grid = $('#lw-sym-grid');
-    var syms = []; WATCHLIST.concat(state.symbol ? [state.symbol] : []).forEach(function (s) { if (s && syms.indexOf(s) < 0) syms.push(s); });
-    $('#lw-sym-count').textContent = syms.length + ' symbol' + (syms.length === 1 ? '' : 's') + ' in lake';
-    syms.forEach(function (sym) { loadSymCard(grid, sym); });
-    grid.insertAdjacentHTML('beforeend',
-      '<div class="lw-sym-card is-empty">' +
-        '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' +
-        '<div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-3);">Add a symbol</div>' +
-        '<div style="font-size:12px;color:var(--lw-ink-4);max-width:220px;">Symbols ingest OHLCV bars on first request. Search above to backfill from EODHD / Tiingo / Alpaca.</div>' +
-      '</div>');
     $('#lw-bar-symbol').addEventListener('keydown', function (e) { if (e.key === 'Enter') { state.symbol = e.target.value.toUpperCase().trim(); showTab('bars'); } });
+
+    api('/bars/symbols').then(function (list) {
+      var grid = $('#lw-sym-grid');
+      $('#lw-sym-count').textContent = list.length + ' symbol' + (list.length === 1 ? '' : 's');
+      list.forEach(function (item) {
+        var sym = item.symbol || item.security_id;
+        loadRealCard(grid, sym);
+      });
+    }).catch(function () { $('#lw-sym-count').textContent = 'could not load symbols'; });
   }
 
-  function loadSymCard(grid, sym) {
+  function loadRealCard(grid, sym) {
     var slot = document.createElement('div'); slot.className = 'lw-sym-card'; slot.innerHTML = '<div class="lw-loading">Loading ' + esc(sym) + '</div>'; grid.appendChild(slot);
-    var end = new Date(), start = new Date(end); start.setFullYear(start.getFullYear() - 1);
-    var sp = start.toISOString().slice(0, 10), ep = end.toISOString().slice(0, 10);
-    /* prefer the lightweight summary endpoint; fall back to /bars/indicators (always present) */
-    barApi('/bars/summary', sym).then(function (s) {
-      slot.innerHTML = symCardFromSummary(sym, s);
+    api('/security/' + sym).then(function (agg) {
+      var ds = agg.datasets || {};
+      var insider = ds.insider_tx || [];
+      var sent = ds.sentiment_annotations || [];
+      var news = ds.news_articles || [];
+      var attn = ds.attention_metrics || [];
+      var macro = ds.macro_series || [];
+
+      var tiles = '';
+      if (insider.length) {
+        var dirs = insider.filter(function (r) { return r.transaction_code === 'P' || r.transaction_code === 'S'; });
+        var buys = dirs.filter(function (r) { return r.transaction_code === 'P'; }).length;
+        var sells = dirs.filter(function (r) { return r.transaction_code === 'S'; }).length;
+        tiles += '<div class="lw-metric"><div class="lw-metric-label">Insider</div><div class="lw-metric-val lw-c-up">' + buys + 'B</div><div class="lw-metric-sub">' + sells + 'S &middot; ' + insider.length + ' tx</div></div>';
+      }
+      if (sent.length) {
+        var pos = sent.filter(function (r) { return r.sentiment_score > 0; }).length;
+        var neg = sent.filter(function (r) { return r.sentiment_score < 0; }).length;
+        tiles += '<div class="lw-metric"><div class="lw-metric-label">Sentiment</div><div class="lw-metric-val lw-c-up">' + pos + ' pos</div><div class="lw-metric-sub">' + neg + ' neg &middot; ' + sent.length + ' total</div></div>';
+      }
+      if (news.length) {
+        tiles += '<div class="lw-metric"><div class="lw-metric-label">News</div><div class="lw-metric-val lw-c-ink">' + news.length + '</div><div class="lw-metric-sub">articles</div></div>';
+      }
+      if (attn.length) {
+        var top = attn[0];
+        tiles += '<div class="lw-metric"><div class="lw-metric-label">Attention</div><div class="lw-metric-val lw-c-ink">' + (top.mentions || 0) + '</div><div class="lw-metric-sub">' + (top.rank ? 'rank ' + top.rank : 'mentions') + '</div></div>';
+      }
+      if (macro.length) {
+        tiles += '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Macro</div><div class="lw-metric-val lw-c-ink">' + macro.length + '</div><div class="lw-metric-sub">observations</div></div>';
+      }
+      if (!tiles) {
+        tiles = '<div class="lw-metric lw-metric-wide"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No data for ' + esc(sym) + '</div></div>';
+      }
+
+      slot.innerHTML = '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div></div></div><div style="text-align:right;flex:none;font-size:12px;color:var(--lw-ink-3);">' + agg.security_id + '</div></div><div class="lw-metric-grid">' + tiles + '</div><div class="lw-sym-foot"><span>as_of: ' + agg.as_of + '</span></div>';
     }).catch(function () {
-      barApi('/bars/indicators?indicators=sma:50,rsi:14,atr:14,macd', sym, sp, ep).then(function (res) {
-        if (!res || !res.close || !res.close.length) { slot.outerHTML = emptySymCard(sym); return; }
-        slot.innerHTML = symCardFromSeries(sym, res);
-      }).catch(function () { slot.outerHTML = emptySymCard(sym); });
+      slot.outerHTML = '<div class="lw-sym-card is-empty"><div class="lw-sym-badge">' + esc(sym[0]) + '</div><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2);">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px;">No data in lake for this symbol yet.</div></div>';
     });
   }
 

@@ -20,6 +20,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "fsspec>=2024.0",
     "s3fs>=2024.0",
+    "pytz>=2024.0",
 ]
 
 [project.optional-dependencies]

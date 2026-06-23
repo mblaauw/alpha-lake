@@ -156,7 +156,7 @@ async def security_detail(
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
-        raise HTTPException(404, f"Symbol '{symbol}' not found")
+        sec_id = symbol
 
     agg: dict[str, Any] = {
         "symbol": symbol,
@@ -302,6 +302,37 @@ async def bars_indicators(
         for key in list(result.keys()):
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
+    return JSONResponse(result)
+
+
+# ── Symbols with real data (replaces hardcoded WATCHLIST) ────────────────
+
+
+@router.get("/bars/symbols")
+async def bars_symbols():
+    """Return distinct security_ids from all populated datasets."""
+    _check_enabled()
+    con = _get_con()
+    seen: dict[str, str] = {}
+    for table, id_col in [
+        ("insider_tx", "security_id"),
+        ("sentiment_annotations", "security_id"),
+        ("attention_metrics", "security_id"),
+    ]:
+        try:
+            ids = con.execute(
+                f"SELECT DISTINCT {id_col} FROM {table}"
+                f" WHERE {id_col} IS NOT NULL AND {id_col} != '' LIMIT 100"
+            ).fetchall()
+            for row in ids:
+                sid = str(row[0])
+                if sid and sid not in seen:
+                    sym = _symbol_for(con, sid, _now()) or sid
+                    seen[sid] = sym
+        except Exception:
+            pass
+    result = [{"security_id": sid, "symbol": sym} for sid, sym in seen.items()]
+    result.sort(key=lambda x: x["symbol"])
     return JSONResponse(result)
 
 
