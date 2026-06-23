@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import polars as pl  # type: ignore[unresolved-import]
@@ -16,7 +16,7 @@ from alpha_lake.catalog import (
     list_snapshots,
 )
 from alpha_lake.config import get_config
-from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
+from alpha_lake.derived import atr, macd, rsi, sma
 from alpha_lake.derived.event_aggregations import (
     compute_attention_deltas,
     compute_sentiment_ratios,
@@ -24,26 +24,16 @@ from alpha_lake.derived.event_aggregations import (
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
 from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
+from alpha_lake.transport._shared import (
+    _INDICATOR_MAP,
+    _MAX_LOOKBACK_DAYS,
+    _compute_warmup,
+    _now,
+    _parse_indicators,
+    _pl_to_dicts,
+)
 
 router = APIRouter(prefix="/v1/dashboard")
-
-_INDICATOR_MAP: dict[str, Any] = {
-    "sma": sma,
-    "ema": ema,
-    "rsi": rsi,
-    "bollinger": bollinger_bands,
-    "atr": atr,
-    "macd": macd,
-}
-_RECURSIVE_MULTIPLIER: dict[str, int] = {
-    "sma": 1,
-    "ema": 3,
-    "rsi": 3,
-    "bollinger": 1,
-    "atr": 5,
-    "macd": 3,
-}
-_MAX_LOOKBACK_DAYS = 365 * 3
 
 
 def _check_enabled() -> None:
@@ -53,44 +43,6 @@ def _check_enabled() -> None:
 
 def _get_con():
     return connect(get_config())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
-    parts = spec.split(",")
-    result: list[tuple[str, list[int | float]]] = []
-    for part in parts:
-        part = part.strip()
-        if ":" in part:
-            name, *args_str = part.split(":")
-            args = [float(a) for a in args_str]
-            result.append((name, args))
-        else:
-            result.append((part, []))
-    return result
-
-
-def _compute_warmup(
-    indicator: str, args: list[int | float], start: date | None, exchange: str = "XNYS"
-) -> date | None:
-    if start is None:
-        return None
-    mult = _RECURSIVE_MULTIPLIER.get(indicator, 1)
-    window = int(args[0]) if args else 14
-    return shift_trading_days(start, -(window * mult), exchange=exchange)
-
-
-def _pl_to_dicts(df: pl.DataFrame) -> list[dict[str, Any]]:
-    return [{k: _v(v) for k, v in row.items()} for row in df.rows(named=True)]
-
-
-def _v(val: Any) -> Any:
-    if isinstance(val, datetime | date):
-        return val.isoformat()
-    return val
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -410,6 +362,7 @@ async def bars_summary(
 
 
 _SYMBOL_CACHE: dict[str, str] = {}
+_SYMBOL_CACHE_MAX = 10000
 
 
 def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
@@ -426,6 +379,8 @@ def _symbol_for(con, security_id: str, as_of: datetime) -> str | None:
         row = None
     sym = row[0] if row else None
     if sym:
+        if len(_SYMBOL_CACHE) >= _SYMBOL_CACHE_MAX:
+            _SYMBOL_CACHE.clear()
         _SYMBOL_CACHE[security_id] = sym
     return sym
 
@@ -452,8 +407,6 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
 
     deltas = compute_attention_deltas(att, as_of)
     ratios = compute_sentiment_ratios(sent, as_of) if sent.height > 0 else None
-
-    import polars as pl  # type: ignore[unresolved-import]
 
     latest_att = (
         att.sort("effective_date")

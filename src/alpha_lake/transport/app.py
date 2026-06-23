@@ -1,70 +1,39 @@
+"""FastAPI application for the Alpha-Lake REST API.
+
+This module defines the authenticated REST endpoints (/v1/bars, /v1/health, …),
+the dashboard gate, and static file mounting. Shared indicator/format utilities
+live in ``_shared.py``.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from pathlib import Path
 from time import monotonic
 from typing import Any
 
 import duckdb
-import polars as pl
 from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-import]
 from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
-from alpha_lake.calendar_ import shift_trading_days
 from alpha_lake.catalog import catalog_health, connect
 from alpha_lake.config import get_config, load_config
-from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
 from alpha_lake.secrets import get_store
 from alpha_lake.security_master import resolve as resolve_security
-from alpha_lake.serving import read_bars_asof
+from alpha_lake.serving import read_bars_adjusted, read_bars_asof
+from alpha_lake.transport._shared import (
+    _INDICATOR_MAP,
+    _MAX_LOOKBACK_DAYS,
+    _compute_warmup,
+    _now,
+    _parse_indicators,
+    _pl_to_dicts,
+)
 
 _STATIC = Path(__file__).parent / "static"
-
-_INDICATOR_MAP: dict[str, Callable[..., Any]] = {
-    "sma": sma,
-    "ema": ema,
-    "rsi": rsi,
-    "bollinger": bollinger_bands,
-    "atr": atr,
-    "macd": macd,
-}
-
-_RECURSIVE_MULTIPLIER: dict[str, int] = {
-    "sma": 1,
-    "ema": 3,
-    "rsi": 3,
-    "bollinger": 1,
-    "atr": 5,
-    "macd": 3,
-}
-
-
-def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
-    parts = spec.split(",")
-    result: list[tuple[str, list[int | float]]] = []
-    for part in parts:
-        part = part.strip()
-        if ":" in part:
-            name, *args_str = part.split(":")
-            args = [float(a) for a in args_str]
-            result.append((name, args))
-        else:
-            result.append((part, []))
-    return result
-
-
-def _compute_warmup(
-    indicator: str, args: list[int | float], start: date | None, exchange: str = "XNYS"
-) -> date | None:
-    if start is None:
-        return None
-    mult = _RECURSIVE_MULTIPLIER.get(indicator, 1)
-    window = int(args[0]) if args else 14
-    return shift_trading_days(start, -(window * mult), exchange=exchange)
 
 
 class _TokenBucket:
@@ -103,7 +72,6 @@ def _verify_key(key: str) -> bool:
 
 _connection: duckdb.DuckDBPyConnection | None = None
 _buckets: dict[str, _TokenBucket] = {}
-_MAX_LOOKBACK_DAYS = 365 * 3
 
 
 def _get_con() -> duckdb.DuckDBPyConnection:
@@ -129,10 +97,6 @@ def _auth(request: Request) -> str:
     return key
 
 
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
 app = FastAPI(title="Alpha-Lake", version="0.1.0")
 
 
@@ -149,6 +113,7 @@ async def bars(
     end: date | None = None,
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
+    price_mode: str = "raw",
 ):
     _auth(request)
 
@@ -156,10 +121,7 @@ async def bars(
         as_of = _now()
 
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(
-            422,
-            f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days",
-        )
+        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
     if sec_id is None:
@@ -172,8 +134,13 @@ async def bars(
         kwargs["end_date"] = end
     if snapshot_id:
         kwargs["snapshot_id"] = snapshot_id
+    if price_mode != "raw":
+        kwargs["price_mode"] = price_mode
 
-    df = read_bars_asof(_get_con(), **kwargs)
+    if price_mode != "raw":
+        df = read_bars_adjusted(_get_con(), **kwargs)
+    else:
+        df = read_bars_asof(_get_con(), **kwargs)
     return JSONResponse(_pl_to_dicts(df))
 
 
@@ -192,10 +159,7 @@ async def bars_indicators(
         as_of = _now()
 
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(
-            422,
-            f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days",
-        )
+        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of)
     if sec_id is None:
@@ -246,16 +210,6 @@ async def bars_indicators(
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
     return JSONResponse(result)
-
-
-def _pl_to_dicts(df: pl.DataFrame) -> list[dict[str, Any]]:
-    return [{k: _v(v) for k, v in row.items()} for row in df.rows(named=True)]
-
-
-def _v(val: Any) -> Any:
-    if isinstance(val, datetime | date):
-        return val.isoformat()
-    return val
 
 
 # ── Dashboard / static —─────────────────────────────────────────────────────
