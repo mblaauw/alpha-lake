@@ -74,7 +74,7 @@ A real-time data-validation dashboard runs at `http://localhost:8000/` once the 
 
 ```bash
 git clone https://github.com/mblaauw/alpha-lake.git && cd alpha-lake
-cp .env.example .env              # configure your API keys (see table below)
+cp .env.example .env              # edit .env with your API keys
 just up                           # start Postgres + RustFS + app server
 just bootstrap                    # initialize catalog tables
 just health                       # verify dataset freshness
@@ -87,14 +87,22 @@ docker compose run --rm app compute-indicators
 
 ### Live Ingestion — API Keys
 
-| Source | Environment Variable |
-|--------|---------------------|
-| EODHD | `ALPHA_LAKE_EODHD_API_KEY` |
-| Tiingo | `ALPHA_LAKE_TIINGO_API_KEY` |
-| Alpaca | `ALPHA_LAKE_ALPACA_API_KEY_ID`, `ALPHA_LAKE_ALPACA_API_SECRET_KEY` |
-| Reddit | `ALPHA_LAKE_REDDIT_API_KEY` |
+Copy `.env.example` to `.env` and fill in the keys you need:
 
-Sources with configured keys are activated automatically. Missing keys fall back to keyless or disabled modes.
+| Source | Environment Variable | Required |
+|--------|---------------------|----------|
+| EODHD | `ALPHA_LAKE_EODHD_API_KEY` | Bars, fundamentals, earnings |
+| Tiingo | `ALPHA_LAKE_TIINGO_API_KEY` | Bars, fundamentals |
+| Alpaca | `ALPHA_LAKE_ALPACA_API_KEY_ID` + `ALPHA_LAKE_ALPACA_API_SECRET_KEY` | Intraday bars |
+| Finnhub | `ALPHA_LAKE_FINNHUB_API_KEY` | News, sentiment, analyst estimates, insider |
+| Marketaux | `ALPHA_LAKE_MARKETAUX_API_KEY` | News + entity sentiment |
+| FMP | `ALPHA_LAKE_FMP_API_KEY` | Economic calendar, analyst estimates |
+| OpenFIGI | `ALPHA_LAKE_OPENFIGI_API_KEY` | Identifier resolution |
+| Quiver | `ALPHA_LAKE_QUIVER_API_KEY` | Congressional trades |
+| Reddit | `ALPHA_LAKE_REDDIT_API_KEY` | Social discussion posts |
+| SEC | `ALPHA_LAKE_SEC_CONTACT_EMAIL` (email, not a key) | EDGAR access compliance |
+
+Sources with configured keys are activated automatically. Missing keys fall back to keyless or disabled modes. StockTwits, ApeWisdom, and FRED work without any key.
 
 ---
 
