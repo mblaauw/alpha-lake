@@ -576,7 +576,40 @@
     { label: 'DolV', key: 'dollar_volume', cat: 'Volume', fmt: 'big', gid: 'dollar_volume' }, { label: 'aDol20', key: 'avg_dollar_volume_20', cat: 'Volume', fmt: 'big', gid: 'avg_dollar_volume' }, { label: 'R1d', key: 'return_1d', cat: 'Structure', fmt: 'pct', gid: 'return_1d' }, { label: 'R5d', key: 'return_5d', cat: 'Structure', fmt: 'pct', gid: 'return_5d' }, { label: 'R21d', key: 'return_21d', cat: 'Structure', fmt: 'pct', gid: 'return_21d' }, { label: 'R63d', key: 'return_63d', cat: 'Structure', fmt: 'pct', gid: 'return_63d' },
     { label: 'Gap%', key: 'gap_pct', cat: 'Structure', fmt: 'pct', gid: 'gap_pct' }, { label: '52wHi', key: 'pct_off_52w_high', cat: 'Structure', fmt: 'pct', gid: 'pct_off_52w_high' }, { label: '52wLo', key: 'pct_off_52w_low', cat: 'Structure', fmt: 'pct', gid: 'pct_off_52w_low' }, { label: 'RV21', key: 'realized_vol_21', cat: 'Volatility', fmt: 'pct', gid: 'realized_vol' }, { label: 'RV63', key: 'realized_vol_63', cat: 'Volatility', fmt: 'pct', gid: 'realized_vol' },
     { label: 'ADX', key: 'adx_14', cat: 'Trend', fmt: 'num2', gid: 'adx' }, { label: 'DI+', key: 'di_plus_14', cat: 'Trend', fmt: 'num2', gid: 'di_plus' }, { label: 'DI-', key: 'di_minus_14', cat: 'Trend', fmt: 'num2', gid: 'di_minus' }, { label: 'StochK', key: 'stoch_k_14', cat: 'Momentum', fmt: 'num1', gid: 'stoch_k' }, { label: 'Wm%R', key: 'williams_r_14', cat: 'Momentum', fmt: 'num1', gid: 'williams_r' }, { label: 'CCI', key: 'cci_20', cat: 'Momentum', fmt: 'num1', gid: 'cci' },
-    { label: 'MFI', key: 'mfi_14', cat: 'Volume', fmt: 'num1', gid: 'mfi' }, { label: 'CMF', key: 'cmf_20', cat: 'Volume', fmt: 'num3', gid: 'cmf' }, { label: '%B', key: 'percent_b', cat: 'Volatility', fmt: 'num2', gid: 'percent_b' }, { label: 'Beta60', key: 'beta_60d', cat: 'Relative', fmt: 'num2', gid: 'beta' }, { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct', gid: 'rs_spy' }, { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2', gid: 'corr_spy' }
+    { label: 'MFI', key: 'mfi_14', cat: 'Volume', fmt: 'num1', gid: 'mfi' }, { label: 'CMF', key: 'cmf_20', cat: 'Volume', fmt: 'num3', gid: 'cmf' }, { label: '%B', key: 'percent_b', cat: 'Volatility', fmt: 'num2', gid: 'percent_b' }, { label: 'Beta60', key: 'beta_60d', cat: 'Relative', fmt: 'num2', gid: 'beta' }, { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct', gid: 'rs_spy' }, { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2', gid: 'corr_spy' },
+    // ── Trend add-ons ──
+    { label: 'ADL', key: 'ad_line', cat: 'Trend', fmt: 'big', gid: 'ad_line' }, { label: 'AronU', key: 'aroon_up_25', cat: 'Trend', fmt: 'num1', gid: 'aroon_up' }, { label: 'AronD', key: 'aroon_down_25', cat: 'Trend', fmt: 'num1', gid: 'aroon_down' }, { label: 'AronO', key: 'aroon_osc_25', cat: 'Trend', fmt: 'num1', gid: 'aroon_osc' },
+    { label: 'KAMA', key: 'kama_10', cat: 'Trend', fmt: 'price', gid: 'kama' }, { label: 'WMA', key: 'wma_20', cat: 'Trend', fmt: 'price', gid: 'wma' },
+    { label: 'LnSlp', key: 'linreg_slope_20', cat: 'Trend', fmt: 'num2', gid: 'linreg_slope' },
+    { label: 'MS20', key: 'ma_slope_20', cat: 'Trend', fmt: 'num2', gid: 'ma_slope' }, { label: 'MS50', key: 'ma_slope_50', cat: 'Trend', fmt: 'num2', gid: 'ma_slope' }, { label: 'MS200', key: 'ma_slope_200', cat: 'Trend', fmt: 'num2', gid: 'ma_slope' },
+    { label: 'MaStk', key: 'ma_stack', cat: 'Trend', fmt: 'num1', gid: 'ma_stack' },
+    { label: 'DMA20', key: 'dist_to_ma_20', cat: 'Trend', fmt: 'pct', gid: 'dist_to_ma' }, { label: 'DMA50', key: 'dist_to_ma_50', cat: 'Trend', fmt: 'pct', gid: 'dist_to_ma' }, { label: 'DMA200', key: 'dist_to_ma_200', cat: 'Trend', fmt: 'pct', gid: 'dist_to_ma' },
+    { label: 'TRIX', key: 'trix_15', cat: 'Trend', fmt: 'num2', gid: 'trix' }, { label: 'TSI', key: 'tsi_25_13', cat: 'Trend', fmt: 'num2', gid: 'tsi' },
+    { label: 'DonU', key: 'donchian_upper', cat: 'Trend', fmt: 'price', gid: 'donchian_upper' }, { label: 'DonM', key: 'donchian_middle', cat: 'Trend', fmt: 'price', gid: 'donchian_middle' }, { label: 'DonL', key: 'donchian_lower', cat: 'Trend', fmt: 'price', gid: 'donchian_lower' },
+    { label: 'KelU', key: 'keltner_upper', cat: 'Trend', fmt: 'price', gid: 'keltner_upper' }, { label: 'KelM', key: 'keltner_middle', cat: 'Trend', fmt: 'price', gid: 'keltner_mid' }, { label: 'KelL', key: 'keltner_lower', cat: 'Trend', fmt: 'price', gid: 'keltner_lower' },
+    { label: 'LnU', key: 'linreg_channel_upper', cat: 'Trend', fmt: 'price', gid: 'linreg_channel' }, { label: 'LnM', key: 'linreg_channel_middle', cat: 'Trend', fmt: 'price', gid: 'linreg_channel' }, { label: 'LnL', key: 'linreg_channel_lower', cat: 'Trend', fmt: 'price', gid: 'linreg_channel' },
+    // ── Momentum add-ons ──
+    { label: 'RoC', key: 'roc_12', cat: 'Momentum', fmt: 'pct', gid: 'roc' }, { label: 'CMO', key: 'cmo_14', cat: 'Momentum', fmt: 'num1', gid: 'cmo' },
+    { label: 'UO', key: 'ultimate_osc', cat: 'Momentum', fmt: 'num1', gid: 'ultimate_osc' }, { label: 'BoP', key: 'bop', cat: 'Momentum', fmt: 'num2', gid: 'bop' },
+    { label: 'RSIdv', key: 'rsi_divergence', cat: 'Momentum', fmt: 'num1', gid: 'rsi_divergence' },
+    { label: 'PPO', key: 'ppo', cat: 'Momentum', fmt: 'num2', gid: 'ppo' }, { label: 'PPOh', key: 'ppo_histogram', cat: 'Momentum', fmt: 'num2', gid: 'ppo_histogram' }, { label: 'PPOs', key: 'ppo_signal', cat: 'Momentum', fmt: 'num2', gid: 'ppo_signal' },
+    { label: 'StoRSI', key: 'stoch_rsi_14', cat: 'Momentum', fmt: 'num1', gid: 'stoch_rsi' }, { label: 'StoD', key: 'stoch_d_3', cat: 'Momentum', fmt: 'num1', gid: 'stoch_d' },
+    // ── Volatility add-ons ──
+    { label: 'BBW', key: 'bandwidth', cat: 'Volatility', fmt: 'num4', gid: 'bandwidth' }, { label: 'BBsqz', key: 'bb_squeeze', cat: 'Volatility', fmt: 'bool', gid: 'bb_squeeze' },
+    { label: 'StdDev', key: 'rolling_std_20', cat: 'Volatility', fmt: 'num2', gid: 'std_dev' }, { label: 'TR', key: 'true_range', cat: 'Volatility', fmt: 'num2', gid: 'true_range' },
+    { label: 'RngEx', key: 'range_expansion', cat: 'Volatility', fmt: 'pct', gid: 'range_expansion' }, { label: 'CHOP', key: 'chop_14', cat: 'Volatility', fmt: 'num1', gid: 'chop' },
+    // ── Volume add-ons ──
+    { label: 'ChaikO', key: 'chaikin_osc', cat: 'Volume', fmt: 'big', gid: 'chaikin_osc' }, { label: 'EoM', key: 'eom_14', cat: 'Volume', fmt: 'num3', gid: 'eom' },
+    { label: 'FI13', key: 'force_index_13', cat: 'Volume', fmt: 'big', gid: 'force_index' }, { label: 'OBVSlp', key: 'obv_slope_20', cat: 'Volume', fmt: 'big', gid: 'obv_slope' }, { label: 'VPT', key: 'vpt', cat: 'Volume', fmt: 'big', gid: 'vpt' },
+    // ── Structure add-ons ──
+    { label: 'Inside', key: 'inside_bar', cat: 'Structure', fmt: 'bool', gid: 'inside_bar' }, { label: 'Outsid', key: 'outside_bar', cat: 'Structure', fmt: 'bool', gid: 'outside_bar' },
+    { label: 'GapFil', key: 'gap_fill', cat: 'Structure', fmt: 'bool', gid: 'gap_fill' }, { label: 'VolSpk', key: 'volume_spike', cat: 'Structure', fmt: 'bool', gid: 'volume_spike' },
+    { label: 'LogR', key: 'log_return', cat: 'Structure', fmt: 'pct', gid: 'log_return' },
+    { label: 'A20', key: 'above_ma_20', cat: 'Structure', fmt: 'bool', gid: 'above_ma' }, { label: 'A50', key: 'above_ma_50', cat: 'Structure', fmt: 'bool', gid: 'above_ma' }, { label: 'A200', key: 'above_ma_200', cat: 'Structure', fmt: 'bool', gid: 'above_ma' },
+    { label: '52wH', key: 'is_new_52w_high', cat: 'Structure', fmt: 'bool', gid: 'is_new_52w_high' }, { label: '52wL', key: 'is_new_52w_low', cat: 'Structure', fmt: 'bool', gid: 'is_new_52w_low' },
+    { label: 'R126', key: 'return_126', cat: 'Structure', fmt: 'pct', gid: 'return_126' },
+    // ── Relative add-ons ──
+    { label: 'Alpha', key: 'alpha', cat: 'Relative', fmt: 'num4', gid: 'alpha' }, { label: 'B20', key: 'beta_20d', cat: 'Relative', fmt: 'num2', gid: 'beta_20d' }, { label: 'RS60', key: 'rs_spy_60d', cat: 'Relative', fmt: 'pct', gid: 'rs_spy' }
   ];
   var pins = getJSON('lw_pins', {});
   function getPins(sym) { return pins[sym] || []; }
