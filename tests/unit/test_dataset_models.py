@@ -165,8 +165,10 @@ def _make(name: str) -> list[str]:
             "cohort",
             "mentions",
             "mentions_24h_ago",
+            "upvotes",
             "rank",
             "rank_24h_ago",
+            "name",
             "source_fetch_id",
             "raw_payload_hash",
             "ingestion_run_id",
@@ -184,11 +186,7 @@ def _df(model_name: str, extra: dict) -> pl.DataFrame:
     data = {c: [None] for c in _make(model_name)}
     for k, v in extra.items():
         data[k] = [v]
-    df = pl.DataFrame(data)
-    for c in df.columns:
-        if df[c].dtype == pl.Null:
-            df = df.with_columns(pl.col(c).cast(pl.Datetime))
-    return df
+    return pl.DataFrame(data)
 
 
 def _td(name: str, **kw) -> pl.DataFrame:
@@ -213,10 +211,12 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "input_text_hash",
         "source_dataset_version",
         "security_id",
+        "name",
     }
     int_cols = {
         "schema_version",
         "parser_version",
+        "upvotes",
         "article_count",
         "mention_count",
         "unique_source_count",
@@ -380,6 +380,7 @@ def test_social_attention_fact():
         cohort="wallstreetbets",
         mentions=100,
         mentions_24h_ago=80,
+        upvotes=500,
         rank=1,
         rank_24h_ago=2,
     )

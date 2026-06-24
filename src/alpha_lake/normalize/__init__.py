@@ -500,15 +500,17 @@ def apewisdom_attention_from_json(
                 "cohort": cohort,
                 "mentions": int(record.get("mentions", 0)),
                 "mentions_24h_ago": int(record.get("mentions_24h_ago", 0)),
+                "upvotes": record.get("upvotes"),
                 "rank": record.get("rank"),
                 "rank_24h_ago": record.get("rank_24h_ago"),
+                "name": record.get("name") or None,
                 "source_fetch_id": source_fetch_id,
                 "raw_payload_hash": content_hash,
                 "ingestion_run_id": ingestion_run_id,
                 "content_hash": content_hash,
                 "version_hash": "",
                 "schema_version": 1,
-                "parser_version": 1,
+                "parser_version": 2,
                 "quality_status": "valid",
             }
         )

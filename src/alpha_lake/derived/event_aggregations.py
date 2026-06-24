@@ -72,13 +72,13 @@ def compute_attention_deltas(
     attention: pl.DataFrame,
     as_of: datetime,
 ) -> pl.DataFrame:
-    """Aggregated social attention deltas: mention change and raw rank.
+    """Aggregated social attention deltas: mention change, upvote ratio, raw rank.
 
     ``attention`` must contain ``security_id``, ``effective_date``,
     ``available_at``, ``cohort``, ``mentions``, ``rank``.
 
     Returns:
-        ``mention_delta_pct``, ``rank`` per
+        ``mention_delta_pct``, ``upvote_ratio``, ``upvote_delta_pct``, ``rank`` per
         ``(security_id, cohort, effective_date)``.
     """
     pit = attention.filter(pl.col("available_at") <= as_of).sort(
@@ -98,12 +98,24 @@ def compute_attention_deltas(
         for i in range(len(s)):
             dt = s["effective_date"][i]
             mentions = s["mentions"][i]
+            upvotes = s["upvotes"][i] if "upvotes" in s.columns else None
             rank = s["rank"][i]
             prev_mentions = s["mentions"][i - 1] if i > 0 else None
+            prev_upvotes = s["upvotes"][i - 1] if i > 0 and "upvotes" in s.columns else None
 
             mention_delta = (
                 ((mentions - prev_mentions) / prev_mentions * 100)
                 if (prev_mentions and prev_mentions != 0)
+                else None
+            )
+
+            upvote_ratio = (
+                upvotes / mentions if (upvotes is not None and mentions and mentions > 0) else None
+            )
+
+            upvote_delta = (
+                ((upvotes - prev_upvotes) / prev_upvotes * 100)
+                if (prev_upvotes is not None and upvotes is not None and prev_upvotes > 0)
                 else None
             )
 
@@ -115,6 +127,8 @@ def compute_attention_deltas(
                     "available_at": as_of,
                     "source_id": "derived",
                     "mention_delta_pct": mention_delta,
+                    "upvote_ratio": upvote_ratio,
+                    "upvote_delta_pct": upvote_delta,
                     "rank": rank,
                     "source_fetch_id": "",
                     "raw_payload_hash": "",

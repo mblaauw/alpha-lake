@@ -839,6 +839,7 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     deltas = compute_attention_deltas(att, as_of)
     ratios = compute_sentiment_ratios(sent, as_of) if sent.height > 0 else None
 
+    has_upvotes = "upvotes" in att.columns
     latest_att = (
         att.sort("effective_date")
         .group_by("security_id")
@@ -846,12 +847,19 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
             pl.col("mentions").last().alias("mentions"),
             pl.col("rank").last().alias("rank"),
             pl.col("cohort").last().alias("cohort"),
+            pl.col("upvotes").last().alias("upvotes")
+            if has_upvotes
+            else pl.lit(None).alias("upvotes"),
         )
     )
     latest_delta = (
         deltas.sort("effective_date")
         .group_by("security_id")
-        .agg(pl.col("mention_delta_pct").last())
+        .agg(
+            pl.col("mention_delta_pct").last(),
+            pl.col("upvote_ratio").last(),
+            pl.col("upvote_delta_pct").last(),
+        )
         if deltas.height > 0
         else None
     )
@@ -885,17 +893,20 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     rows: list[dict[str, Any]] = []
     for r in board.iter_rows(named=True):
         sid = str(r["security_id"])
-        sym, name = _symbol_name_for(con, r["security_id"], as_of)
+        sym, sym_name = _symbol_name_for(con, r["security_id"], as_of)
         sp = split.get(sid, {})
         rows.append(
             {
                 "security_id": sid,
                 "symbol": sym or sid,
-                "name": name or "",
+                "name": r.get("name") or sym_name or "",
                 "mentions": int(r["mentions"]) if r["mentions"] is not None else 0,
+                "upvotes": int(r["upvotes"]) if r.get("upvotes") is not None else None,
                 "rank": r.get("rank"),
                 "cohort": r.get("cohort"),
                 "mention_delta_pct": r.get("mention_delta_pct"),
+                "upvote_ratio": r.get("upvote_ratio"),
+                "upvote_delta_pct": r.get("upvote_delta_pct"),
                 "positive_ratio": sp.get("positive_ratio", r.get("positive_ratio")),
                 "neutral_ratio": sp.get("neutral_ratio"),
                 "negative_ratio": sp.get("negative_ratio"),

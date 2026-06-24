@@ -526,7 +526,7 @@
   function emptySentiment() { return '<div class="lw-empty" style="padding:36px 16px"><div class="lw-empty-mono">Awaiting attention data</div></div>'; }
   function drawLeaders() {
     var lead = $('#lw-lead');
-    var html = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Δ</span><span>Bull / Neu / Bear</span><span></span></div>';
+    var html = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Upvotes</span><span>Δ</span><span>Engage</span><span></span></div>';
     _leaders.forEach(function (l) {
       var hasSent = l.positive_ratio != null;
       var pos = hasSent ? Math.round(l.positive_ratio * 100) : 0;
@@ -539,30 +539,29 @@
       var deltaCol = d == null ? 'var(--lw-ink-3)' : d >= 0 ? 'var(--lw-up)' : 'var(--lw-down)';
       var open = state.expanded === l.symbol;
       var trend = (l.trend || []).length >= 2 ? l.trend : [0, l.mentions || 1];
-      var sentCell = hasSent
-        ? '<div class="lw-sent-wrap" style="display:flex;align-items:center;gap:7px"><span class="lw-sent-bar"><span class="lw-sent-pos" style="width:' + pos + '%"></span><span class="lw-sent-neu" style="width:' + neu + '%"></span><span class="lw-sent-neg" style="width:' + neg + '%"></span></span><span class="lw-mono" style="font-size:11px;font-weight:700;color:var(--lw-up)">' + pos + '%</span></div>'
-        : '<div class="lw-sent-wrap"><span class="lw-mono lw-c-dim" style="font-size:11px">no sentiment</span></div>';
-      var meanCol = l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)';
-      var legend = hasSent ? (has3
-        ? '<span class="lw-c-up" style="font-weight:700">' + pos + '% bull</span> · <span class="lw-c-dim">' + neu + '% neu</span> · <span class="lw-c-down" style="font-weight:700">' + neg + '% bear</span>'
-        : '<span class="lw-c-up" style="font-weight:700">' + pos + '% bull</span> · <span class="lw-c-dim">' + (100 - pos) + '% neutral / bearish</span>')
-        : '<span class="lw-c-dim">no labelled messages</span>';
+      var up = l.upvotes;
+      var upStr = up == null ? '—' : fmtBig(up);
+      var ur = l.upvote_ratio;
+      var urStr = ur == null ? '—' : ur.toFixed(1) + '×';
+      var urCol = ur == null ? 'var(--lw-ink-3)' : ur > 3 ? 'var(--lw-up)' : ur > 1 ? 'var(--lw-accent)' : 'var(--lw-ink-3)';
       html += '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
         '<div class="lw-lead-row">' +
           '<div class="lw-lead-id"><span class="lw-lead-badge">' + esc((l.symbol || '?')[0]) + '</span><div style="min-width:0"><div class="lw-lead-sym">' + esc(l.symbol) + '</div>' + (l.name ? '<div class="lw-sym-name" style="font-size:10px">' + esc(l.name) + '</div>' : '') + '</div></div>' +
           '<div class="lw-lead-mentions">' + fmtNum(l.mentions) + spark(trend, 52, 18, (d || 0) >= 0) + '</div>' +
+          '<span class="lw-mono" style="font-size:12px;font-weight:700;color:var(--lw-ink)">' + upStr + '</span>' +
           '<span class="lw-mono" style="font-size:12px;font-weight:700;color:' + deltaCol + '">' + deltaStr + '</span>' +
-          sentCell +
+          '<span class="lw-mono" style="font-size:11px;font-weight:700;color:' + urCol + '">' + urStr + '</span>' +
           '<span class="lw-caret">▾</span>' +
         '</div>' +
         '<div class="lw-lead-detail">' +
           '<div><div class="lw-detail-lbl">Mention trend · 30d</div>' + (ftChart(trend, null, (d || 0) >= 0, function (v) { return fmtBig(v); }) || '<div class="lw-c-dim" style="padding:16px 0">—</div>') + '</div>' +
           '<div style="display:flex;flex-direction:column;gap:11px">' +
-            '<div><div class="lw-detail-lbl">Sentiment split</div><div class="lw-mono" style="font-size:11px">' + legend + '</div></div>' +
+            '<div style="display:flex;gap:20px"><div><div class="lw-detail-lbl">Sentiment split</div><div class="lw-mono" style="font-size:11px">' + legend + '</div></div></div>' +
             '<div><div class="lw-detail-lbl">Mean score</div><div class="lw-mono" style="font-size:15px;font-weight:700;color:' + meanCol + '">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
             '<div style="display:flex;gap:20px"><div><div class="lw-detail-lbl">Messages</div><div class="lw-mono" style="font-size:13px;color:var(--lw-ink)">' + fmtNum(l.total_messages) + '</div></div>' + (l.cohort ? '<div><div class="lw-detail-lbl">Cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap)">' + esc(l.cohort) + '</div></div>' : '') + '</div>' +
           '</div>' +
         '</div></div>';
+      html += '</div>';
     });
     lead.innerHTML = html;
     $$('.lw-lead-row', lead).forEach(function (row) { row.addEventListener('click', function () { var sym = row.parentNode.dataset.sym; state.expanded = state.expanded === sym ? null : sym; drawLeaders(); }); });

@@ -248,7 +248,7 @@ html, body {
 
 /* ── Sentiment leaderboard ── */
 .lw-lead { background: var(--lw-paper); border:1px solid var(--lw-rule); border-radius:5px; overflow:hidden; }
-.lw-lead-head, .lw-lead-row { display:grid; grid-template-columns:1fr 110px 64px 150px 22px; gap:10px; align-items:center; }
+.lw-lead-head, .lw-lead-row { display:grid; grid-template-columns:1fr 100px 64px 64px 44px 22px; gap:10px; align-items:center; }
 .lw-lead-head { padding:10px 16px 7px; font-family: var(--lw-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; color: var(--lw-ink-3); border-bottom:1px solid var(--lw-rule); }
 .lw-lead-item { border-bottom:1px solid var(--lw-rule); }
 .lw-lead-item:last-child { border-bottom:0; }
@@ -318,8 +318,8 @@ html, body {
 @media (max-width: 720px) {
   .lw-metric-grid { grid-template-columns:repeat(2,1fr); }
   .lw-ind-grid { grid-template-columns:repeat(4,1fr); }
-  .lw-lead-head, .lw-lead-row { grid-template-columns:1fr 80px 56px 22px; }
-  .lw-lead-row .lw-sent-wrap, .lw-lead-head span:nth-child(4) { display:none; }
+  .lw-lead-head, .lw-lead-row { grid-template-columns:1fr 72px 44px 44px 22px; }
+  .lw-lead-row .lw-sent-wrap, .lw-lead-head span:nth-child(4), .lw-lead-head span:nth-child(5) { display:none; }
   .lw-lead-item.is-open .lw-lead-detail { grid-template-columns:1fr; }
   .lw-tri, .lw-tt-grid { grid-template-columns:1fr; }
 }

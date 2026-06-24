@@ -166,13 +166,15 @@ class SocialAttentionFact(pt.Model):
     cohort: str
     mentions: int = Field(ge=0)
     mentions_24h_ago: int = Field(ge=0)
+    upvotes: int | None = Field(None, ge=0)
     rank: int | None = Field(None, ge=1)
     rank_24h_ago: int | None = Field(None, ge=1)
+    name: str | None = None
     source_fetch_id: str
     raw_payload_hash: str
     ingestion_run_id: str
     content_hash: str
     version_hash: str
     schema_version: int = 1
-    parser_version: int = 1
+    parser_version: int = 2
     quality_status: str = "valid"
