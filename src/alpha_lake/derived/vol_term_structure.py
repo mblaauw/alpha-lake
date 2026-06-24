@@ -31,7 +31,8 @@ def compute_vol_term_structure(
     Returns a ``pl.DataFrame`` with one row per ``(series_id, effective_date)``
     containing the level, plus derived ``contango_spread`` rows.
     """
-    sorted_bars = bars.sort("security_id", "effective_date")
+    bars_pit = bars.filter(pl.col("available_at") <= as_of)
+    sorted_bars = bars_pit.sort("security_id", "effective_date")
     unique_dates = sorted_bars["effective_date"].unique().sort()
     rows: list[dict] = []
     source_id = "derived"

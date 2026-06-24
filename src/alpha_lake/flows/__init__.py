@@ -753,12 +753,12 @@ def compute_indicators(
     if bars.is_empty():
         return 0
 
-    from alpha_lake.derived.compute import _SPY_SECURITY_ID, compute_all_indicators
+    from alpha_lake.derived.compute import compute_all_indicators
     from alpha_lake.security_master import register as _register_security
 
     try:
         spy_bars = read_bars_asof(
-            con, security_ids=[_SPY_SECURITY_ID], as_of=as_of, start_date=start, end_date=end
+            con, security_ids=["SPY"], as_of=as_of, start_date=start, end_date=end
         )
     except Exception:
         spy_bars = None
@@ -767,7 +767,7 @@ def compute_indicators(
         _register_security(
             con,
             symbol="SPY",
-            security_id=_SPY_SECURITY_ID,
+            security_id="SPY",
             effective_start=start,
             name="SPDR S&P 500 ETF Trust",
             exchange="ARCX",

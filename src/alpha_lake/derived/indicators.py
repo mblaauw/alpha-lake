@@ -796,14 +796,14 @@ def log_return(close: pl.Series) -> pl.Series:
 
 
 def ma_stack(sma_20: pl.Series, sma_50: pl.Series, sma_200: pl.Series) -> pl.Series:
-    """MA stack direction.
+    """MA stack alignment.
 
-    Returns 1 (bullish: 20 > 50 > 200), -1 (bearish: 20 < 50 < 200),
+    Returns 1 (aligned up: 20 > 50 > 200), -1 (aligned down: 20 < 50 < 200),
     or 0 (mixed/transitional).
     """
-    bullish = (sma_20 > sma_50) & (sma_50 > sma_200)
-    bearish = (sma_20 < sma_50) & (sma_50 < sma_200)
-    return bullish.cast(pl.Int8) - bearish.cast(pl.Int8)
+    aligned_up = (sma_20 > sma_50) & (sma_50 > sma_200)
+    aligned_down = (sma_20 < sma_50) & (sma_50 < sma_200)
+    return aligned_up.cast(pl.Int8) - aligned_down.cast(pl.Int8)
 
 
 def ma_slope(ma_series: pl.Series, window: int = 5) -> pl.Series:
@@ -814,9 +814,11 @@ def ma_slope(ma_series: pl.Series, window: int = 5) -> pl.Series:
 def rsi_divergence(close: pl.Series, rsi_series: pl.Series, window: int = 14) -> pl.Series:
     """Detect RSI divergence.
 
-    - 1 = bullish divergence (price lower low, RSI higher low)
-    - -1 = bearish divergence (price higher high, RSI lower high)
-    - 0 = no divergence
+    Looks for price making a lower low while RSI makes a higher low (positive
+    divergence) or price making a higher high while RSI makes a lower high
+    (negative divergence).
+
+    Returns 1 (positive), -1 (negative), or 0 (none).
     """
     out: list[int | None] = [None] * len(close)
     periods = max(5, window // 3)
@@ -836,11 +838,11 @@ def rsi_divergence(close: pl.Series, rsi_series: pl.Series, window: int = 14) ->
         r_min_idx = r_slice.index(r_min)
         p_max_idx = p_slice.index(p_max)
         r_max_idx = r_slice.index(r_max)
-        bullish_div = p_min_idx > r_min_idx and r_min > p_min
-        bearish_div = p_max_idx > r_max_idx and r_max < p_max
-        if bullish_div:
+        positive_div = p_min_idx > r_min_idx and r_min > p_min
+        negative_div = p_max_idx > r_max_idx and r_max < p_max
+        if positive_div:
             out[i] = 1
-        elif bearish_div:
+        elif negative_div:
             out[i] = -1
         else:
             out[i] = 0

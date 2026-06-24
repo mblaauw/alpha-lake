@@ -264,7 +264,7 @@ html, body {
 .lw-pit-presets button:hover { background: var(--lw-bg-3); color: var(--lw-ink); }
 
 /* ============================================================
-   NEW: data-reflecting visuals (Bars cards, Sentiment, Catalog)
+   Data-reflecting visuals (Bars cards, Sentiment, Catalog)
    ============================================================ */
 
 /* color helpers (meaning-coloring for derived metrics) */

@@ -178,7 +178,7 @@ async def securities(
 async def security_detail(
     symbol: str,
     as_of: datetime | None = None,
-    datasets: str | None = None,
+    datasets: str = "",
 ):
     """Per-symbol aggregation across datasets.
 
@@ -186,6 +186,8 @@ async def security_detail(
     only the cross-dataset signals they render (insider/sentiment/news/attention),
     so we scan ~4 tables instead of all ~18 — a large win on the Bars tab where
     this is called once per card.
+
+    When omitted all datasets are scanned — use the allow-list in production.
     """
     _check_enabled()
     if as_of is None:
@@ -386,18 +388,6 @@ async def bars_symbols():
 
 # ── Per-symbol card bundle ─────────────────────────────────────────────────
 
-
-_INDICATOR_DASH_MAP: dict[str, str] = {
-    "rsi": "rsi_14",
-    "atr": "atr_14",
-    "macd_hist": "macd_histogram",
-    "return_1d": "return_1",
-    "return_5d": "return_5",
-    "return_21d": "return_21",
-    "return_63d": "return_63",
-    "vol_ratio": "rvol",
-}
-"""Maps dashboard field names to the canonical TechnicalIndicatorFact column name."""
 
 # Model column names whose values are boolean
 _BOOL_INDICATOR_COLS = frozenset(
