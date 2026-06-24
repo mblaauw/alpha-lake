@@ -1,6 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="64" fill="#161b22"/>
-  <text x="256" y="340" text-anchor="middle" font-family="system-ui,sans-serif" font-size="256" font-weight="700" fill="#58a6ff">L</text>
-  <path d="M128 384 L192 268 L256 320 L320 192 L384 256" stroke="#58a6ff" stroke-width="8" fill="none" stroke-linecap="round"/>
-  <circle cx="384" cy="256" r="10" fill="#58a6ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="48" fill="#990F3D"/>
+  <text x="256" y="310" font-family="Georgia,'Times New Roman',serif" font-size="180" font-weight="700" fill="#FFF1E5" text-anchor="middle">LW</text>
 </svg>

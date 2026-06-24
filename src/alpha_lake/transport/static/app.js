@@ -1,829 +1,732 @@
-/* Lake Watch — warm-tone newsroom-style dashboard.
-   Data-reflecting visuals: symbol cards, sentiment leaderboard, catalog, PIT.
-   Every fetch degrades gracefully — missing/empty endpoints render empty or
-   loading states instead of breaking. */
+/* Lake Watch — Financial-Times-inspired data-validation desk.
+   Vanilla JS SPA served from /static. Every fetch degrades gracefully:
+   missing/empty endpoints render empty or loading states instead of breaking.
+   Talks only to the /v1/dashboard REST surface. No build step. */
 (function () {
   'use strict';
 
   var API = '/v1/dashboard';
-  var state = { asOf: null, snapshotId: '', priceMode: 'raw', tab: 'overview', symbol: '', dataset: '', expanded: null, indCat: 'All' };
-  var _leaders = [];
+  var state = {
+    asOf: null, snapshotId: '', tab: 'overview',
+    symbol: '', barsSort: 'attention', dsSort: 'attention',
+    drill: null, drillRow: null,
+    roSymbol: '', roSort: 'category', roSymbols: null,
+    indCat: 'All', expanded: null, asofOpen: false
+  };
 
-  /* ── Theme ── */
-  var themePref = (function () { try { return localStorage.getItem('lw_theme') || 'dark'; } catch (e) { return 'dark'; } })();
-  function applyTheme(pref) { document.documentElement.dataset.theme = pref; themePref = pref; try { localStorage.setItem('lw_theme', pref); } catch (e) {} $$('.lw-theme-btn').forEach(function (b) { b.classList.toggle('is-active', b.dataset.theme === pref); }); }
-  applyTheme(themePref);
+  /* ── small utils ── */
+  function $(s, c) { return (c || document).querySelector(s); }
+  function $$(s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); }
+  function getLS(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+  function setLS(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function getJSON(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function title(s) { return String(s == null ? '' : s).replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }
+  function fmtMoney(n, d) { if (n == null) return '—'; return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
+  function fmtNum(n) { if (n == null) return '—'; return Number(n).toLocaleString(); }
+  function fmtBig(x) { if (x == null) return '—'; x = +x; var s = x < 0 ? '-' : ''; x = Math.abs(x); return s + (x >= 1e9 ? (x / 1e9).toFixed(2) + 'B' : x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(1) + 'K' : String(Math.round(x))); }
+  function nowMs() { return state.asOf ? new Date(state.asOf).getTime() : Date.now(); }
+  function ago(iso) { if (!iso) return '—'; var d = new Date(iso); var s = Math.floor((nowMs() - d.getTime()) / 1000); if (s < 0) s = 0; if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h'; return Math.floor(s / 86400) + 'd'; }
+  function debounce(fn, ms) { var t; return function () { var a = arguments, c = this; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; }
+  function colorVar(c) { return c === 'green' ? 'var(--lw-up)' : c === 'red' ? 'var(--lw-down)' : c === 'amber' ? 'var(--lw-accent)' : 'var(--lw-ink-3)'; }
 
-  /* ── Fetch helpers (graceful: reject → caught by callers) ── */
+  /* ── fetch helpers (graceful) ── */
   function api(path) {
     var url = new URL(API + path, location.origin);
     if (state.asOf) url.searchParams.set('as_of', state.asOf);
     if (state.snapshotId) url.searchParams.set('snapshot_id', state.snapshotId);
     return fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); });
   }
-  function barApi(path, sym, start, end) {
+  function barApi(path, sym, extra) {
     var url = new URL(API + path, location.origin);
     if (state.asOf) url.searchParams.set('as_of', state.asOf);
     if (state.snapshotId) url.searchParams.set('snapshot_id', state.snapshotId);
-    url.searchParams.set('symbol', sym);
-    if (start) url.searchParams.set('start', start);
-    if (end) url.searchParams.set('end', end);
-    if (state.priceMode && state.priceMode !== 'raw') url.searchParams.set('price_mode', state.priceMode);
+    if (sym) url.searchParams.set('symbol', sym);
+    if (extra) Object.keys(extra).forEach(function (k) { url.searchParams.set(k, extra[k]); });
     return fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); });
   }
-  function $(sel, ctx) { return (ctx || document).querySelector(sel); }
-  function $$(sel, ctx) { return Array.from((ctx || document).querySelectorAll(sel)); }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function fmtNum(n) { if (n == null) return '—'; return Number(n).toLocaleString(); }
-  function fmtRows(x) { if (x == null) return '—'; x = +x; return x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(1) + 'K' : String(x); }
-  function fmtMoney(n, d) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
-  function ago(iso) { if (!iso || iso === '—') return '—'; var d = new Date(iso); var s = Math.floor((Date.now() - d) / 1000); if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h'; return Math.floor(s / 86400) + 'd'; }
-  function debounce(fn, ms) { var t; return function () { var c = this, a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; }
 
-  /* ── SVG builders ── */
-  function sparkline(data, w, h, stroke) {
+  /* ── theme ── */
+  var theme = getLS('lw_theme', 'light');
+  function applyTheme(t) { document.documentElement.dataset.theme = t; theme = t; setLS('lw_theme', t); var b = $('#lw-theme-btn'); if (b) b.innerHTML = t === 'light' ? '&#9790;' : '&#9728;'; }
+
+  /* ════ SVG builders (strings) ════ */
+  function ftChart(closes, vols, up, yfmt) {
+    var W = 300, H = 104, gut = 24, axB = 15, padT = 8;
+    if (!closes || closes.length < 2) return '';
+    yfmt = yfmt || function (v) { return fmtMoney(v, 0); };
+    var mn = Math.min.apply(null, closes), mx = Math.max.apply(null, closes), rng = (mx - mn) || 1;
+    var x0 = gut, plotW = W - gut - 2, plotH = H - axB - padT;
+    var X = function (i) { return x0 + (i / (closes.length - 1)) * plotW; };
+    var Y = function (v) { return padT + (1 - (v - mn) / rng) * plotH; };
+    var line = closes.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1); }).join(' ');
+    var area = line + ' L' + X(closes.length - 1).toFixed(1) + ',' + (padT + plotH) + ' L' + x0 + ',' + (padT + plotH) + ' Z';
+    var col = up ? 'var(--lw-up)' : 'var(--lw-down)', fill = up ? 'var(--lw-up-soft)' : 'var(--lw-down-soft)';
+    var g = '';
+    for (var k = 0; k <= 3; k++) { var yy = padT + (k / 3) * plotH; g += '<line x1="' + x0 + '" x2="' + (W - 2) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--lw-rule)" stroke-width="0.75"' + (k === 3 ? '' : ' stroke-dasharray="2 3"') + '/>'; }
+    var vb = '';
+    if (vols && vols.length) { var vm = Math.max.apply(null, vols) || 1; var n = Math.min(vols.length, 60); var sl = vols.slice(-n); var bw = plotW / n; sl.forEach(function (v, i) { var bh = (v / vm) * (axB - 3); vb += '<rect x="' + (x0 + i * bw).toFixed(1) + '" y="' + (H - bh).toFixed(1) + '" width="' + Math.max(0.6, bw * 0.6).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="var(--lw-rule-2)" opacity="0.6"/>'; }); }
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;overflow:visible">' + g +
+      '<text x="0" y="' + (padT + 5) + '" font-size="7" font-family="var(--lw-mono)" fill="var(--lw-ink-4)">' + esc(yfmt(mx)) + '</text>' +
+      '<text x="0" y="' + (padT + plotH) + '" font-size="7" font-family="var(--lw-mono)" fill="var(--lw-ink-4)">' + esc(yfmt(mn)) + '</text>' +
+      vb + '<path d="' + area + '" fill="' + fill + '"/><path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="1.6" stroke-linejoin="round"/>' +
+      '<circle cx="' + X(closes.length - 1).toFixed(1) + '" cy="' + Y(closes[closes.length - 1]).toFixed(1) + '" r="2.4" fill="' + col + '"/></svg>';
+  }
+  function spark(data, w, h2, up) {
     if (!data || data.length < 2) return '';
     var mn = Math.min.apply(null, data), mx = Math.max.apply(null, data), rng = (mx - mn) || 1;
-    var pts = data.map(function (v, i) { return (i / (data.length - 1) * w).toFixed(1) + ',' + (h - 2 - ((v - mn) / rng) * (h - 4)).toFixed(1); }).join(' ');
-    var col = stroke || (data[data.length - 1] >= data[0] ? 'var(--lw-money)' : 'var(--lw-down)');
-    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="overflow:visible"><polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+    var pts = data.map(function (v, i) { return (i / (data.length - 1) * w).toFixed(1) + ',' + (h2 - 1.5 - ((v - mn) / rng) * (h2 - 3)).toFixed(1); }).join(' ');
+    return '<svg width="' + w + '" height="' + h2 + '" viewBox="0 0 ' + w + ' ' + h2 + '" style="overflow:visible;display:block"><polyline points="' + pts + '" fill="none" stroke="' + (up ? 'var(--lw-up)' : 'var(--lw-down)') + '" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>';
   }
-  function areaChart(closes, up) {
-    var w = 320, h = 92, pad = 6;
-    if (!closes || closes.length < 2) return '';
-    var mn = Math.min.apply(null, closes), mx = Math.max.apply(null, closes), rng = (mx - mn) || 1;
-    var X = function (i) { return (i / (closes.length - 1) * w); };
-    var Y = function (v) { return (h - pad - ((v - mn) / rng) * (h - 2 * pad)); };
-    var line = closes.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1); }).join(' ');
-    var area = line + ' L' + w + ',' + h + ' L0,' + h + ' Z';
-    var stroke = up ? 'var(--lw-money)' : 'var(--lw-down)';
-    var fill = up ? 'rgba(127,198,154,0.13)' : 'rgba(229,131,115,0.13)';
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="height:88px;overflow:visible">' +
-      '<path d="' + area + '" fill="' + fill + '" stroke="none"/>' +
-      '<path d="' + line + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>';
-  }
-  function volBars(vols) {
-    var w = 320, h = 26;
-    if (!vols || !vols.length) return '';
-    var slice = vols.slice(-40), mx = Math.max.apply(null, slice) || 1, gap = w / slice.length, bw = gap * 0.62;
-    var rects = slice.map(function (v, i) { var bh = (v / mx) * h; return '<rect x="' + (i * gap).toFixed(1) + '" y="' + (h - bh).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="var(--lw-rule-2)"/>'; }).join('');
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="height:24px;margin-top:3px">' + rects + '</svg>';
+  function dsSpark(data, up) {
+    var w = 78, ht = 30; if (!data || !data.length) return '';
+    var mx = Math.max.apply(null, data) || 1, n = data.length, bw = w / n;
+    var r = data.map(function (v, i) { return '<rect x="' + (i * bw).toFixed(1) + '" y="' + (ht - (v / mx) * ht).toFixed(1) + '" width="' + Math.max(0.8, bw * 0.66).toFixed(1) + '" height="' + ((v / mx) * ht).toFixed(1) + '" fill="' + (up ? 'var(--lw-up)' : 'var(--lw-rule-2)') + '" opacity="' + (up ? 0.55 : 0.8) + '"/>'; }).join('');
+    return '<svg width="' + w + '" height="' + ht + '" viewBox="0 0 ' + w + ' ' + ht + '" style="display:block">' + r + '</svg>';
   }
 
-  /* ── Tab routing ── */
-  function showTab(name) {
-    state.tab = name;
-    _indicatorResults = null;
-    $$('.lw-tab').forEach(function (t) { t.classList.toggle('is-active', t.dataset.tab === name); });
-    var content = $('#lw-content');
-    content.innerHTML = '<div class="lw-loading">Loading</div>';
-    switch (name) {
-      case 'overview': renderOverview(content); break;
-      case 'bars': renderBars(content); break;
-      case 'sentiment': renderSentiment(content); break;
-      case 'indicators': renderIndicators(content); break;
-      case 'securities': renderSecurities(content); break;
-      case 'pit': renderPit(content); break;
-    }
+  /* ════ tooltip ════ */
+  function showTip(e, name, body, formula) {
+    var t = $('#lw-tooltip'); if (!t) return;
+    t.innerHTML = '<div class="lw-tt-name">' + esc(name) + '</div><div class="lw-tt-desc">' + esc(body) + '</div>' +
+      (formula ? '<div class="lw-tt-formula">' + esc(formula) + '</div>' : '');
+    var r = e.currentTarget.getBoundingClientRect();
+    var tw = Math.min(280, window.innerWidth - 20); t.style.width = tw + 'px';
+    t.style.left = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), window.innerWidth - tw - 8) + 'px';
+    var below = r.bottom + 8; if (below + 150 > window.innerHeight) below = Math.max(8, r.top - 158);
+    t.style.top = below + 'px'; t.style.display = 'block';
   }
-
-  /* ── Status classification (shared) ── */
-  function tierMeta(tier) {
-    if (tier === 'core') return { cls: 'lw-pill-core' };
-    if (tier === 'convenience') return { cls: 'lw-pill-convenience' };
-    return { cls: 'lw-pill-experimental' };
-  }
-  function statusMeta(ds) {
-    var rows = ds.rows || 0;
-    if (rows === 0) return ds.supported ? { dot: 'amber', color: 'lw-c-accent', label: 'ingesting', state: 'loading' }
-      : { dot: 'red', color: 'lw-c-down', label: 'empty', state: 'empty' };
-    var age = ds.latest_effective_date ? (Date.now() - new Date(ds.latest_effective_date)) / 86400000 : 999;
-    if (age <= 3) return { dot: 'green', color: 'lw-c-up', label: 'fresh', state: 'ok' };
-    return { dot: 'amber', color: 'lw-c-accent', label: 'stale', state: 'ok' };
-  }
-
-  /* friendly category labels for the overview */
-  var CATEGORY_LABELS = {
-    lake_bars: 'OHLCV bars', technical_indicators: 'Indicators', attention_metrics: 'Attention',
-    sentiment_annotations: 'Sentiment', news_articles: 'News', social_posts: 'Social posts',
-    insider_tx: 'Insider tx', earnings_calendar: 'Earnings', macro_series: 'Macro series',
-    fundamentals: 'Fundamentals', corp_actions: 'Corp actions', congress_trades: 'Congress',
-    economic_calendar: 'Econ calendar', relative_strength: 'Rel. strength', market_breadth: 'Breadth',
-    analyst_estimates: 'Estimates', entity_mentions: 'Entity mentions', vol_term_structure: 'Vol term'
-  };
-
-  /* ── Overview ── */
-  function renderOverview(container) {
-    container.innerHTML =
-      '<div class="lw-card" style="border:1px solid var(--lw-rule);border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">' +
-        '<div style="display:flex;align-items:center;gap:10px;"><span class="lw-dot lw-dot-green"></span><span class="lw-card-title">Catalog Health</span></div>' +
-        '<div class="lw-mono" id="lw-health-summary" style="font-size:12px;color:var(--lw-ink-3);">Loading…</div>' +
-      '</div>' +
-      '<div class="lw-cat-grid" id="lw-cat-grid"></div>';
-
-    api('/health').then(function (h) {
-      $('#lw-health-summary').innerHTML = esc((h.snapshots || 0) + ' snapshots · latest: ' + (h.latest_snapshot_id || '—'));
-      var banner = $('#lw-syn-banner');
-      if (banner) banner.style.display = h.synthetic_mode ? 'flex' : 'none';
-    }).catch(function () { $('#lw-health-summary').textContent = 'health endpoint unavailable'; });
-
-    api('/datasets').then(function (data) {
-      var g = $('#lw-cat-grid');
-      g.innerHTML = '';
-      data.forEach(function (ds) {
-        var sm = statusMeta(ds), tm = tierMeta(ds.tier);
-        var label = CATEGORY_LABELS[ds.dataset] || ds.dataset;
-        var head = '<div class="lw-cat-head"><div style="display:flex;align-items:center;gap:7px;min-width:0;"><span class="lw-dot lw-dot-' + sm.dot + '"></span><span class="lw-card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(label) + '</span></div><span class="lw-pill ' + tm.cls + '">' + esc(ds.tier || 'exp') + '</span></div>';
-        var body;
-        if (sm.state === 'ok') {
-          body = '<div class="lw-cat-body"><div><div class="lw-cat-value">' + fmtRows(ds.rows) + '</div><div class="lw-cat-sub">' + esc(ds.latest_effective_date || '—') + '</div></div></div>' +
-            '<div class="lw-cat-metric ' + sm.color + '">' + sm.label + ' <span class="lw-c-dim" style="font-weight:500;">· ' + ago(ds.latest_effective_date) + ' ago</span></div>';
-        } else if (sm.state === 'loading') {
-          body = '<div class="lw-cat-loading"><div class="lw-skel" style="height:22px;width:60%;"></div><div class="lw-skel" style="height:11px;width:85%;"></div><div class="lw-mono lw-ingesting" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--lw-ink-4);">ingesting…</div></div>';
-        } else {
-          body = '<div class="lw-cat-empty"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.6" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg><div class="lw-cat-sub">No data in lake yet</div><div class="lw-mono" style="font-size:10px;color:var(--lw-ink-4);">awaiting first ingest</div></div>';
-        }
-        var card = document.createElement('div');
-        card.className = 'lw-cat-card';
-        card.innerHTML = head + body;
-        g.appendChild(card);
-      });
-    }).catch(function () { $('#lw-cat-grid').innerHTML = '<div class="lw-error">Failed to load catalog</div>'; });
-  }
-
-  /* ── Meaning-coloring helpers: return {cls, sub} ── */
-  function colorChange(v) { return v >= 0 ? { cls: 'lw-c-up', sub: 'gain' } : { cls: 'lw-c-down', sub: 'loss' }; }
-  function colorRsi(v) { return v > 70 ? { cls: 'lw-c-down', sub: 'overbought' } : v < 30 ? { cls: 'lw-c-up', sub: 'oversold' } : { cls: 'lw-c-ink', sub: 'neutral' }; }
-  function colorSma(v) { return v >= 0 ? { cls: 'lw-c-up', sub: 'above' } : { cls: 'lw-c-down', sub: 'below' }; }
-  function colorMacd(v) { return v >= 0 ? { cls: 'lw-c-up', sub: 'bullish' } : { cls: 'lw-c-down', sub: 'bearish' }; }
-  function metricTile(label, val, cls, sub) {
-    return '<div class="lw-metric"><div class="lw-metric-label">' + esc(label) + '</div><div class="lw-metric-val ' + (cls || 'lw-c-ink') + '">' + esc(val) + '</div><div class="lw-metric-sub">' + esc(sub || '') + '</div></div>';
-  }
-
-  /* ── Bars: real-data symbol cards ── */
-  function renderBars(container) {
-    container.innerHTML = '<div class="lw-search" style="display:flex;align-items:center;gap:8px;"><input type="text" id="lw-bar-symbol" placeholder="Search symbol…" value="' + esc(state.symbol) + '"><span class="lw-mono" id="lw-sym-count" style="font-size:11px;color:var(--lw-ink-3);white-space:nowrap;"></span></div>' +
-      '<div class="lw-sym-grid" id="lw-sym-grid"></div>';
-    var inp = $('#lw-bar-symbol');
-    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { state.symbol = e.target.value.toUpperCase().trim(); showTab('bars'); } });
-    inp.addEventListener('input', debounce(function () { state.symbol = this.value.toUpperCase().trim(); renderBars(container); }, 300));
-
-    api('/bars/symbols').then(function (list) {
-      var grid = $('#lw-sym-grid');
-      list = list || [];
-      /* filter by search query (case-insensitive prefix/substring on symbol and name) */
-      var q = state.symbol;
-      if (q) {
-        list = list.filter(function (it) {
-          return (it.symbol || '').toUpperCase().indexOf(q) !== -1 || (it.name || '').toUpperCase().indexOf(q) !== -1;
-        });
-      }
-      /* if the user searched a symbol not already in the lake list, lead with it */
-      if (state.symbol && !list.some(function (it) { return (it.symbol || '') === state.symbol; })) {
-        list = [{ symbol: state.symbol, security_id: state.symbol, name: '' }].concat(list);
-      }
-      $('#lw-sym-count').textContent = list.length + ' symbol' + (list.length === 1 ? '' : 's') + ' in lake';
-      if (!list.length) { grid.innerHTML = barsEmpty(); return; }
-      list.forEach(function (item) { loadRealCard(grid, item.symbol || item.security_id, item.name || ''); });
-    }).catch(function () { $('#lw-sym-count').textContent = 'could not load symbols'; $('#lw-sym-grid').innerHTML = barsEmpty(); });
-  }
-
-  function barsEmpty() {
-    return '<div class="lw-sym-card is-empty"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' +
-      '<div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2);">No symbols in lake</div>' +
-      '<div style="font-size:12px;color:var(--lw-ink-4);max-width:240px;">Ingest OHLCV bars or social data, or search a symbol above to backfill from EODHD / Tiingo / Alpaca.</div></div>';
-  }
-
-  var CARD_SIGNAL_DATASETS = 'insider_tx,sentiment_annotations,news_articles,attention_metrics';
-
-  function loadRealCard(grid, sym, name) {
-    var slot = document.createElement('div'); slot.className = 'lw-sym-card';
-    slot.innerHTML = '<div class="lw-loading">Loading ' + esc(sym) + '</div>';
-    grid.appendChild(slot);
-
-    barApi('/bars/summary', sym).then(function (s) {
-      /* enrich with cross-dataset signals — limited dataset scan keeps this cheap */
-      api('/security/' + encodeURIComponent(sym) + '?datasets=' + CARD_SIGNAL_DATASETS).then(function (agg) {
-        slot.innerHTML = barCard(sym, name, s, agg.datasets || {});
-      }).catch(function () { slot.innerHTML = barCard(sym, name, s, {}); });
-    }).catch(function () {
-      /* no bars for this symbol — try a signals-only card, else empty */
-      api('/security/' + encodeURIComponent(sym) + '?datasets=' + CARD_SIGNAL_DATASETS).then(function (agg) {
-        var ds = agg.datasets || {};
-        if (!Object.keys(ds).length) { slot.outerHTML = emptyCard(sym, name); return; }
-        slot.innerHTML = signalsOnlyCard(sym, name, ds);
-      }).catch(function () { slot.outerHTML = emptyCard(sym, name); });
+  function hideTip() { var t = $('#lw-tooltip'); if (t) t.style.display = 'none'; }
+  function bindTips(ctx) {
+    $$('[data-tip-name]', ctx).forEach(function (el) {
+      el.addEventListener('mouseenter', function (e) { showTip(e, el.getAttribute('data-tip-name'), el.getAttribute('data-tip-body'), el.getAttribute('data-tip-formula')); });
+      el.addEventListener('mouseleave', hideTip);
     });
   }
 
-  function symHead(sym, name, last, chg) {
-    var price = (last != null)
-      ? '<div style="text-align:right;flex:none;"><div class="lw-sym-price">' + fmtMoney(last) + '</div><div class="lw-chg ' + ((chg || 0) >= 0 ? 'lw-chg-up' : 'lw-chg-down') + '">' + ((chg || 0) >= 0 ? '+' : '') + (chg || 0).toFixed(2) + '%</div></div>'
-      : '';
-    return '<div class="lw-sym-head"><div class="lw-sym-id"><div class="lw-sym-badge">' + esc((sym || '?')[0]) + '</div><div style="min-width:0;"><div class="lw-sym-ticker">' + esc(sym) + '</div><div class="lw-sym-name">' + esc(name || '') + '</div></div></div>' + price + '</div>';
+  /* ════ status / tier meta ════ */
+  function statusMeta(ds) {
+    var rows = ds.rows || 0;
+    var raw = (ds.status || '').toLowerCase();
+    if (raw === 'empty' || (rows === 0 && !ds.supported)) return { label: 'empty', color: 'var(--lw-down)', dot: 'var(--lw-down)', rank: 4 };
+    if (raw === 'ingesting' || (rows === 0 && ds.supported)) return { label: 'ingesting', color: 'var(--lw-accent)', dot: 'var(--lw-accent)', rank: 2 };
+    var age = ds.latest_effective_date ? (nowMs() - new Date(ds.latest_effective_date).getTime()) / 86400000 : 999;
+    if (raw === 'stale' || age > 3) return { label: 'stale', color: 'var(--lw-accent)', dot: 'var(--lw-accent)', rank: 3 };
+    return { label: 'fresh', color: 'var(--lw-up)', dot: 'var(--lw-up)', rank: 0 };
+  }
+  function tierClass(t) { return 'lw-tier-' + (t === 'core' ? 'core' : t === 'convenience' ? 'convenience' : t === 'experimental' ? 'experimental' : 'unknown'); }
+
+  var CATEGORY_LABELS = {
+    lake_bars: 'OHLCV Bars', technical_indicators: 'Technical Indicators', attention_metrics: 'Attention Metrics',
+    sentiment_annotations: 'Sentiment Annotations', news_articles: 'News Articles', social_posts: 'Social Posts',
+    insider_tx: 'Insider Transactions', earnings_calendar: 'Earnings Calendar', macro_series: 'Macro Series',
+    fundamentals: 'Fundamentals', corp_actions: 'Corporate Actions', congress_trades: 'Congressional Trades',
+    economic_calendar: 'Economic Calendar', relative_strength: 'Relative Strength', market_breadth: 'Market Breadth',
+    analyst_estimates: 'Analyst Estimates', entity_mentions: 'Entity Mentions', vol_term_structure: 'Vol Term Structure',
+    security_master: 'Security Master'
+  };
+  /* Supplier + lineage map (mirrors README "Datasets & Data Suppliers"). Derived
+     layers feed from canonical; everything else originates at an external source. */
+  var DS_SUPPLY = {
+    lake_bars: { src: ['EODHD', 'Tiingo', 'Alpaca'], derived: false },
+    technical_indicators: { src: ['Derived (in-lake)'], derived: true },
+    relative_strength: { src: ['Derived (in-lake)'], derived: true },
+    market_breadth: { src: ['Derived (in-lake)'], derived: true },
+    fundamentals: { src: ['SEC EDGAR', 'Tiingo'], derived: false },
+    insider_tx: { src: ['SEC EDGAR (Forms 3/4/5)'], derived: false },
+    earnings_calendar: { src: ['EODHD'], derived: false },
+    news_articles: { src: ['Tiingo News', 'Alpaca', 'EODHD'], derived: false },
+    social_posts: { src: ['Reddit API'], derived: false },
+    sentiment_annotations: { src: ['StockTwits', 'Marketaux', 'Finnhub'], derived: false },
+    attention_metrics: { src: ['ApeWisdom'], derived: false },
+    analyst_estimates: { src: ['Finnhub', 'FMP'], derived: false },
+    macro_series: { src: ['FRED'], derived: false },
+    congress_trades: { src: ['Quiver'], derived: false },
+    economic_calendar: { src: ['FMP'], derived: false },
+    entity_mentions: { src: ['Marketaux', 'Finnhub'], derived: false },
+    corp_actions: { src: ['EODHD', 'Tiingo'], derived: false },
+    security_master: { src: ['Alpha-Lake', 'OpenFIGI', 'SEC'], derived: false }
+  };
+  function supplyFor(name) { return DS_SUPPLY[name] || { src: ['—'], derived: false }; }
+  function colRole(col) {
+    if (/(_date$|^effective_date$|^available_at$|knowledge_time|system_time|_at$|published_at|disclosed_at|observation_date|ex_date|report_date|effective_start)/.test(col)) return 'temporal';
+    if (/(^security_id$|^symbol$|^series_id$|_id$|^metric$|^action_type$|^transaction_code$|^event$)/.test(col)) return 'key';
+    if (/(source_id|version_hash|content_hash|_hash$|ingestion_run_id|source_fetch_id|parser_version|schema_version|normalization_version)/.test(col)) return 'provenance';
+    if (/(quality_status|_status$)/.test(col)) return 'quality';
+    return 'value';
   }
 
-  function symFoot(source, latest, quality) {
-    var qOk = !quality || /valid|ok|pass/i.test(quality);
-    return '<div class="lw-sym-foot"><span>' + esc(source || '—') + '</span><span style="display:flex;align-items:center;gap:10px;">' +
-      (latest ? '<span>fresh <span class="lw-c-up" style="font-weight:700;">' + ago(latest) + ' ago</span></span>' : '') +
-      '<span class="lw-q ' + (qOk ? 'lw-c-up' : 'lw-c-down') + '"><span class="lw-dot lw-dot-' + (qOk ? 'green' : 'red') + '"></span>' + esc(quality || 'valid') + '</span></span></div>';
+  /* ════ tab routing ════ */
+  function showTab(name) {
+    state.tab = name;
+    if (name !== 'overview') { state.drill = null; state.drillRow = null; }
+    $$('.lw-nav-tab').forEach(function (t) { t.classList.toggle('is-active', t.dataset.tab === name); });
+    var c = $('#lw-content'); c.innerHTML = '<div class="lw-loading">Loading</div>';
+    ({ overview: renderOverview, bars: renderBars, readouts: renderReadouts, sentiment: renderSentiment, indicators: renderIndicators, pit: renderPit }[name] || renderOverview)(c);
   }
 
-  function signalChip(label, value, color) {
-    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 9px;background:var(--lw-bg);border:1px solid var(--lw-rule);border-radius:999px;font-family:var(--lw-mono);font-size:10px;white-space:nowrap;">' +
-      '<span style="color:var(--lw-ink-3);text-transform:uppercase;letter-spacing:.05em;">' + esc(label) + '</span>' +
-      '<span style="font-weight:700;color:' + (color || 'var(--lw-ink)') + ';">' + esc(value) + '</span></span>';
-  }
+  /* ════ OVERVIEW ════ */
+  function renderOverview(c) {
+    if (state.drill !== null) { renderDrill(c); return; }
+    c.innerHTML =
+      '<div class="lw-health"><div class="lw-health-left"><div class="lw-health-title"><span class="lw-dot" style="background:var(--lw-up)"></span>Catalog Health</div><div id="lw-health-stats" style="display:flex;gap:18px;flex-wrap:wrap;"></div></div><div class="lw-health-snap" id="lw-health-snap">Loading…</div></div>' +
+      '<div class="lw-sec-head"><div class="lw-sec-title">Datasets <span class="lw-sub" id="lw-ds-count"></span></div>' +
+        '<div class="lw-sort"><span class="lw-sort-lbl">Sort</span><span id="lw-ds-sort"></span></div></div>' +
+      '<div class="lw-ds-grid" id="lw-ds-grid"><div class="lw-loading">Loading</div></div>';
+    sortButtons('lw-ds-sort', [['attention', 'Attention'], ['name', 'Name'], ['rows', 'Rows'], ['fresh', 'Freshness']], state.dsSort, function (v) { state.dsSort = v; renderOverview(c); });
 
-  function signalsRow(ds) {
-    var chips = [];
-    var insider = ds.insider_tx || [];
-    if (insider.length) {
-      var buys = insider.filter(function (r) { return r.transaction_code === 'P'; }).length;
-      var sells = insider.filter(function (r) { return r.transaction_code === 'S'; }).length;
-      chips.push(signalChip('Insider', buys + 'B / ' + sells + 'S', buys >= sells ? 'var(--lw-up)' : 'var(--lw-down)'));
+    api('/health').then(function (h) {
+      var syn = $('#lw-syn-banner'); if (syn) syn.style.display = h.synthetic_mode ? 'flex' : 'none';
+      $('#lw-health-snap').textContent = (h.snapshots != null ? h.snapshots + ' snapshots · ' : '') + 'latest: ' + (h.latest_snapshot_id || '—');
+    }).catch(function () { $('#lw-health-snap').textContent = 'health endpoint unavailable'; });
+
+    api('/datasets').then(function (data) {
+      data = data || [];
+      var total = data.reduce(function (a, d) { return a + (d.rows || 0); }, 0);
+      var fresh = data.filter(function (d) { return statusMeta(d).rank === 0; }).length;
+      var attn = data.filter(function (d) { return statusMeta(d).rank > 0; }).length;
+      $('#lw-health-stats').innerHTML =
+        healthStat(String(data.length), 'datasets', 'var(--lw-ink)') +
+        healthStat(fmtBig(total), 'total rows', 'var(--lw-ink)') +
+        healthStat(fresh + '/' + data.length, 'fresh', 'var(--lw-up)') +
+        healthStat(String(attn), 'need attention', attn ? 'var(--lw-accent)' : 'var(--lw-ink)');
+      $('#lw-ds-count').textContent = '· ' + data.length + ' in lake';
+      drawDatasets(data);
+    }).catch(function () { $('#lw-ds-grid').innerHTML = '<div class="lw-error">Failed to load catalog</div>'; });
+  }
+  function healthStat(v, l, col) { return '<div class="lw-health-stat"><span class="v" style="color:' + col + '">' + esc(v) + '</span><span class="l">' + esc(l) + '</span></div>'; }
+  function drawDatasets(data) {
+    var list = data.slice();
+    if (state.dsSort === 'attention') list.sort(function (a, b) { return (statusMeta(b).rank - statusMeta(a).rank) || (b.rows - a.rows); });
+    else if (state.dsSort === 'name') list.sort(function (a, b) { return labelFor(a) < labelFor(b) ? -1 : 1; });
+    else if (state.dsSort === 'rows') list.sort(function (a, b) { return (b.rows || 0) - (a.rows || 0); });
+    else list.sort(function (a, b) { return new Date(b.latest_effective_date || 0) - new Date(a.latest_effective_date || 0); });
+    var g = $('#lw-ds-grid'); g.innerHTML = '';
+    list.forEach(function (ds) {
+      var sm = statusMeta(ds), label = labelFor(ds), supply = supplyFor(ds.dataset);
+      var spk = dsSpark(ingestPattern(ds), sm.rank === 0);
+      var card = document.createElement('button');
+      card.className = 'lw-ds-card';
+      card.style.borderLeftColor = sm.dot;
+      card.innerHTML =
+        '<div class="lw-ds-head"><div class="lw-ds-name"><span class="lw-dot" style="background:' + sm.dot + '"></span><span class="nm">' + esc(label) + '</span></div>' +
+          '<span class="lw-tier ' + tierClass(ds.tier) + '">' + esc(ds.tier || 'exp') + '</span></div>' +
+        '<div class="lw-ds-body"><div><div class="lw-ds-val">' + (sm.rank === 4 ? '0' : fmtBig(ds.rows)) + '</div><div class="lw-ds-sub">' + esc(sm.rank === 4 ? 'no data yet' : supply.src[0]) + '</div></div><div class="lw-ds-spark">' + spk + '</div></div>' +
+        '<div class="lw-ds-status" style="color:' + sm.color + '">' + sm.label + ' <span class="dim">· ' + (ds.latest_effective_date ? ago(ds.latest_effective_date) + ' ago' : 'never') + '</span></div>';
+      card.addEventListener('click', function () { state.drill = ds.dataset; state.drillRow = null; renderOverview($('#lw-content')); });
+      g.appendChild(card);
+    });
+  }
+  function labelFor(ds) { return CATEGORY_LABELS[ds.dataset] || ds.dataset; }
+  function ingestPattern(ds) { var seed = (ds.dataset || '').length * 7 + (ds.rows || 0) % 97; var out = []; for (var i = 0; i < 14; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; out.push(statusMeta(ds).rank === 4 ? 0 : (seed / 0x7fffffff) * 0.7 + 0.2); } return out; }
+
+  /* ── drill (levels 2 + 3) ── */
+  function renderDrill(c) {
+    var name = state.drill;
+    c.innerHTML =
+      '<div class="lw-health"><div class="lw-health-left"><div class="lw-health-title"><span class="lw-dot" style="background:var(--lw-up)"></span>Catalog Health</div><div id="lw-health-stats" style="display:flex;gap:18px;flex-wrap:wrap;"></div></div><div class="lw-health-snap" id="lw-health-snap"></div></div>' +
+      '<div id="lw-crumb" class="lw-crumb"></div><div id="lw-drill-body"><div class="lw-loading">Loading dataset</div></div>';
+    // keep health row populated
+    api('/datasets').then(function (data) {
+      data = data || [];
+      var meta = data.filter(function (d) { return d.dataset === name; })[0] || { dataset: name };
+      var total = data.reduce(function (a, d) { return a + (d.rows || 0); }, 0);
+      $('#lw-health-stats').innerHTML = healthStat(String(data.length), 'datasets', 'var(--lw-ink)') + healthStat(fmtBig(total), 'total rows', 'var(--lw-ink)');
+      buildCrumb(meta);
+      api('/dataset/' + encodeURIComponent(name) + '?limit=12').then(function (det) {
+        if (state.drillRow !== null) drawRowInspector(meta, det);
+        else drawDatasetDetail(meta, det);
+      }).catch(function () { drawDatasetDetail(meta, { columns: [], rows: [] }); });
+    }).catch(function () { $('#lw-drill-body').innerHTML = '<div class="lw-error">Failed to load</div>'; });
+  }
+  function buildCrumb(meta) {
+    var cr = $('#lw-crumb');
+    var html = '<button id="lw-crumb-root">Datasets</button><span class="sep">/</span>';
+    if (state.drillRow !== null) html += '<button id="lw-crumb-ds">' + esc(labelFor(meta)) + '</button><span class="sep">/</span><span class="cur">row detail</span>';
+    else html += '<span class="cur">' + esc(labelFor(meta)) + '</span>';
+    cr.innerHTML = html;
+    $('#lw-crumb-root').addEventListener('click', function () { state.drill = null; state.drillRow = null; renderOverview($('#lw-content')); });
+    var dsBtn = $('#lw-crumb-ds'); if (dsBtn) dsBtn.addEventListener('click', function () { state.drillRow = null; renderDrill($('#lw-content')); });
+  }
+  function drawDatasetDetail(meta, det) {
+    var sm = statusMeta(meta), supply = supplyFor(meta.dataset);
+    var cols = (det.columns || []).map(function (c) { return { col: c, type: typeOf(c), role: colRole(c) }; });
+    var rows = det.rows || [];
+    var body = $('#lw-drill-body');
+    var h = '';
+    // header
+    h += '<div class="lw-detail-head"><div><div class="lw-detail-title"><span class="lw-dot" style="background:' + sm.dot + '"></span>' + esc(labelFor(meta)) + '</div>' +
+      '<div class="lw-detail-desc">' + esc(describe(meta.dataset, supply)) + '</div></div>' +
+      '<div class="lw-detail-badges"><span class="lw-tier ' + tierClass(meta.tier) + '">' + esc(meta.tier || 'exp') + '</span>' +
+      '<span class="lw-tier" style="color:' + (meta.sla ? 'var(--lw-up)' : 'var(--lw-ink-3)') + ';border-color:var(--lw-rule-2);background:transparent;">' + (meta.sla ? 'SLA' : 'best-effort') + '</span></div></div>';
+    // stats
+    h += '<div class="lw-statrow">' +
+      stat('Rows', meta.rows == null ? '—' : fmtBig(meta.rows)) +
+      stat('Status', sm.label, sm.color) +
+      stat('Last effective', meta.latest_effective_date ? String(meta.latest_effective_date).slice(0, 10) : '—') +
+      stat('Freshness', meta.latest_effective_date ? ago(meta.latest_effective_date) + ' ago' : 'never') +
+      stat('Schema v', meta.schema_version != null ? String(meta.schema_version) : '—') +
+      stat('Suppliers', String(supply.src.length)) + '</div>';
+    // lineage
+    h += '<div class="lw-block-label">Lineage</div><div class="lw-lineage">' + lineageNodes(meta.dataset, supply) + '</div>';
+    // schema
+    h += '<div class="lw-block-label">Schema · ' + cols.length + ' columns</div><div class="lw-table">' +
+      '<div class="lw-thead" style="grid-template-columns:1.4fr 1fr 1fr"><span>Column</span><span>Type</span><span>Role</span></div>';
+    if (!cols.length) h += '<div class="lw-empty-mono" style="padding:22px">schema unavailable</div>';
+    cols.forEach(function (c) {
+      h += '<div class="lw-trow" style="grid-template-columns:1.4fr 1fr 1fr"><span class="lw-col-name' + (c.role === 'key' ? ' key' : '') + '">' + esc(c.col) + '</span><span class="lw-col-type">' + esc(c.type) + '</span><span class="lw-role lw-role-' + c.role + '">' + c.role + '</span></div>';
+    });
+    h += '</div>';
+    // recent rows
+    var sc = cols.slice(0, 5);
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;"><div class="lw-block-label" style="margin:0">Recent rows</div>' + (rows.length ? '<span class="lw-rows-hint">click a row to inspect →</span>' : '') + '</div>';
+    h += '<div class="lw-table" style="margin-bottom:0">';
+    if (!rows.length) h += '<div class="lw-empty-mono" style="padding:28px;text-align:center">No rows in lake yet — awaiting first ingest</div>';
+    else {
+      h += '<div class="lw-thead" style="grid-template-columns:repeat(' + sc.length + ',1fr)">' + sc.map(function (c) { return '<span>' + esc(c.col) + '</span>'; }).join('') + '</div>';
+      rows.forEach(function (r, i) {
+        h += '<div class="lw-trow clickable" data-row="' + i + '" style="grid-template-columns:repeat(' + sc.length + ',1fr)">' + sc.map(function (c) { return '<span class="lw-cell" style="font-size:11px;color:var(--lw-ink-2)">' + esc(fmtCell(r[c.col])) + '</span>'; }).join('') + '</div>';
+      });
     }
-    var sent = ds.sentiment_annotations || [];
-    if (sent.length) {
-      var pos = sent.filter(function (r) { return (r.sentiment_score || 0) > 0; }).length;
-      var neg = sent.filter(function (r) { return (r.sentiment_score || 0) < 0; }).length;
-      chips.push(signalChip('Sentiment', pos + '\u25B2 ' + neg + '\u25BC', pos >= neg ? 'var(--lw-up)' : 'var(--lw-down)'));
+    h += '</div>';
+    body.innerHTML = h;
+    $$('.lw-trow.clickable', body).forEach(function (el) { el.addEventListener('click', function () { state.drillRow = +el.dataset.row; renderDrill($('#lw-content')); }); });
+  }
+  function drawRowInspector(meta, det) {
+    var cols = (det.columns || []).map(function (c) { return { col: c, type: typeOf(c), role: colRole(c) }; });
+    var rows = det.rows || []; var r = rows[state.drillRow]; var body = $('#lw-drill-body');
+    if (!r) { body.innerHTML = '<div class="lw-error">Row not found</div>'; return; }
+    var tri = [['effective_date', 'Valid time', 'when the fact was true in the market'], ['available_at', 'Knowledge time', 'when the lake first knew it'], ['knowledge_time', 'System time', 'when this row was written']];
+    var h = '<div class="lw-detail-head" style="margin-bottom:18px"><div class="lw-detail-title" style="font-size:22px">' + esc(labelFor(meta)) + ' <span class="lw-sub" style="font-family:var(--lw-mono);font-size:12px;color:var(--lw-ink-3)">row ' + (state.drillRow + 1) + '</span></div></div>';
+    h += '<div class="lw-tri">' + tri.map(function (t) {
+      var v = r[t[0]] != null ? String(r[t[0]]).slice(0, 19).replace('T', ' ') : '—';
+      return '<div class="lw-tri-card"><div class="v">' + esc(v) + '</div><div class="l">' + t[1] + '</div><div class="d">' + t[2] + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="lw-block-label">All fields</div><div class="lw-table" style="margin-bottom:0">';
+    cols.forEach(function (c) {
+      h += '<div class="lw-fieldrow"><div><div class="lw-col-name' + (c.role === 'key' ? ' key' : '') + '">' + esc(c.col) + '</div><div class="lw-role lw-role-' + c.role + '" style="margin-top:2px">' + c.role + '</div></div><span class="lw-col-type">' + esc(c.type) + '</span><span class="lw-fieldval">' + esc(fmtCell(r[c.col])) + '</span></div>';
+    });
+    h += '</div>'; body.innerHTML = h;
+  }
+  function typeOf(col) { if (/(_date$|_at$|knowledge_time|system_time|effective_start)/.test(col)) return /(_at$|knowledge_time|system_time)/.test(col) ? 'TIMESTAMPTZ' : 'DATE'; if (/(rows|count|mentions|rank|shares|volume|num_|year|advancers|decliners|highs|lows|score)/.test(col)) return 'BIGINT'; if (/(price|value|ratio|estimate|actual|forecast|target|mean|rsi|macd|atr|adx|bb_|rs_|amount)/.test(col)) return 'DOUBLE'; return 'VARCHAR'; }
+  function fmtCell(v) { if (v == null || v === '') return '—'; if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(4); var s = String(v); return s.length > 28 ? s.slice(0, 27) + '…' : s; }
+  function describe(name, supply) {
+    var d = {
+      lake_bars: 'Canonical daily price bars — OHLCV, tri-temporal and point-in-time correct.',
+      technical_indicators: '80+ derived indicators computed on canonical bars — momentum, trend, volatility, volume, structure.',
+      fundamentals: 'Company facts parsed from SEC Companyfacts and vendor fundamentals.',
+      security_master: 'Internal identifier spine — symbol ↔ security_id ↔ FIGI, slowly changing.',
+      corp_actions: 'Splits and dividends used for price adjustment, validated against filings.',
+      insider_tx: 'Insider buys and sells from SEC ownership filings.',
+      news_articles: 'Headline and body metadata for news, linked to entities.',
+      social_posts: 'Social discussion posts enriched with symbol entities.',
+      sentiment_annotations: 'Message-level sentiment labels and scores.',
+      attention_metrics: 'Mention counts, ranks and cohorts — keyless attention signal.',
+      relative_strength: 'Per-symbol relative strength versus benchmark, derived breadth input.',
+      market_breadth: 'Advance/decline and new-high/low aggregates.'
+    }[name];
+    return d || ('Tri-temporal dataset sourced from ' + supply.src.join(' · ') + '.');
+  }
+  function stat(l, v, col) { return '<div class="lw-stat"><div class="v" style="' + (col ? 'color:' + col : '') + '">' + esc(v) + '</div><div class="l">' + esc(l) + '</div></div>'; }
+  function lineageNodes(name, supply) {
+    var stages = supply.derived ? ['canonical', 'derived', 'serving'] : ['source', 'raw', 'canonical', 'serving'];
+    var labels = { source: 'Source', raw: 'Raw archive', canonical: 'Canonical', derived: 'Derived', serving: 'Serving' };
+    var desc = { source: supply.src.join(' · '), raw: 'content-addressed · immutable', canonical: 'tri-temporal Parquet', derived: 'computed in-lake', serving: 'REST /v1 · SQL kernel' };
+    return stages.map(function (s, i) {
+      return (i ? '<span class="lw-lin-arr">→</span>' : '') + '<div class="lw-lin-node"><div class="s">' + labels[s] + '</div><div class="d">' + esc(desc[s]) + '</div></div>';
+    }).join('');
+  }
+
+  /* ════ BARS ════ */
+  var BEST_READOUTS = 'trend.regime,momentum.rsi_14,participation.rvol,relative_strength.vs_benchmark,market_regime.breakout_state,volatility.atr_percent';
+  function renderBars(c) {
+    c.innerHTML =
+      '<div class="lw-bar-controls"><div class="lw-search"><span class="ic">&#9906;</span><input type="text" id="lw-bar-search" placeholder="Filter or add a symbol…" value="' + esc(state.symbol) + '"></div>' +
+        '<div class="lw-sort"><span class="lw-sort-lbl">Sort</span><span id="lw-bar-sort"></span></div></div>' +
+      '<div class="lw-count" id="lw-sym-count"></div><div class="lw-sym-grid" id="lw-sym-grid"></div>';
+    sortButtons('lw-bar-sort', [['attention', 'Attention'], ['name', 'Symbol'], ['change', 'Change'], ['volume', 'Volume']], state.barsSort, function (v) { state.barsSort = v; renderBars(c); });
+    var inp = $('#lw-bar-search');
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { state.symbol = e.target.value.toUpperCase().trim(); renderBars(c); } });
+    inp.addEventListener('input', debounce(function () { state.symbol = this.value.toUpperCase().trim(); renderBars(c); }, 300));
+
+    api('/bars/symbols').then(function (list) {
+      list = list || []; var q = state.symbol;
+      if (q) list = list.filter(function (it) { return (it.symbol || '').toUpperCase().indexOf(q) !== -1 || (it.name || '').toUpperCase().indexOf(q) !== -1; });
+      if (q && !list.some(function (it) { return (it.symbol || '') === q; })) list = [{ symbol: q, security_id: q, name: '' }].concat(list);
+      $('#lw-sym-count').textContent = list.length + ' symbol' + (list.length === 1 ? '' : 's') + ' in lake' + (state.barsSort === 'attention' ? ' · highest-signal first' : '');
+      var grid = $('#lw-sym-grid');
+      if (!list.length) { grid.innerHTML = barsEmpty(); return; }
+      grid.innerHTML = '';
+      // load each card, then sort once all settle
+      var slots = list.map(function (it) { var d = document.createElement('div'); d.className = 'lw-sym-card'; d.innerHTML = '<div class="lw-loading">' + esc(it.symbol) + '</div>'; grid.appendChild(d); return { it: it, el: d, summary: null }; });
+      var pending = slots.length;
+      slots.forEach(function (s) {
+        barApi('/bars/summary', s.it.symbol || s.it.security_id).then(function (sum) { s.summary = sum; }).catch(function () { s.summary = null; }).then(function () {
+          if (--pending === 0) finishBars(grid, slots);
+        });
+      });
+    }).catch(function () { $('#lw-sym-count').textContent = 'could not load symbols'; $('#lw-sym-grid').innerHTML = barsEmpty(); });
+  }
+  function finishBars(grid, slots) {
+    var withData = slots.filter(function (s) { return s.summary; });
+    var noData = slots.filter(function (s) { return !s.summary; });
+    if (state.barsSort === 'name') withData.sort(function (a, b) { return (a.it.symbol || '') < (b.it.symbol || '') ? -1 : 1; });
+    else if (state.barsSort === 'change') withData.sort(function (a, b) { return (b.summary.change_pct || 0) - (a.summary.change_pct || 0); });
+    else if (state.barsSort === 'volume') withData.sort(function (a, b) { return (b.summary.dollar_volume || 0) - (a.summary.dollar_volume || 0); });
+    else withData.sort(function (a, b) { return Math.abs(b.summary.change_pct || 0) - Math.abs(a.summary.change_pct || 0); }); // refined below by readout attention
+    grid.innerHTML = '';
+    withData.concat(noData).forEach(function (s) {
+      var el = document.createElement('div'); el.className = 'lw-sym-card'; grid.appendChild(el);
+      if (s.summary) drawBarCard(el, s.it, s.summary);
+      else { el.outerHTML = emptyCard(s.it.symbol, s.it.name); }
+    });
+  }
+  function drawBarCard(el, it, s) {
+    var sym = it.symbol || it.security_id, up = (s.change_pct || 0) >= 0;
+    var chart = (s.trend && s.trend.length >= 2) ? ftChart(s.trend, s.volume, up) : '';
+    var metrics = '';
+    metrics += metric('Last close', fmtMoney(s.last), 'var(--lw-ink)', 'EOD');
+    if (s.rsi != null) { var rc = s.rsi > 70 ? 'var(--lw-down)' : s.rsi < 30 ? 'var(--lw-up)' : 'var(--lw-ink)'; metrics += metric('RSI 14', s.rsi.toFixed(0), rc, s.rsi > 70 ? 'overbought' : s.rsi < 30 ? 'oversold' : 'neutral'); }
+    if (s.sma_50 != null && s.last != null) { var vs = (s.last / s.sma_50 - 1) * 100; metrics += metric('vs SMA50', (vs >= 0 ? '+' : '') + vs.toFixed(1) + '%', vs >= 0 ? 'var(--lw-up)' : 'var(--lw-down)', vs >= 0 ? 'above' : 'below'); }
+    var rv = s.vol_ratio != null ? s.vol_ratio : s.rvol;
+    if (rv != null) metrics += metric('Rel vol', rv.toFixed(2) + '×', rv > 1.3 ? 'var(--lw-accent)' : 'var(--lw-ink-3)', rv > 1.3 ? 'elevated' : 'vs 20d');
+    el.innerHTML =
+      '<div class="lw-sym-head"><div class="lw-sym-id"><span class="lw-badge">' + esc((sym || '?')[0]) + '</span><div style="min-width:0"><div class="lw-sym-ticker">' + esc(sym) + '</div><div class="lw-sym-name">' + esc(it.name || s.name || '') + '</div></div></div>' +
+        '<div style="text-align:right;flex:none"><div class="lw-sym-price">' + fmtMoney(s.last) + '</div><div class="lw-chg ' + (up ? 'lw-chg-up' : 'lw-chg-down') + '">' + (up ? '+' : '') + (s.change_pct || 0).toFixed(2) + '%</div></div></div>' +
+      (chart ? '<div>' + chart + '<div class="lw-chart-axis"><span>~6mo daily close</span><span>volume</span></div></div>' : '') +
+      '<div class="lw-metric-grid">' + metrics + '</div>' +
+      '<div><div class="lw-signals-label">Signal readouts</div><div class="lw-signals" id="sig-' + cssId(sym) + '"><span class="lw-empty-mono" style="font-size:10px;padding:0">loading…</span></div></div>' +
+      '<div class="lw-sym-foot"><span>' + esc(s.source_id || '—') + '</span><span style="display:flex;align-items:center;gap:10px;">' + (s.latest_date ? '<span>fresh <span class="lw-c-up" style="font-weight:700">' + ago(s.latest_date) + '</span></span>' : '') +
+        '<span class="lw-q lw-c-up"><span class="lw-dot" style="background:var(--lw-up)"></span>' + esc(s.quality_status || 'valid') + '</span></span></div>';
+    // readout-enriched signal chips
+    barApi('/symbol/' + encodeURIComponent(sym) + '/readouts', null, { latest: 'true', readout_ids: BEST_READOUTS }).then(function (res) {
+      var box = $('#sig-' + cssId(sym), el); if (!box) return;
+      var ros = (res && res.readouts) || [];
+      if (!ros.length) { box.innerHTML = '<span class="lw-empty-mono" style="font-size:10px;padding:0">no readouts</span>'; return; }
+      // keep BEST order
+      var order = BEST_READOUTS.split(',');
+      ros.sort(function (a, b) { return order.indexOf(a.definition.definition_id) - order.indexOf(b.definition.definition_id); });
+      box.innerHTML = ros.slice(0, 4).map(function (r) {
+        var d = r.definition, o = r.observation, col = colorVar(o.color);
+        var val = d.display_value_type === 'text' ? title(o.state) : fmtReadoutValue(d, o);
+        return '<span class="lw-chip" style="border-left-color:' + col + '" data-tip-name="' + esc(d.name) + '" data-tip-body="' + esc(d.question || d.description || '') + '" data-tip-formula="' + esc(d.calculation_formula || '') + '"><span class="k">' + esc(d.name.replace(' (14)', '')) + '</span><span class="v" style="color:' + col + '">' + esc(val) + '</span></span>';
+      }).join('');
+      bindTips(box);
+    }).catch(function () { var box = $('#sig-' + cssId(sym), el); if (box) box.innerHTML = '<span class="lw-empty-mono" style="font-size:10px;padding:0">readouts unavailable</span>'; });
+  }
+  function cssId(s) { return String(s).replace(/[^A-Za-z0-9_-]/g, '_'); }
+  function metric(l, v, col, sub) { return '<div class="lw-metric"><span class="l">' + esc(l) + '</span><span class="v" style="color:' + (col || 'var(--lw-ink)') + '">' + esc(v) + '</span><span class="s">' + esc(sub || '') + '</span></div>'; }
+  function barsEmpty() { return '<div class="lw-sym-card is-empty"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2)">No symbols in lake</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:240px">Ingest OHLCV bars or social data, or search a symbol above to backfill from EODHD / Tiingo / Alpaca.</div></div>'; }
+  function emptyCard(sym, name) { return '<div class="lw-sym-card is-empty"><span class="lw-badge">' + esc((sym || '?')[0]) + '</span><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2)">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px">No data in lake for this symbol yet.</div></div>'; }
+
+  /* ════ READOUTS ════ */
+  var RO_CATS = [['price_action', 'Price Action'], ['trend', 'Trend'], ['momentum', 'Momentum'], ['volatility', 'Volatility'], ['participation', 'Participation'], ['relative_strength', 'Relative Strength'], ['market_regime', 'Market Regime']];
+  function fmtReadoutValue(def, obs) {
+    if (def.display_value_type === 'text') return title(obs.state);
+    var v = obs.value; if (v == null) return '—';
+    if (def.display_suffix === '%') return (v >= 0 ? '+' : '') + (v * 100).toFixed(def.display_decimals != null ? def.display_decimals : 2) + '%';
+    return Number(v).toFixed(def.display_decimals != null ? def.display_decimals : 2) + (def.display_suffix || '');
+  }
+  function renderReadouts(c) {
+    c.innerHTML =
+      '<div class="lw-sec-head"><div class="lw-sec-title">Readouts</div><div class="lw-sort"><span class="lw-sort-lbl">Order</span><span id="lw-ro-sort"></span></div></div>' +
+      '<div class="lw-ro-syms" id="lw-ro-syms"><span class="lw-empty-mono">loading symbols…</span></div>' +
+      '<div id="lw-ro-body"></div>';
+    sortButtons('lw-ro-sort', [['category', 'By category'], ['attention', 'Attention'], ['name', 'Name']], state.roSort, function (v) { state.roSort = v; loadReadoutBody(); });
+
+    var doSyms = function (list) {
+      state.roSymbols = list;
+      if (!list.length) { $('#lw-ro-syms').innerHTML = '<span class="lw-empty-mono">no symbols in lake</span>'; $('#lw-ro-body').innerHTML = '<div class="lw-empty">Ingest bars to compute readouts.</div>'; return; }
+      if (!state.roSymbol || !list.some(function (x) { return (x.symbol || x.security_id) === state.roSymbol; })) state.roSymbol = list[0].symbol || list[0].security_id;
+      drawRoSyms(list); loadReadoutBody();
+    };
+    if (state.roSymbols) doSyms(state.roSymbols);
+    else api('/bars/symbols').then(function (l) { doSyms(l || []); }).catch(function () { $('#lw-ro-syms').innerHTML = '<span class="lw-empty-mono">could not load symbols</span>'; });
+  }
+  function drawRoSyms(list) {
+    var box = $('#lw-ro-syms'); box.innerHTML = '';
+    list.forEach(function (it) {
+      var sym = it.symbol || it.security_id;
+      var b = document.createElement('button');
+      b.className = 'lw-ro-sym' + (sym === state.roSymbol ? ' is-active' : '');
+      b.innerHTML = esc(sym);
+      b.addEventListener('click', function () { state.roSymbol = sym; drawRoSyms(list); loadReadoutBody(); });
+      box.appendChild(b);
+    });
+  }
+  function loadReadoutBody() {
+    var body = $('#lw-ro-body'); if (!body) return;
+    body.innerHTML = '<div class="lw-loading">Computing readouts</div>';
+    var sym = state.roSymbol;
+    barApi('/symbol/' + encodeURIComponent(sym) + '/readouts', null, { latest: 'true' }).then(function (res) {
+      drawReadoutBody(body, res);
+    }).catch(function (st) { body.innerHTML = '<div class="lw-empty"><div class="lw-empty-mono">No readouts for ' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);margin-top:6px">Needs daily bars in the lake to compute.</div></div>'; });
+  }
+  function drawReadoutBody(body, res) {
+    var ros = (res && res.readouts) || [];
+    var meta = (res && res.metadata) || {};
+    var sb = state.roSymbols ? state.roSymbols.filter(function (x) { return (x.symbol || x.security_id) === state.roSymbol; })[0] : null;
+    var name = sb ? (sb.name || '') : '';
+    var attnCount = ros.filter(function (r) { return r.observation.color === 'red' || (r.observation.attention && r.observation.attention !== 'normal'); }).length;
+    var head = '<div class="lw-ro-symhead"><span class="t">' + esc(state.roSymbol) + '</span><span class="n">' + esc(name) + '</span>' +
+      '<span class="m">' + ros.length + ' readouts · ' + attnCount + ' need attention · as of ' + (state.asOf ? esc(String(res.as_of || state.asOf).slice(0, 10)) : 'now') + '</span></div>';
+    if (!ros.length) { body.innerHTML = head + '<div class="lw-empty"><div class="lw-empty-mono">No readouts computed</div></div>'; return; }
+    var html = head;
+    if (state.roSort === 'category') {
+      RO_CATS.forEach(function (cat) {
+        var items = ros.filter(function (r) { return r.definition.category === cat[0]; });
+        if (!items.length) return;
+        html += roGroup(cat[1], items);
+      });
+      // any category not in RO_CATS (forward-compat)
+      var known = RO_CATS.map(function (x) { return x[0]; });
+      var extra = {};
+      ros.forEach(function (r) { var c = r.definition.category; if (known.indexOf(c) < 0) (extra[c] = extra[c] || []).push(r); });
+      Object.keys(extra).forEach(function (c) { html += roGroup(title(c), extra[c]); });
+    } else {
+      var arr = ros.slice();
+      if (state.roSort === 'attention') arr.sort(function (a, b) { return roScore(b) - roScore(a) || (a.definition.name < b.definition.name ? -1 : 1); });
+      else arr.sort(function (a, b) { return a.definition.name < b.definition.name ? -1 : 1; });
+      html += roGroup(state.roSort === 'attention' ? 'All · attention first' : 'All · A–Z', arr);
     }
-    var news = ds.news_articles || [];
-    if (news.length) chips.push(signalChip('News', String(news.length), 'var(--lw-ink)'));
-    var attn = ds.attention_metrics || [];
-    if (attn.length) { var t = attn[0]; chips.push(signalChip('Mentions', String(t.mentions || 0), 'var(--lw-accent)')); }
-    if (!chips.length) return '';
-    return '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips.join('') + '</div>';
+    body.innerHTML = html;
+    bindTips(body);
+  }
+  function roScore(r) { var o = r.observation; var s = 0; if (o.color === 'red') s += 3; if (o.color === 'amber') s += 1; if (o.risk && o.risk !== 'normal') s += 2; if (o.attention && o.attention !== 'normal') s += 1; return s; }
+  function roGroup(label, items) {
+    var html = '<div class="lw-ro-group"><div class="lw-ro-grouphead"><span class="c">' + esc(label) + '</span><span class="rule"></span><span class="ct">' + items.length + ' readout' + (items.length === 1 ? '' : 's') + '</span></div><div class="lw-ro-grid">';
+    items.forEach(function (r) { html += roCard(r); });
+    return html + '</div></div>';
+  }
+  function roCard(r) {
+    var d = r.definition, o = r.observation, col = colorVar(o.color);
+    var risk = o.risk && o.risk !== 'normal', att = o.attention && o.attention !== 'normal';
+    var flag = risk ? { l: 'risk', c: 'var(--lw-down)', b: 'var(--lw-down-soft)' } : att ? { l: 'watch', c: 'var(--lw-accent)', b: 'var(--lw-accent-soft)' } : null;
+    var val = fmtReadoutValue(d, o);
+    var valColor = d.display_value_type === 'text' ? col : 'var(--lw-ink)';
+    var sub = d.surface === 'detail' ? 'detail' : '';
+    return '<div class="lw-ro-card" style="border-top-color:' + col + '" data-tip-name="' + esc(d.name) + '" data-tip-body="' + esc(d.question || d.description || '') + '" data-tip-formula="' + esc(d.calculation_formula || '') + '">' +
+      '<div class="lw-ro-card-head"><span class="lw-ro-name">' + esc(d.name) + '</span>' + (flag ? '<span class="lw-ro-flag" style="color:' + flag.c + ';background:' + flag.b + '">' + flag.l + '</span>' : '') + '</div>' +
+      '<div class="lw-ro-val" style="color:' + valColor + '">' + esc(val) + '</div>' +
+      '<div class="lw-ro-foot"><span class="lw-ro-state" style="color:' + col + '"><span class="d" style="background:' + col + '"></span>' + esc(title(o.state)) + '</span>' + (sub ? '<span class="lw-ro-sub">' + sub + '</span>' : '') + '</div></div>';
   }
 
-  function barCard(sym, name, s, ds) {
-    var up = (s.change_pct || 0) >= 0;
-    var chart = (s.trend && s.trend.length >= 2) ? areaChart(s.trend, up) : '';
-    var vol = (s.volume && s.volume.length >= 2) ? volBars(s.volume) : '';
-    var chartSection = chart ? '<div class="lw-sym-chart">' + chart + vol + '<div class="lw-chart-axis"><span>~6mo close</span><span>volume</span></div></div>' : '';
-
-    var last = s.last, tiles = '';
-    if (last != null) tiles += metricTile('Last close', fmtMoney(last), 'lw-c-ink', 'EOD');
-    var cc = colorChange(s.change_pct || 0); tiles += metricTile('Day Δ', ((s.change_pct || 0) >= 0 ? '+' : '') + (s.change_pct || 0).toFixed(2) + '%', cc.cls, cc.sub);
-    if (s.rsi != null) { var cr = colorRsi(s.rsi); tiles += metricTile('RSI 14', s.rsi.toFixed(1), cr.cls, cr.sub); }
-    if (s.sma50 != null && last != null) { var vs = (last / s.sma50 - 1) * 100, csm = colorSma(vs); tiles += metricTile('vs SMA 50', (vs >= 0 ? '+' : '') + vs.toFixed(1) + '%', csm.cls, csm.sub); }
-    if (s.atr != null && last != null) tiles += metricTile('ATR 14', s.atr.toFixed(2), 'lw-c-accent', (s.atr / last * 100).toFixed(1) + '% vol');
-    if (s.macd != null) { var cm = colorMacd(s.macd); tiles += metricTile('MACD', (s.macd >= 0 ? '+' : '') + s.macd.toFixed(2), cm.cls, cm.sub); }
-    if (s.vol_ratio != null) tiles += metricTile('Volume', s.vol_ratio.toFixed(2) + '×', s.vol_ratio > 1.1 ? 'lw-c-accent' : 'lw-c-dim', s.vol_ratio > 1.1 ? 'elevated' : 'vs 20d avg');
-
-    return symHead(sym, name || s.name, last, s.change_pct) +
-      chartSection +
-      '<div class="lw-metric-grid">' + tiles + '</div>' +
-      signalsRow(ds) +
-      symFoot(s.source_id, s.latest_date, s.quality_status);
-  }
-
-  function signalsOnlyCard(sym, name, ds) {
-    var row = signalsRow(ds);
-    return symHead(sym, name, null, null) +
-      (row || '<div class="lw-metric-grid"><div class="lw-metric" style="grid-column:1/-1;"><div class="lw-metric-label">Lake data</div><div class="lw-metric-val lw-c-ink">—</div><div class="lw-metric-sub">No price bars; signals only</div></div></div>');
-  }
-
-  function emptyCard(sym, name) {
-    return '<div class="lw-sym-card is-empty"><div class="lw-sym-badge">' + esc((sym || '?')[0]) + '</div><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2);">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px;">No data in lake for this symbol yet.</div></div>';
-  }
-
-  /* ── Sentiment & Mentions leaderboard ── */
-  function renderSentiment(container) {
-    container.innerHTML =
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
-        '<span class="lw-card-title">Social Sentiment</span>' +
-        '<span class="lw-mono" style="font-size:10px;color:var(--lw-ink-3);letter-spacing:.06em;">most-mentioned 24h</span>' +
-      '</div>' +
-      '<div class="lw-lead" id="lw-lead"></div>' +
-      '<div class="lw-mono" style="font-size:10px;color:var(--lw-ink-4);text-align:center;margin-top:8px;">ApeWisdom attention + StockTwits sentiment</div>';
-
+  /* ════ SENTIMENT ════ */
+  function renderSentiment(c) {
+    c.innerHTML =
+      '<div class="lw-sec-head"><div class="lw-sec-title">Social Sentiment</div><span class="lw-mono" style="font-size:10px;letter-spacing:.06em;color:var(--lw-ink-3);text-transform:uppercase">most-mentioned · 24h</span></div>' +
+      '<div class="lw-lead" id="lw-lead"><div class="lw-loading">Loading</div></div>' +
+      '<div class="lw-mono" style="font-size:10px;color:var(--lw-ink-4);text-align:center;margin-top:9px">ApeWisdom attention + StockTwits sentiment</div>';
     api('/attention/leaderboard?limit=20').then(function (rows) {
       if (!rows || !rows.length) { $('#lw-lead').innerHTML = emptySentiment(); return; }
       _leaders = rows; drawLeaders();
     }).catch(function () { $('#lw-lead').innerHTML = emptySentiment(); });
   }
-
-  function emptySentiment() {
-    return '<div class="lw-empty" style="padding:36px 16px;">' +
-      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M2 12a10 10 0 0 1 10-10"/><path d="M12 2v10l4 4"/></svg>' +
-      '<div class="lw-mono" style="font-size:12px;color:var(--lw-ink-3);margin-top:8px;">Awaiting attention data</div></div>';
-  }
-
+  var _leaders = [];
+  function emptySentiment() { return '<div class="lw-empty" style="padding:36px 16px"><div class="lw-empty-mono">Awaiting attention data</div></div>'; }
   function drawLeaders() {
-    var rows = _leaders;
     var lead = $('#lw-lead');
-    lead.innerHTML = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Δ</span><span>Bull / Neu / Bear</span><span></span></div>' +
-      rows.map(function (l) {
-        var hasSent = l.positive_ratio != null;
-        var posP = hasSent ? Math.round(l.positive_ratio * 100) : 0;
-        /* real 3-way split when the backend supplies it; otherwise show bull vs.
-           an explicitly-muted remainder — never fabricate a neutral/bear ratio */
-        var has3 = hasSent && (l.neutral_ratio != null || l.negative_ratio != null);
-        var neuP, negP;
-        if (has3) { neuP = Math.round((l.neutral_ratio || 0) * 100); negP = Math.max(0, 100 - posP - neuP); }
-        else { neuP = hasSent ? (100 - posP) : 0; negP = 0; }
-
-        var d = l.mention_delta_pct;
-        var deltaStr = d == null ? '—' : (d >= 0 ? '+' : '') + Math.round(d) + '%';
-        var deltaCls = d == null ? 'lw-c-dim' : d >= 0 ? 'lw-c-up' : 'lw-c-down';
-        var open = state.expanded === l.symbol;
-        var trend = (l.trend || []).length >= 2 ? l.trend : [0, l.mentions || 1];
-        var spark = sparkline(trend, 56, 18, (d || 0) >= 0 ? 'var(--lw-money)' : 'var(--lw-down)');
-        var badge = (l.symbol || '?')[0];
-
-        var sentCell = hasSent
-          ? '<div class="lw-sent-wrap" style="display:flex;align-items:center;gap:6px;"><span class="lw-sent-bar" style="width:70px;"><span class="lw-sent-pos" style="width:' + posP + '%"></span><span class="lw-sent-neu" style="width:' + neuP + '%"></span><span class="lw-sent-neg" style="width:' + negP + '%"></span></span><span class="lw-mono" style="font-size:11px;font-weight:700;color:var(--lw-up);">' + posP + '%</span></div>'
-          : '<div class="lw-sent-wrap" style="display:flex;align-items:center;gap:6px;"><span class="lw-mono lw-c-dim" style="font-size:11px;">no sentiment</span></div>';
-
-        var meanColor = l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)';
-        var legend = hasSent
-          ? (has3
-            ? '<span class="lw-c-up" style="font-weight:700;">' + posP + '% bull</span> · <span class="lw-c-dim">' + neuP + '% neu</span> · <span class="lw-c-down" style="font-weight:700;">' + negP + '% bear</span>'
-            : '<span class="lw-c-up" style="font-weight:700;">' + posP + '% bull</span> · <span class="lw-c-dim">' + (100 - posP) + '% neutral / bearish</span>')
-          : '<span class="lw-c-dim">no labelled messages</span>';
-
-        var detailHtml =
-          '<div class="lw-lead-detail">' +
-            '<div><div class="lw-detail-label">Mention trend</div>' + (areaChart(trend, (d || 0) >= 0) || '<div class="lw-dim" style="padding:16px 0;">—</div>') + '</div>' +
-            '<div style="display:flex;flex-direction:column;gap:10px;">' +
-              '<div><div class="lw-detail-label">Sentiment</div><div class="lw-mono" style="font-size:11px;margin-top:2px;">' + legend + '</div></div>' +
-              '<div><div class="lw-detail-label">Mean score</div><div class="lw-mono" style="font-size:14px;font-weight:700;color:' + meanColor + ';">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
-              '<div style="display:flex;gap:18px;">' +
-                '<div><div class="lw-detail-label">Messages</div><div class="lw-mono" style="font-size:13px;color:var(--lw-ink);">' + fmtNum(l.total_messages) + '</div></div>' +
-                (l.cohort ? '<div><div class="lw-detail-label">Cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap);">' + esc(l.cohort) + '</div></div>' : '') +
-              '</div>' +
-            '</div>' +
-          '</div>';
-
-        var nameLine = l.name ? '<div class="lw-sym-name" style="font-size:10px;">' + esc(l.name) + '</div>' : '';
-
-        return '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
-          '<div class="lw-lead-row">' +
-            '<div style="display:flex;align-items:center;gap:8px;min-width:0;"><span class="lw-lead-badge" style="width:26px;height:26px;border-radius:50%;font-size:10px;">' + esc(badge) + '</span><div style="min-width:0;"><span class="lw-mono" style="font-size:13px;font-weight:600;color:var(--lw-ink);">' + esc(l.symbol) + '</span>' + nameLine + '</div></div>' +
-            '<div class="lw-lead-mentions" style="justify-content:flex-end;"><span class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink);">' + fmtNum(l.mentions) + '</span>' + spark + '</div>' +
-            '<span class="lw-mono ' + deltaCls + '" style="font-size:12px;font-weight:700;">' + deltaStr + '</span>' +
-            sentCell +
-            '<span class="lw-caret">▾</span>' +
+    var html = '<div class="lw-lead-head"><span>Symbol</span><span>Mentions</span><span>Δ</span><span>Bull / Neu / Bear</span><span></span></div>';
+    _leaders.forEach(function (l) {
+      var hasSent = l.positive_ratio != null;
+      var pos = hasSent ? Math.round(l.positive_ratio * 100) : 0;
+      var has3 = hasSent && (l.neutral_ratio != null || l.negative_ratio != null);
+      var neu, neg;
+      if (has3) { neu = Math.round((l.neutral_ratio || 0) * 100); neg = Math.max(0, 100 - pos - neu); }
+      else { neu = hasSent ? (100 - pos) : 0; neg = 0; }
+      var d = l.mention_delta_pct;
+      var deltaStr = d == null ? '—' : (d >= 0 ? '+' : '') + Math.round(d) + '%';
+      var deltaCol = d == null ? 'var(--lw-ink-3)' : d >= 0 ? 'var(--lw-up)' : 'var(--lw-down)';
+      var open = state.expanded === l.symbol;
+      var trend = (l.trend || []).length >= 2 ? l.trend : [0, l.mentions || 1];
+      var sentCell = hasSent
+        ? '<div class="lw-sent-wrap" style="display:flex;align-items:center;gap:7px"><span class="lw-sent-bar"><span class="lw-sent-pos" style="width:' + pos + '%"></span><span class="lw-sent-neu" style="width:' + neu + '%"></span><span class="lw-sent-neg" style="width:' + neg + '%"></span></span><span class="lw-mono" style="font-size:11px;font-weight:700;color:var(--lw-up)">' + pos + '%</span></div>'
+        : '<div class="lw-sent-wrap"><span class="lw-mono lw-c-dim" style="font-size:11px">no sentiment</span></div>';
+      var meanCol = l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-ink-3)';
+      var legend = hasSent ? (has3
+        ? '<span class="lw-c-up" style="font-weight:700">' + pos + '% bull</span> · <span class="lw-c-dim">' + neu + '% neu</span> · <span class="lw-c-down" style="font-weight:700">' + neg + '% bear</span>'
+        : '<span class="lw-c-up" style="font-weight:700">' + pos + '% bull</span> · <span class="lw-c-dim">' + (100 - pos) + '% neutral / bearish</span>')
+        : '<span class="lw-c-dim">no labelled messages</span>';
+      html += '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
+        '<div class="lw-lead-row">' +
+          '<div class="lw-lead-id"><span class="lw-lead-badge">' + esc((l.symbol || '?')[0]) + '</span><div style="min-width:0"><div class="lw-lead-sym">' + esc(l.symbol) + '</div>' + (l.name ? '<div class="lw-sym-name" style="font-size:10px">' + esc(l.name) + '</div>' : '') + '</div></div>' +
+          '<div class="lw-lead-mentions">' + fmtNum(l.mentions) + spark(trend, 52, 18, (d || 0) >= 0) + '</div>' +
+          '<span class="lw-mono" style="font-size:12px;font-weight:700;color:' + deltaCol + '">' + deltaStr + '</span>' +
+          sentCell +
+          '<span class="lw-caret">▾</span>' +
+        '</div>' +
+        '<div class="lw-lead-detail">' +
+          '<div><div class="lw-detail-lbl">Mention trend · 30d</div>' + (ftChart(trend, null, (d || 0) >= 0, function (v) { return fmtBig(v); }) || '<div class="lw-c-dim" style="padding:16px 0">—</div>') + '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:11px">' +
+            '<div><div class="lw-detail-lbl">Sentiment split</div><div class="lw-mono" style="font-size:11px">' + legend + '</div></div>' +
+            '<div><div class="lw-detail-lbl">Mean score</div><div class="lw-mono" style="font-size:15px;font-weight:700;color:' + meanCol + '">' + (l.mean_score != null ? l.mean_score.toFixed(3) : '—') + '</div></div>' +
+            '<div style="display:flex;gap:20px"><div><div class="lw-detail-lbl">Messages</div><div class="lw-mono" style="font-size:13px;color:var(--lw-ink)">' + fmtNum(l.total_messages) + '</div></div>' + (l.cohort ? '<div><div class="lw-detail-lbl">Cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap)">' + esc(l.cohort) + '</div></div>' : '') + '</div>' +
           '</div>' +
-          detailHtml +
-        '</div>';
-      }).join('');
-    $$('.lw-lead-row', lead).forEach(function (row) {
-      row.addEventListener('click', function () {
-        var sym = row.parentNode.dataset.sym;
-        state.expanded = state.expanded === sym ? null : sym;
-        drawLeaders();
-      });
+        '</div></div>';
     });
+    lead.innerHTML = html;
+    $$('.lw-lead-row', lead).forEach(function (row) { row.addEventListener('click', function () { var sym = row.parentNode.dataset.sym; state.expanded = state.expanded === sym ? null : sym; drawLeaders(); }); });
   }
 
-  /* ── Indicator definitions with categories ── */
+  /* ════ INDICATORS ════ */
   var IND_DEFS = [
-    { label: 'RSI', key: 'rsi', cat: 'Momentum', fmt: 'num' },
-    { label: 'SMA20', key: 'sma_20', cat: 'Trend', fmt: 'price' },
-    { label: 'SMA50', key: 'sma_50', cat: 'Trend', fmt: 'price' },
-    { label: 'SMA200', key: 'sma_200', cat: 'Trend', fmt: 'price' },
-    { label: 'EMA12', key: 'ema_12', cat: 'Trend', fmt: 'price' },
-    { label: 'EMA26', key: 'ema_26', cat: 'Trend', fmt: 'price' },
-    { label: 'BB U', key: 'bb_upper', cat: 'Volatility', fmt: 'price' },
-    { label: 'BB M', key: 'bb_middle', cat: 'Volatility', fmt: 'price' },
-    { label: 'BB L', key: 'bb_lower', cat: 'Volatility', fmt: 'price' },
-    { label: 'ATR', key: 'atr', cat: 'Volatility', fmt: 'num' },
-    { label: 'ATR%', key: 'atr_pct', cat: 'Volatility', fmt: 'pct' },
-    { label: 'VWAP', key: 'vwap', cat: 'Volume', fmt: 'price' },
-    { label: 'MACD', key: 'macd', cat: 'Trend', fmt: 'num' },
-    { label: 'MACDe', key: 'macd_ema', cat: 'Trend', fmt: 'num' },
-    { label: 'MACh', key: 'macd_hist', cat: 'Trend', fmt: 'num' },
-    { label: 'OBV', key: 'obv', cat: 'Volume', fmt: 'big' },
-    { label: 'RVol', key: 'rvol', cat: 'Volume', fmt: 'num2' },
-    { label: 'DolV', key: 'dollar_volume', cat: 'Volume', fmt: 'big' },
-    { label: 'aDol20', key: 'avg_dollar_volume_20', cat: 'Volume', fmt: 'big' },
-    { label: 'R1d', key: 'return_1d', cat: 'Structure', fmt: 'pct' },
-    { label: 'R5d', key: 'return_5d', cat: 'Structure', fmt: 'pct' },
-    { label: 'R21d', key: 'return_21d', cat: 'Structure', fmt: 'pct' },
-    { label: 'R63d', key: 'return_63d', cat: 'Structure', fmt: 'pct' },
-    { label: 'Gap%', key: 'gap_pct', cat: 'Structure', fmt: 'pct' },
-    { label: '52wHi', key: 'pct_off_52w_high', cat: 'Structure', fmt: 'pct' },
-    { label: '52wLo', key: 'pct_off_52w_low', cat: 'Structure', fmt: 'pct' },
-    { label: 'N52wH', key: 'is_new_52w_high', cat: 'Structure', fmt: 'bool' },
-    { label: 'N52wL', key: 'is_new_52w_low', cat: 'Structure', fmt: 'bool' },
-    { label: 'RV21', key: 'realized_vol_21', cat: 'Volatility', fmt: 'pct' },
-    { label: 'RV63', key: 'realized_vol_63', cat: 'Volatility', fmt: 'pct' },
+    { label: 'RSI', key: 'rsi', cat: 'Momentum', fmt: 'num1', gid: 'rsi' }, { label: 'SMA20', key: 'sma_20', cat: 'Trend', fmt: 'price', gid: 'sma' }, { label: 'SMA50', key: 'sma_50', cat: 'Trend', fmt: 'price', gid: 'sma' }, { label: 'SMA200', key: 'sma_200', cat: 'Trend', fmt: 'price', gid: 'sma' }, { label: 'EMA12', key: 'ema_12', cat: 'Trend', fmt: 'price', gid: 'ema' }, { label: 'EMA26', key: 'ema_26', cat: 'Trend', fmt: 'price', gid: 'ema' },
+    { label: 'BB U', key: 'bb_upper', cat: 'Volatility', fmt: 'price', gid: 'bollinger' }, { label: 'BB M', key: 'bb_middle', cat: 'Volatility', fmt: 'price', gid: 'bollinger' }, { label: 'BB L', key: 'bb_lower', cat: 'Volatility', fmt: 'price', gid: 'bollinger' }, { label: 'ATR', key: 'atr', cat: 'Volatility', fmt: 'num2', gid: 'atr' }, { label: 'ATR%', key: 'atr_pct', cat: 'Volatility', fmt: 'pct', gid: 'atr_pct' },
+    { label: 'VWAP', key: 'vwap', cat: 'Volume', fmt: 'price', gid: 'vwap' }, { label: 'MACD', key: 'macd', cat: 'Trend', fmt: 'num2', gid: 'macd' }, { label: 'MACDe', key: 'macd_ema', cat: 'Trend', fmt: 'num2', gid: 'macd' }, { label: 'MACh', key: 'macd_hist', cat: 'Trend', fmt: 'num2', gid: 'macd' }, { label: 'OBV', key: 'obv', cat: 'Volume', fmt: 'big', gid: 'obv' }, { label: 'RVol', key: 'rvol', cat: 'Volume', fmt: 'num2', gid: 'rvol' },
+    { label: 'DolV', key: 'dollar_volume', cat: 'Volume', fmt: 'big', gid: 'dollar_volume' }, { label: 'aDol20', key: 'avg_dollar_volume_20', cat: 'Volume', fmt: 'big', gid: 'avg_dollar_volume' }, { label: 'R1d', key: 'return_1d', cat: 'Structure', fmt: 'pct', gid: 'return_1d' }, { label: 'R5d', key: 'return_5d', cat: 'Structure', fmt: 'pct', gid: 'return_5d' }, { label: 'R21d', key: 'return_21d', cat: 'Structure', fmt: 'pct', gid: 'return_21d' }, { label: 'R63d', key: 'return_63d', cat: 'Structure', fmt: 'pct', gid: 'return_63d' },
+    { label: 'Gap%', key: 'gap_pct', cat: 'Structure', fmt: 'pct', gid: 'gap_pct' }, { label: '52wHi', key: 'pct_off_52w_high', cat: 'Structure', fmt: 'pct', gid: 'pct_off_52w_high' }, { label: '52wLo', key: 'pct_off_52w_low', cat: 'Structure', fmt: 'pct', gid: 'pct_off_52w_low' }, { label: 'RV21', key: 'realized_vol_21', cat: 'Volatility', fmt: 'pct', gid: 'realized_vol' }, { label: 'RV63', key: 'realized_vol_63', cat: 'Volatility', fmt: 'pct', gid: 'realized_vol' },
+    { label: 'ADX', key: 'adx_14', cat: 'Trend', fmt: 'num2', gid: 'adx' }, { label: 'DI+', key: 'di_plus_14', cat: 'Trend', fmt: 'num2', gid: 'di_plus' }, { label: 'DI-', key: 'di_minus_14', cat: 'Trend', fmt: 'num2', gid: 'di_minus' }, { label: 'StochK', key: 'stoch_k_14', cat: 'Momentum', fmt: 'num1', gid: 'stoch_k' }, { label: 'Wm%R', key: 'williams_r_14', cat: 'Momentum', fmt: 'num1', gid: 'williams_r' }, { label: 'CCI', key: 'cci_20', cat: 'Momentum', fmt: 'num1', gid: 'cci' },
+    { label: 'MFI', key: 'mfi_14', cat: 'Volume', fmt: 'num1', gid: 'mfi' }, { label: 'CMF', key: 'cmf_20', cat: 'Volume', fmt: 'num3', gid: 'cmf' }, { label: '%B', key: 'percent_b', cat: 'Volatility', fmt: 'num2', gid: 'percent_b' }, { label: 'Beta60', key: 'beta_60d', cat: 'Relative', fmt: 'num2', gid: 'beta' }, { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct', gid: 'rs_spy' }, { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2', gid: 'corr_spy' }
   ];
-  /* Extra new indicators from sub-issues 3-7 — keep sorted by category */
-  var IND_DEFS_EXTRA = [
-    { label: 'ADX', key: 'adx_14', cat: 'Trend', fmt: 'num2' },
-    { label: 'DI+', key: 'di_plus_14', cat: 'Trend', fmt: 'num2' },
-    { label: 'DI-', key: 'di_minus_14', cat: 'Trend', fmt: 'num2' },
-    { label: 'AroonU', key: 'aroon_up_25', cat: 'Trend', fmt: 'num' },
-    { label: 'AroonD', key: 'aroon_down_25', cat: 'Trend', fmt: 'num' },
-    { label: 'AroonO', key: 'aroon_osc_25', cat: 'Trend', fmt: 'num' },
-    { label: 'PPO', key: 'ppo', cat: 'Trend', fmt: 'num2' },
-    { label: 'PPOs', key: 'ppo_signal', cat: 'Trend', fmt: 'num2' },
-    { label: 'PPOh', key: 'ppo_histogram', cat: 'Trend', fmt: 'num2' },
-    { label: 'TRIX', key: 'trix_15', cat: 'Trend', fmt: 'num2' },
-    { label: 'ROC', key: 'roc_12', cat: 'Momentum', fmt: 'pct' },
-    { label: 'StochK', key: 'stoch_k_14', cat: 'Momentum', fmt: 'num' },
-    { label: 'StochD', key: 'stoch_d_3', cat: 'Momentum', fmt: 'num' },
-    { label: 'StRSI', key: 'stoch_rsi_14', cat: 'Momentum', fmt: 'num2' },
-    { label: 'Wm%R', key: 'williams_r_14', cat: 'Momentum', fmt: 'num' },
-    { label: 'CCI', key: 'cci_20', cat: 'Momentum', fmt: 'num' },
-    { label: 'TSI', key: 'tsi_25_13', cat: 'Momentum', fmt: 'num2' },
-    { label: 'UltO', key: 'ultimate_osc', cat: 'Momentum', fmt: 'num' },
-    { label: 'CMO', key: 'cmo_14', cat: 'Momentum', fmt: 'num' },
-    { label: 'BoP', key: 'bop', cat: 'Momentum', fmt: 'num2' },
-    { label: 'CHOP', key: 'chop_14', cat: 'Momentum', fmt: 'num' },
-    { label: '%B', key: 'percent_b', cat: 'Volatility', fmt: 'num2' },
-    { label: 'BW', key: 'bandwidth', cat: 'Volatility', fmt: 'num4' },
-    { label: 'Squeeze', key: 'bb_squeeze', cat: 'Volatility', fmt: 'bool' },
-    { label: 'KeltU', key: 'keltner_upper', cat: 'Volatility', fmt: 'price' },
-    { label: 'KeltM', key: 'keltner_middle', cat: 'Volatility', fmt: 'price' },
-    { label: 'KeltL', key: 'keltner_lower', cat: 'Volatility', fmt: 'price' },
-    { label: 'DonU', key: 'donchian_upper', cat: 'Volatility', fmt: 'price' },
-    { label: 'DonM', key: 'donchian_middle', cat: 'Volatility', fmt: 'price' },
-    { label: 'DonL', key: 'donchian_lower', cat: 'Volatility', fmt: 'price' },
-    { label: 'RExp', key: 'range_expansion', cat: 'Volatility', fmt: 'num2' },
-    { label: 'TR', key: 'true_range', cat: 'Volatility', fmt: 'num2' },
-    { label: 'σ20', key: 'rolling_std_20', cat: 'Volatility', fmt: 'num2' },
-    { label: 'WMA', key: 'wma_20', cat: 'Trend', fmt: 'price' },
-    { label: 'KAMA', key: 'kama_10', cat: 'Trend', fmt: 'price' },
-    { label: 'LinR', key: 'linreg_slope_20', cat: 'Trend', fmt: 'num4' },
-    { label: 'LR Up', key: 'linreg_channel_upper', cat: 'Trend', fmt: 'price' },
-    { label: 'LR Mid', key: 'linreg_channel_middle', cat: 'Trend', fmt: 'price' },
-    { label: 'LR Lw', key: 'linreg_channel_lower', cat: 'Trend', fmt: 'price' },
-    { label: 'PvtHi', key: 'pivot_high', cat: 'Structure', fmt: 'price' },
-    { label: 'PvtLo', key: 'pivot_low', cat: 'Structure', fmt: 'price' },
-    { label: 'InBar', key: 'inside_bar', cat: 'Structure', fmt: 'bool' },
-    { label: 'OutBar', key: 'outside_bar', cat: 'Structure', fmt: 'bool' },
-    { label: 'GFill', key: 'gap_fill', cat: 'Structure', fmt: 'bool' },
-    { label: 'A/D', key: 'ad_line', cat: 'Volume', fmt: 'big' },
-    { label: 'CMF', key: 'cmf_20', cat: 'Volume', fmt: 'num3' },
-    { label: 'Chaik', key: 'chaikin_osc', cat: 'Volume', fmt: 'num2' },
-    { label: 'MFI', key: 'mfi_14', cat: 'Volume', fmt: 'num' },
-    { label: 'VPT', key: 'vpt', cat: 'Volume', fmt: 'big' },
-    { label: 'Force', key: 'force_index_13', cat: 'Volume', fmt: 'num2' },
-    { label: 'EOM', key: 'eom_14', cat: 'Volume', fmt: 'num4' },
-    { label: 'OBVs', key: 'obv_slope_20', cat: 'Volume', fmt: 'num2' },
-    { label: 'VSpike', key: 'volume_spike', cat: 'Volume', fmt: 'bool' },
-    { label: 'LogR', key: 'log_return', cat: 'Structure', fmt: 'pct' },
-    { label: 'MAStk', key: 'ma_stack', cat: 'Trend', fmt: 'num' },
-    { label: 'MAS20', key: 'ma_slope_20', cat: 'Trend', fmt: 'num4' },
-    { label: 'MAS50', key: 'ma_slope_50', cat: 'Trend', fmt: 'num4' },
-    { label: 'MAS200', key: 'ma_slope_200', cat: 'Trend', fmt: 'num4' },
-    { label: 'RSIDv', key: 'rsi_divergence', cat: 'Momentum', fmt: 'num' },
-    { label: 'Beta20', key: 'beta_20d', cat: 'Relative', fmt: 'num2' },
-    { label: 'Beta60', key: 'beta_60d', cat: 'Relative', fmt: 'num2' },
-    { label: 'Alpha', key: 'alpha', cat: 'Relative', fmt: 'pct' },
-    { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct' },
-    { label: 'RS60', key: 'rs_spy_60d', cat: 'Relative', fmt: 'pct' },
-    { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2' },
-    { label: 'R126d', key: 'return_126', cat: 'Structure', fmt: 'pct' },
-    { label: 'R252d', key: 'return_252', cat: 'Structure', fmt: 'pct' },
-  ];
-  var IND_ALL = IND_DEFS.concat(IND_DEFS_EXTRA);
   var IND_CATS = ['All', 'Trend', 'Momentum', 'Volatility', 'Volume', 'Structure', 'Relative'];
+  var pins = getJSON('lw_pins', {});
+  function getPins(sym) { return pins[sym] || []; }
+  function setPins(sym, arr) { pins[sym] = arr; setLS('lw_pins', JSON.stringify(pins)); }
+  var _glossary = null, _glossaryReq = null;
+  function fetchGlossary() { if (_glossary) return Promise.resolve(_glossary); if (!_glossaryReq) _glossaryReq = api('/indicators/glossary').then(function (g) { _glossary = g || {}; return _glossary; }).catch(function () { _glossary = {}; return _glossary; }); return _glossaryReq; }
 
-  /* ── Glossary lookup: model key → glossary entry id ── */
-  var GLOSSARY_ID_MAP = {
-    'cmf_20': 'cmf', 'mfi_14': 'mfi',
-    'force_index_13': 'force_index', 'eom_14': 'eom', 'obv_slope_20': 'obv_slope',
-    'adx_14': 'adx', 'di_plus_14': 'di_plus', 'di_minus_14': 'di_minus',
-    'aroon_up_25': 'aroon_up', 'aroon_down_25': 'aroon_down', 'aroon_osc_25': 'aroon_osc',
-    'chop_14': 'chop', 'roc_12': 'roc', 'trix_15': 'trix',
-    'stoch_k_14': 'stoch_k', 'stoch_d_3': 'stoch_d', 'stoch_rsi_14': 'stoch_rsi',
-    'williams_r_14': 'williams_r', 'cci_20': 'cci', 'tsi_25_13': 'tsi',
-    'cmo_14': 'cmo', 'keltner_middle': 'keltner_mid',
-    'rolling_std_20': 'std_dev', 'wma_20': 'wma', 'kama_10': 'kama',
-    'linreg_slope_20': 'linreg_slope', 'pivot_high': 'pivot_points',
-    'pivot_low': 'pivot_points',
-    'ma_slope_20': 'ma_slope', 'ma_slope_50': 'ma_slope', 'ma_slope_200': 'ma_slope',
-    'rs_spy_20d': 'rs_spy', 'rs_spy_60d': 'rs_spy',
-    'avg_dollar_volume_20': 'avg_dollar_volume',
-    'donchian_middle': 'donchian_middle',
-    'linreg_channel_upper': 'linreg_channel',
-    'linreg_channel_middle': 'linreg_channel',
-    'linreg_channel_lower': 'linreg_channel',
-  };
-  function gidForKey(key) { return GLOSSARY_ID_MAP[key] || key; }
-
-  /* ── Indicators tab ── */
-  var _indicatorResults = null;
-  function renderIndicators(container) {
-    var cat = state.indCat || 'All';
-    var catsHtml = '<div class="lw-ind-cats" id="lw-ind-cats">' +
-      IND_CATS.map(function (c) { return '<button class="lw-ind-cat' + (c === cat ? ' is-active' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('') +
-      '</div>';
-
-    if (_indicatorResults) {
-      container.innerHTML = catsHtml + _renderIndicatorGrid(_indicatorResults, cat);
-      container.querySelectorAll('.lw-ind-cat').forEach(function (b) {
-        b.addEventListener('click', function () {
-          state.indCat = b.dataset.cat;
-          renderIndicators(container);
-        });
-      });
-      bindPins(container);
-      bindHoverTooltip(container);
-      return;
-    }
-
-    container.innerHTML = '<div class="lw-loading">Loading indicators…</div>';
-
+  function renderIndicators(c) {
+    c.innerHTML = '<div class="lw-ind-cats" id="lw-ind-cats"></div><div class="lw-sym-grid" id="lw-ind-grid"><div class="lw-loading">Loading indicators</div></div>';
+    var cats = $('#lw-ind-cats');
+    IND_CATS.forEach(function (cat) {
+      var b = document.createElement('button'); b.className = 'lw-ind-cat' + (cat === state.indCat ? ' is-active' : ''); b.textContent = cat;
+      b.addEventListener('click', function () { state.indCat = cat; renderIndicators(c); }); cats.appendChild(b);
+    });
+    if (_indResults) { drawIndicators(_indResults); return; }
     api('/bars/symbols').then(function (list) {
       list = list || [];
-      if (!list.length) {
-        container.innerHTML = catsHtml + '<div class="lw-empty">No symbols in lake</div>';
-        return;
-      }
-      var promises = list.map(function (item) {
-        var sym = item.symbol || item.security_id;
-        return barApi('/bars/summary', sym).then(function (s) {
-          s._sym = sym;
-          s._name = item.name || '';
-          return s;
-        }).catch(function () { return null; });
+      if (!list.length) { $('#lw-ind-grid').innerHTML = '<div class="lw-empty">No symbols in lake</div>'; return; }
+      Promise.all(list.map(function (it) { var sym = it.symbol || it.security_id; return barApi('/bars/summary', sym).then(function (s) { s._sym = sym; s._name = it.name || s.name || ''; return s; }).catch(function () { return null; }); }))
+        .then(function (res) { _indResults = res.filter(function (r) { return r; }); drawIndicators(_indResults); });
+    }).catch(function () { $('#lw-ind-grid').innerHTML = '<div class="lw-error">Failed to load symbols</div>'; });
+  }
+  var _indResults = null;
+  function drawIndicators(results) {
+    var grid = $('#lw-ind-grid'); if (!grid) return;
+    if (!results.length) { grid.innerHTML = '<div class="lw-empty">No indicator data</div>'; return; }
+    grid.innerHTML = ''; results.forEach(function (s) { grid.appendChild(indicatorCard(s)); });
+    // tooltips
+    $$('.lw-ind-tile', grid).forEach(function (t) {
+      t.addEventListener('mouseenter', function (e) {
+        var gid = t.dataset.gid; fetchGlossary().then(function (g) { var en = g[gid]; if (!en) return; showTip(e, en.full_name || en.name || gid, en.description || '', en.formula || ''); });
       });
-      Promise.all(promises).then(function (results) {
-        results = results.filter(function (r) { return r !== null; });
-        _indicatorResults = results;
-        container.innerHTML = catsHtml + _renderIndicatorGrid(results, cat);
-        container.querySelectorAll('.lw-ind-cat').forEach(function (b) {
-          b.addEventListener('click', function () {
-            state.indCat = b.dataset.cat;
-            renderIndicators(container);
-          });
-        });
-        bindPins(container);
-        bindHoverTooltip(container);
-      });
-    }).catch(function () {
-      container.innerHTML = catsHtml + '<div class="lw-error">Failed to load symbols</div>';
+      t.addEventListener('mouseleave', hideTip);
     });
   }
-
-  function _renderIndicatorGrid(results, cat) {
-    if (!results.length) return '<div class="lw-empty">No indicator data available</div>';
-    var h = '<div class="lw-sym-grid">';
-    results.forEach(function (s) { h += indicatorCard(s, cat); });
-    return h + '</div>';
+  function indicatorCard(s) {
+    var sym = s._sym || s.symbol; var stale = false;
+    if (s.latest_date) { var ref = state.asOf ? new Date(state.asOf) : new Date(); stale = (ref.getTime() - new Date(s.latest_date).getTime()) / 86400000 > 3; }
+    var pinsArr = getPins(sym);
+    var eligible = IND_DEFS.filter(function (d) { return state.indCat === 'All' || d.cat === state.indCat; });
+    var pinned = eligible.filter(function (d) { return pinsArr.indexOf(d.label) !== -1; });
+    var rest = eligible.filter(function (d) { return pinsArr.indexOf(d.label) === -1; }).slice(0, 18);
+    var card = document.createElement('div'); card.className = 'lw-ind-card' + (stale ? ' lw-stale' : '');
+    var up = (s.change_pct || 0) >= 0;
+    var tiles = pinned.concat(rest).map(function (d) {
+      var raw = s[d.key], isP = pinsArr.indexOf(d.label) !== -1;
+      var vc = 'var(--lw-ink)';
+      if (d.key === 'rsi' && raw != null) vc = raw > 70 ? 'var(--lw-down)' : raw < 30 ? 'var(--lw-up)' : 'var(--lw-ink)';
+      else if (raw != null && (d.fmt === 'pct')) vc = raw >= 0 ? 'var(--lw-up)' : 'var(--lw-down)';
+      return '<div class="lw-ind-tile' + (isP ? ' pinned' : '') + '" data-sym="' + esc(sym) + '" data-label="' + esc(d.label) + '" data-gid="' + esc(d.gid) + '"><div class="l"><span class="lw-ind-pin">' + (isP ? '★ ' : '') + '</span>' + esc(d.label) + '</div><div class="v" style="color:' + vc + '">' + fmtInd(raw, d.fmt) + '</div></div>';
+    }).join('') || '<div class="lw-c-dim" style="grid-column:1/-1;padding:18px;text-align:center">No indicators in this category</div>';
+    card.innerHTML =
+      '<div class="lw-ind-head"><div style="display:flex;align-items:center;gap:8px"><span class="sym">' + esc(sym) + '</span>' + (s._name ? '<span class="nm">' + esc(s._name) + '</span>' : '') + (stale ? '<span class="lw-stale-badge">stale</span>' : '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:11px"><span class="lw-mono" style="font-size:13px;font-weight:600;color:var(--lw-ink)">' + fmtMoney(s.last) + '</span><span class="lw-mono" style="font-size:12px;color:' + (up ? 'var(--lw-up)' : 'var(--lw-down)') + '">' + (up ? '+' : '') + (s.change_pct || 0).toFixed(2) + '%</span><span class="lw-mono" style="font-size:10px;color:var(--lw-ink-4)">' + (s.latest_date ? ago(s.latest_date) : '—') + '</span></div></div>' +
+      '<div class="lw-ind-grid">' + tiles + '</div>';
+    $$('.lw-ind-tile', card).forEach(function (t) { t.addEventListener('click', function () { var arr = getPins(sym); var i = arr.indexOf(t.dataset.label); if (i < 0) arr.push(t.dataset.label); else arr.splice(i, 1); setPins(sym, arr); drawIndicators(_indResults); }); });
+    return card;
   }
+  function fmtInd(v, t) { if (v == null) return '—'; if (t === 'bool') return v ? 'yes' : 'no'; if (t === 'pct') return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%'; if (t === 'price') return fmtMoney(v); if (t === 'big') return fmtBig(v); if (t === 'num1') return Number(v).toFixed(1); if (t === 'num2') return Number(v).toFixed(2); if (t === 'num3') return Number(v).toFixed(3); return Number(v).toFixed(1); }
 
-  function indicatorCard(s, cat) {
-    var stale = false;
-    if (s.latest_date) {
-      var ref = state.asOf ? new Date(state.asOf) : new Date();
-      var daysAgo = (ref.getTime() - new Date(s.latest_date).getTime()) / 86400000;
-      stale = daysAgo > 3;
-    }
-    var staleCls = stale ? ' lw-stale' : '';
-    var staleBadge = stale ? '<span class="lw-stale-badge">stale</span>' : '';
-    var chgCls = (s.change_pct || 0) >= 0 ? 'lw-c-up' : 'lw-c-down';
-    var chgSign = (s.change_pct || 0) >= 0 ? '+' : '';
-    var agoTxt = s.latest_date ? ago(s.latest_date) : '—';
-
-    /* filter for this category + pinned */
-    var sym = s.symbol || '';
-    var pins = getPins(sym);
-    var showAll = cat === 'All';
-    var eligible = IND_ALL.filter(function (d) { return showAll || d.cat === cat; });
-
-    /* pinned tiles — shown first regardless of category */
-    var pinnedDefs = IND_ALL.filter(function (d) { return pins.indexOf(d.label) !== -1; });
-    var catDefs = eligible.filter(function (d) { return pins.indexOf(d.label) === -1; });
-    /* limit to 4 rows × 6 cols = 24 max */
-    var displayDefs = catDefs.slice(0, 24);
-
-    function buildTile(d) {
-      var raw = s[d.key];
-      var val = fmtIndVal(raw, d.fmt);
-      var xtra = '';
-      if (d.key === 'rsi' && raw != null) { xtra = raw > 70 ? ' lw-c-down' : raw < 30 ? ' lw-c-up' : ''; }
-      else if (raw != null && (d.fmt === 'pct' || d.key.indexOf('return_') === 0 || d.key.indexOf('macd') === 0)) {
-        xtra = raw >= 0 ? ' lw-c-up' : ' lw-c-down';
-      }
-      var pinned = pins.indexOf(d.label) !== -1;
-      var gid = gidForKey(d.key);
-      return '<div class="lw-ind-tile' + (pinned ? ' lw-ind-pinned' : '') + xtra + '" data-label="' + d.label + '" data-sym="' + sym + '" data-gid="' + gid + '">' +
-        '<div class="lw-ind-tile-label"><span class="lw-ind-pin">' + (pinned ? '\u2605' : '\u2606') + '</span>' + esc(d.label) + '</div>' +
-        '<div class="lw-ind-tile-val">' + val + '</div></div>';
-    }
-
-    var gridTiles = (pinnedDefs.map(buildTile).join('') + displayDefs.map(buildTile).join('')) || '<div class="lw-dim" style="padding:20px;text-align:center;grid-column:1/-1;">No indicators in this category</div>';
-
-    return '<div class="lw-sym-card' + staleCls + '">' +
-      '<div class="lw-ind-head">' +
-        '<div style="display:flex;align-items:center;gap:8px;">' +
-          '<span class="lw-card-title">' + esc(sym) + '</span>' +
-          (s.name ? '<span class="lw-dim" style="font-size:11px;">' + esc(s.name) + '</span>' : '') +
-          staleBadge +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:12px;">' +
-          '<span class="lw-mono" style="font-weight:600;">' + fmtMoney(s.last) + '</span>' +
-          '<span class="' + chgCls + '" style="font-size:12px;">' + chgSign + (s.change_pct || 0).toFixed(2) + '%</span>' +
-          '<span class="lw-dim" style="font-size:11px;">' + esc(s.latest_date || '') + ' · ' + agoTxt + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="lw-ind-pinned-section" id="lw-pins-' + sym + '"><div class="lw-ind-grid">' + gridTiles + '</div></div>' +
-    '</div>';
-  }
-
-  /* ── Pin helpers ── */
-  function getPins(sym) {
-    try {
-      var all = JSON.parse(localStorage.getItem('lw_ind_pins') || '{}');
-      return all[sym] || [];
-    } catch (e) { return []; }
-  }
-  function setPins(sym, arr) {
-    try {
-      var all = JSON.parse(localStorage.getItem('lw_ind_pins') || '{}');
-      all[sym] = arr;
-      localStorage.setItem('lw_ind_pins', JSON.stringify(all));
-    } catch (e) {}
-  }
-
-  /* ── Bind pin clicks (called after render) ── */
-  function bindPins(container) {
-    container.querySelectorAll('.lw-ind-tile').forEach(function (tile) {
-      tile.addEventListener('click', function () {
-        var sym = tile.dataset.sym;
-        var label = tile.dataset.label;
-        if (!sym || !label) return;
-        var pins = getPins(sym);
-        var idx = pins.indexOf(label);
-        if (idx === -1) { pins.push(label); } else { pins.splice(idx, 1); }
-        setPins(sym, pins);
-        renderIndicators(container);
-      });
-    });
-  }
-
-  /* ── Glossary tooltip ── */
-  var _glossaryPromise = null;
-  var _glossaryCache = null;
-  var _tooltipEl = null;
-  var _hoveredGid = null;
-
-  function getTooltip() {
-    if (!_tooltipEl) {
-      _tooltipEl = document.createElement('div');
-      _tooltipEl.className = 'lw-gloss-tip';
-      _tooltipEl.style.display = 'none';
-      document.body.appendChild(_tooltipEl);
-    }
-    return _tooltipEl;
-  }
-
-  function fetchGlossary() {
-    if (_glossaryCache) return Promise.resolve(_glossaryCache);
-    if (!_glossaryPromise) {
-      _glossaryPromise = api('/indicators/glossary').then(function (data) {
-        _glossaryCache = data || {};
-        return _glossaryCache;
-      }).catch(function () { _glossaryCache = {}; return _glossaryCache; });
-    }
-    return _glossaryPromise;
-  }
-
-  function bindHoverTooltip(container) {
-    container.querySelectorAll('.lw-ind-tile').forEach(function (tile) {
-      tile.addEventListener('mouseenter', function () {
-        var gid = tile.dataset.gid;
-        if (!gid) return;
-        _hoveredGid = gid;
-        var _tile = tile;
-        fetchGlossary().then(function (glossary) {
-          if (_hoveredGid !== gid) return;
-          var entry = glossary[gid];
-          if (!entry) return;
-          var tip = getTooltip();
-          tip.innerHTML = '<div class="lw-gloss-tip-name">' + esc(entry.full_name || entry.name || gid) + '</div>' +
-            '<div class="lw-gloss-tip-desc">' + esc(entry.description || '') + '</div>' +
-            (entry.formula ? '<div class="lw-gloss-tip-formula">' + esc(entry.formula) + '</div>' : '');
-          var rect = _tile.getBoundingClientRect();
-          tip.style.left = Math.min(rect.left + rect.width / 2 - 140, window.innerWidth - 300) + 'px';
-          tip.style.top = (rect.bottom + 6) + 'px';
-          tip.style.display = 'block';
-        });
-      });
-      tile.addEventListener('mouseleave', function () {
-        _hoveredGid = null;
-        var tip = getTooltip();
-        tip.style.display = 'none';
-      });
-    });
-  }
-
-  function fmtIndVal(val, type) {
-    if (val == null) return '—';
-    if (type === 'bool') return val ? '<span style="color:var(--lw-money);font-weight:700;">yes</span>' : '<span style="color:var(--lw-ink-4);">no</span>';
-    if (type === 'pct') return (val >= 0 ? '+' : '') + (val * 100).toFixed(2) + '%';
-    if (type === 'price') return '$' + Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (type === 'big') return fmtRows(val);
-    if (type === 'num2') return Number(val).toFixed(2);
-    if (type === 'num3') return Number(val).toFixed(3);
-    if (type === 'num4') return Number(val).toFixed(4);
-    return Number(val).toFixed(1);
-  }
-
-  /* ── Securities ── */
-  function renderSecurities(container) {
-    container.innerHTML = '<div class="lw-search"><input type="text" id="lw-sec-search" placeholder="Search symbol…" value="' + esc(state.symbol) + '"></div><div id="lw-sec-detail"></div>';
-    var input = $('#lw-sec-search');
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { state.symbol = e.target.value.toUpperCase(); loadSecurity(state.symbol); } });
-    if (state.symbol) loadSecurity(state.symbol);
-  }
-  function loadSecurity(sym) {
-    var content = $('#lw-sec-detail');
-    content.innerHTML = '<div class="lw-loading">Loading</div>';
-    api('/security/' + sym).then(function (agg) {
-      var h = '<div class="lw-card" style="border:1px solid var(--lw-rule);border-radius:8px;padding:12px;margin-bottom:8px;"><div class="lw-card-title">' + esc(sym) + ' <span class="lw-dim" style="font-weight:400;text-transform:none;letter-spacing:0;">' + esc(agg.security_id) + '</span></div><div class="lw-card-sub">as_of: ' + esc(agg.as_of) + '</div></div>';
-      Object.keys(agg.datasets).forEach(function (ds) {
-        var rows = agg.datasets[ds];
-        h += '<div class="lw-card" style="border:1px solid var(--lw-rule);border-radius:8px;padding:12px;margin-bottom:6px;"><div class="lw-card-title">' + esc(ds) + ' <span class="lw-dim" style="font-weight:400;text-transform:none;letter-spacing:0;">' + rows.length + ' rows</span></div>';
-        rows.slice(0, 5).forEach(function (r) {
-          var src = r.source_id || '—', avail = r.available_at ? String(r.available_at).slice(0, 19) : '—', qs = r.quality_status || '—';
-          h += '<div class="lw-li-summary" style="border-bottom:1px solid var(--lw-rule);padding:6px 0;font-size:var(--lw-size-small);"><span class="lw-li-label">' + esc(src) + ' @ ' + esc(avail) + '</span><span class="lw-li-value lw-mono">' + esc(qs) + '</span></div>';
-        });
-        h += '</div>';
-      });
-      content.innerHTML = h;
-    }).catch(function () { content.innerHTML = '<div class="lw-error">Symbol not found</div>'; });
-  }
-
-  /* ── PIT ── */
-  function renderPit(container) {
-    container.innerHTML =
-      '<div class="lw-card" style="border:1px solid var(--lw-rule);border-radius:12px;padding:16px 18px;margin-bottom:14px;"><div class="lw-card-title">Point-in-Time Playground</div>' +
-        '<p style="font-size:13px;color:var(--lw-ink-3);margin-top:8px;max-width:640px;">Rewind <strong style="color:var(--lw-ink-2);">knowledge-time</strong> via <strong>as_of</strong> in the header to see exactly what the lake knew as of any instant. Every read is bounded by <code style="font-family:var(--lw-mono);color:var(--lw-accent);background:var(--lw-bg-3);padding:1px 5px;border-radius:4px;">available_at ≤ as_of</code>.</p>' +
+  /* ════ PIT ════ */
+  function renderPit(c) {
+    var live = !state.asOf;
+    var asTxt = live ? 'now (live)' : new Date(state.asOf).toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    var presets = [['Today', isoDaysAgo(1, 20)], ['1 week ago', isoDaysAgo(7, 20)], ['1 month ago', isoDaysAgo(30, 20)], ['Quarter ago', isoDaysAgo(91, 20)]];
+    c.innerHTML =
+      '<div class="lw-pit-card"><div class="lw-pit-title">Point-in-Time Playground</div>' +
+        '<p class="lw-pit-p">Rewind <strong style="color:var(--lw-ink)">knowledge-time</strong> via the <strong style="color:var(--lw-claret)">AS OF</strong> control in the masthead to see exactly what the lake knew at any instant. Every read is bounded — no lookahead, ever.</p>' +
+        '<div class="lw-pit-strip"><div class="lw-pit-line"></div><div class="lw-pit-fill" style="width:' + (live ? '100%' : '62%') + '"></div>' + (live ? '' : '<div class="lw-pit-dot" style="left:62%"></div>') + '<div class="lw-pit-now"></div></div>' +
+        '<div class="lw-pit-labels"><span>past</span><span>reading as of: ' + esc(asTxt) + '</span><span>live</span></div>' +
         '<div class="lw-pit-presets" id="lw-pit-presets"></div></div>' +
-      '<div class="lw-card" style="border:1px solid var(--lw-rule);border-radius:12px;padding:16px 18px;margin-bottom:14px;"><div class="lw-detail-label">Knowledge-time axis · snapshots</div><div class="lw-kt-strip" id="lw-kt-strip"><div class="lw-kt-line"></div><div class="lw-kt-fill" style="width:88%"></div><div class="lw-kt-now"></div></div><div class="lw-kt-labels"><span id="lw-kt-first">—</span><span>now · live</span></div></div>' +
-      '<div id="lw-snapshots"></div>';
+      '<div class="lw-pit-card"><div class="lw-block-label" style="margin-bottom:12px">Tri-temporal guarantee</div><div class="lw-tt-grid">' +
+        ttCard('Valid time', 'When a fact was true in the market — the trading day it describes.', 'var(--lw-snap)') +
+        ttCard('Knowledge time', 'When the lake first knew it — bounded by your AS OF instant.', 'var(--lw-claret)') +
+        ttCard('System time', 'When the row was physically written — full audit lineage.', 'var(--lw-up)') +
+      '</div></div>';
+    var pp = $('#lw-pit-presets');
+    presets.forEach(function (p) { var b = document.createElement('button'); b.textContent = p[0]; b.addEventListener('click', function () { setAsOf(p[1]); }); pp.appendChild(b); });
+    var lb = document.createElement('button'); lb.className = 'is-live'; lb.innerHTML = '⟲ Live'; lb.addEventListener('click', function () { setAsOf(null); }); pp.appendChild(lb);
+  }
+  function ttCard(t, d, col) { return '<div class="lw-tt-card" style="border-top-color:' + col + '"><div class="t" style="color:' + col + '">' + t + '</div><div class="d">' + d + '</div></div>'; }
+  function isoDaysAgo(days, hour) { var d = new Date(); d.setUTCDate(d.getUTCDate() - days); d.setUTCHours(hour, 0, 0, 0); return d.toISOString().slice(0, 19); }
 
-    api('/snapshots').then(function (list) {
-      if (!list || !list.length) { $('#lw-snapshots').innerHTML = '<div class="lw-empty">No snapshots yet</div>'; return; }
-      var strip = $('#lw-kt-strip'), n = list.length;
-      list.forEach(function (s, i) { var dot = document.createElement('span'); dot.className = 'lw-kt-dot'; dot.style.left = ((n - 1 - i) / Math.max(1, n - 1) * 88).toFixed(1) + '%'; strip.appendChild(dot); });
-      $('#lw-kt-first').textContent = (list[list.length - 1].timestamp || '').slice(0, 10) || '—';
-      /* list_snapshots() returns snapshot_id / timestamp / changes — no row count */
-      var h = '<div class="lw-cat-list"><div class="lw-cat-cols" style="grid-template-columns:1.6fr 1.4fr 1fr;"><span>Snapshot</span><span>Timestamp</span><span style="text-align:right;">Changes</span></div>';
-      list.slice(0, 15).forEach(function (s) {
-        h += '<div class="lw-cat-row" style="grid-template-columns:1.6fr 1.4fr 1fr;"><span class="lw-cat-ds"><span class="lw-dot" style="background:var(--lw-snap);"></span><span class="lw-cat-name">' + esc(s.snapshot_id || s.id || '—') + '</span></span><span class="lw-mono" style="font-size:11px;color:var(--lw-ink-3);">' + esc(s.timestamp || '—') + '</span><span class="lw-mono" style="font-size:10px;color:var(--lw-ink-3);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(s.changes || '—') + '</span></div>';
-      });
-      $('#lw-snapshots').innerHTML = h + '</div>';
-    }).catch(function () { $('#lw-snapshots').innerHTML = '<div class="lw-error">Failed to load snapshots</div>'; });
-
-    var presets = $('#lw-pit-presets'), now = new Date();
-    [7, 30, 90].forEach(function (dys) {
-      var btn = document.createElement('button'); btn.textContent = 'Rewind ' + dys + ' days';
-      btn.addEventListener('click', function () { var dt = new Date(now); dt.setDate(dt.getDate() - dys); var input = $('#lw-asof'); if (input) { input.value = dt.toISOString().slice(0, 16); input.dispatchEvent(new Event('change')); } });
-      presets.appendChild(btn);
+  /* ════ shared sort buttons ════ */
+  function sortButtons(containerId, opts, current, onPick) {
+    var box = document.getElementById(containerId); if (!box) return;
+    box.innerHTML = ''; box.style.display = 'inline-flex'; box.style.gap = '5px';
+    opts.forEach(function (o) {
+      var b = document.createElement('button'); b.className = 'lw-sort-btn' + (o[0] === current ? ' is-active' : ''); b.textContent = o[1];
+      b.addEventListener('click', function () { onPick(o[0]); }); box.appendChild(b);
     });
   }
 
-  /* ── Init ── */
-  document.addEventListener('DOMContentLoaded', function () {
-    $$('.lw-tab').forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
+  /* ════ AS OF control ════ */
+  function setAsOf(v) { state.asOf = v; if (v) state.snapshotId = ''; closeAsof(); renderAsof(); showTab(state.tab); }
+  function setSnapshot(id) { state.snapshotId = id; state.asOf = null; closeAsof(); renderAsof(); showTab(state.tab); }
+  function closeAsof() { state.asofOpen = false; var p = $('#lw-asof-pop'); if (p) p.classList.remove('is-open'); var b = $('#lw-asof-btn'); if (b) b.setAttribute('aria-expanded', 'false'); }
+  function renderAsof() {
+    var live = !state.asOf && !state.snapshotId;
+    $('#lw-asof-dot').className = 'lw-asof-dot' + (live ? '' : ' is-pit');
+    $('#lw-asof-kicker').textContent = live ? 'Live' : (state.snapshotId ? 'Snapshot' : 'As of');
+    $('#lw-asof-val').textContent = live ? 'Live' : (state.snapshotId ? shortSnap(state.snapshotId) : new Date(state.asOf).toISOString().slice(0, 16).replace('T', ' '));
+    $('#lw-asof-hint').textContent = live ? 'reading live data' : 'point-in-time read';
+    // presets
+    var presets = [['Live', null], ['Today close', isoDaysAgo(1, 20)], ['Yesterday', isoDaysAgo(2, 20)], ['1 week ago', isoDaysAgo(7, 20)], ['1 month ago', isoDaysAgo(30, 20)], ['Quarter ago', isoDaysAgo(91, 20)]];
+    var pe = $('#lw-asof-presets'); pe.innerHTML = '';
+    presets.forEach(function (p) {
+      var active = (p[1] === state.asOf) || (p[1] === null && live);
+      var b = document.createElement('button'); if (active) b.className = 'is-active'; b.textContent = p[0];
+      b.addEventListener('click', function () { setAsOf(p[1]); }); pe.appendChild(b);
+    });
+    var inp = $('#lw-asof-input'); inp.value = state.asOf ? String(state.asOf).slice(0, 19) : '';
+  }
+  function shortSnap(id) { return String(id).length > 16 ? String(id).slice(0, 15) + '…' : String(id); }
+  function loadSnapshots() {
+    api('/snapshots').then(function (snaps) {
+      snaps = snaps || []; var box = $('#lw-asof-snaps'), lbl = $('#lw-snap-label');
+      if (!snaps.length) { box.innerHTML = ''; lbl.style.display = 'none'; return; }
+      lbl.style.display = 'block'; box.innerHTML = '';
+      snaps.slice(0, 12).forEach(function (s) {
+        var id = s.snapshot_id || s.id || s; var when = s.created_at || s.snapshot_at || '';
+        var b = document.createElement('button'); if (id === state.snapshotId) b.className = 'is-active';
+        b.innerHTML = esc(shortSnap(id)) + (when ? ' <span style="color:var(--lw-ink-4)">· ' + esc(String(when).slice(0, 10)) + '</span>' : '');
+        b.addEventListener('click', function () { setSnapshot(id); }); box.appendChild(b);
+      });
+    }).catch(function () { });
+  }
 
-    var hdr = $('#lw-header-time');
-    if (hdr) hdr.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+  /* ════ clock ════ */
+  function tickClock() {
+    var d = new Date(nowMs());
+    var line = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase() + ' · ' + d.toISOString().slice(11, 16) + ' UTC';
+    var el = $('#lw-header-time'); if (el) el.textContent = line;
+  }
 
-    var asOfInput = $('#lw-asof');
-    if (asOfInput) {
-      var n = new Date(); n.setSeconds(0, 0);
-      var pad = function (v) { return String(v).padStart(2, '0'); };
-      asOfInput.value = n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate()) + 'T' + pad(n.getHours()) + ':' + pad(n.getMinutes());
-      asOfInput.addEventListener('change', function () { state.asOf = asOfInput.value ? new Date(asOfInput.value).toISOString() : null; showTab(state.tab); });
-    }
-
-    var snap = $('#lw-snapshot');
-    if (snap) {
-      api('/snapshots').then(function (list) { list.forEach(function (s) { var o = document.createElement('option'); o.value = s.snapshot_id || s.id || ''; o.textContent = s.snapshot_id || s.id || ''; snap.appendChild(o); }); }).catch(function () {});
-      snap.addEventListener('change', function () { state.snapshotId = snap.value; showTab(state.tab); });
-    }
-
-    var pm = $('#lw-price-mode');
-    if (pm) pm.addEventListener('change', function () { state.priceMode = pm.value; if (state.tab === 'bars') showTab('bars'); });
-
-    $$('.lw-theme-btn').forEach(function (b) { b.addEventListener('click', function () { applyTheme(b.dataset.theme); }); });
-
-    var settingsBtn = $('#lw-settings-btn'), settingsPop = $('#lw-settings-pop');
-    if (settingsBtn && settingsPop) {
-      settingsBtn.addEventListener('click', function (e) { e.stopPropagation(); settingsPop.classList.toggle('is-open'); });
-      document.addEventListener('click', function () { settingsPop.classList.remove('is-open'); });
-      settingsPop.addEventListener('click', function (e) { e.stopPropagation(); });
-    }
-
-    /* register the service worker (was never registered before, so the PWA
-       layer and offline cache did nothing). Secure-context only; failures are
-       non-fatal. */
-    if ('serviceWorker' in navigator) {
-      try { navigator.serviceWorker.register('/service-worker.js').catch(function () {}); } catch (e) {}
-    }
-
+  /* ════ init ════ */
+  function init() {
+    applyTheme(theme);
+    $('#lw-theme-btn').addEventListener('click', function () { applyTheme(theme === 'light' ? 'dark' : 'light'); });
+    $$('.lw-nav-tab').forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
+    var ab = $('#lw-asof-btn');
+    ab.addEventListener('click', function (e) { e.stopPropagation(); state.asofOpen = !state.asofOpen; $('#lw-asof-pop').classList.toggle('is-open', state.asofOpen); ab.setAttribute('aria-expanded', state.asofOpen ? 'true' : 'false'); });
+    $('#lw-asof-pop').addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('click', function () { if (state.asofOpen) closeAsof(); });
+    $('#lw-asof-input').addEventListener('change', function (e) { if (e.target.value) setAsOf(e.target.value); });
+    $('#lw-golive').addEventListener('click', function () { setAsOf(null); });
+    renderAsof(); loadSnapshots(); tickClock();
+    setInterval(function () { if (!state.asOf) tickClock(); }, 30000);
     showTab('overview');
-  });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
