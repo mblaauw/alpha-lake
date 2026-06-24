@@ -28,7 +28,8 @@ def compute_market_breadth(
 
     Returns a ``pl.DataFrame`` with one row per ``(metric_id, effective_date)``.
     """
-    sorted_bars = bars.sort("security_id", "effective_date")
+    bars_pit = bars.filter(pl.col("available_at") <= as_of)
+    sorted_bars = bars_pit.sort("security_id", "effective_date")
     unique_dates = sorted_bars["effective_date"].unique().sort()
     rows: list[dict] = []
 

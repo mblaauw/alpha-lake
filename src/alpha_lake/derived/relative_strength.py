@@ -24,22 +24,26 @@ def compute_relative_strength(
     Returns one row per ``(security_id, effective_date, window)`` with the
     return difference and its cross-sectional percentile.
     """
+    bars = bars.filter(pl.col("available_at") <= as_of)
+
     benchmark_close = benchmark_bars.sort("effective_date")["close"]
+    bmk_rets: dict[int, pl.Series] = {}
+    for w in _RS_WINDOWS:
+        bmk_rets[w] = returns(benchmark_close, w)
+
     rows: list[dict] = []
 
     for sid in bars["security_id"].unique():
         symbol_bars = bars.filter(pl.col("security_id") == sid).sort("effective_date")
         close = symbol_bars["close"]
-        avail = symbol_bars["available_at"].max()
-        if avail is None:
-            continue
+        n = len(symbol_bars)
 
         for window in _RS_WINDOWS:
             sym_ret = returns(close, window)
-            bmk_ret = returns(benchmark_close, window)
-            rs = sym_ret - bmk_ret
+            bmk_ret = bmk_rets[window]
+            rs = sym_ret - bmk_ret.head(n)
 
-            for i in range(len(symbol_bars)):
+            for i in range(n):
                 val = rs[i]
                 if val is None:
                     continue

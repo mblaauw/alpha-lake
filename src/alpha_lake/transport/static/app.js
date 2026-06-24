@@ -73,6 +73,7 @@
   /* ── Tab routing ── */
   function showTab(name) {
     state.tab = name;
+    _indicatorResults = null;
     $$('.lw-tab').forEach(function (t) { t.classList.toggle('is-active', t.dataset.tab === name); });
     var content = $('#lw-content');
     content.innerHTML = '<div class="lw-loading">Loading</div>';
@@ -509,11 +510,26 @@
   function gidForKey(key) { return GLOSSARY_ID_MAP[key] || key; }
 
   /* ── Indicators tab ── */
+  var _indicatorResults = null;
   function renderIndicators(container) {
     var cat = state.indCat || 'All';
     var catsHtml = '<div class="lw-ind-cats" id="lw-ind-cats">' +
       IND_CATS.map(function (c) { return '<button class="lw-ind-cat' + (c === cat ? ' is-active' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('') +
       '</div>';
+
+    if (_indicatorResults) {
+      container.innerHTML = catsHtml + _renderIndicatorGrid(_indicatorResults, cat);
+      container.querySelectorAll('.lw-ind-cat').forEach(function (b) {
+        b.addEventListener('click', function () {
+          state.indCat = b.dataset.cat;
+          renderIndicators(container);
+        });
+      });
+      bindPins(container);
+      bindHoverTooltip(container);
+      return;
+    }
+
     container.innerHTML = '<div class="lw-loading">Loading indicators…</div>';
 
     api('/bars/symbols').then(function (list) {
@@ -532,16 +548,8 @@
       });
       Promise.all(promises).then(function (results) {
         results = results.filter(function (r) { return r !== null; });
-        var h = catsHtml;
-        if (!results.length) {
-          h += '<div class="lw-empty">No indicator data available</div>';
-        } else {
-          h += '<div class="lw-sym-grid">';
-          results.forEach(function (s) { h += indicatorCard(s, cat); });
-          h += '</div>';
-        }
-        container.innerHTML = h;
-        /* bind category clicks */
+        _indicatorResults = results;
+        container.innerHTML = catsHtml + _renderIndicatorGrid(results, cat);
         container.querySelectorAll('.lw-ind-cat').forEach(function (b) {
           b.addEventListener('click', function () {
             state.indCat = b.dataset.cat;
@@ -554,6 +562,13 @@
     }).catch(function () {
       container.innerHTML = catsHtml + '<div class="lw-error">Failed to load symbols</div>';
     });
+  }
+
+  function _renderIndicatorGrid(results, cat) {
+    if (!results.length) return '<div class="lw-empty">No indicator data available</div>';
+    var h = '<div class="lw-sym-grid">';
+    results.forEach(function (s) { h += indicatorCard(s, cat); });
+    return h + '</div>';
   }
 
   function indicatorCard(s, cat) {
@@ -715,7 +730,6 @@
   }
 
   /* ── Securities ── */
-  /* ── Securities ── */
   function renderSecurities(container) {
     container.innerHTML = '<div class="lw-search"><input type="text" id="lw-sec-search" placeholder="Search symbol…" value="' + esc(state.symbol) + '"></div><div id="lw-sec-detail"></div>';
     var input = $('#lw-sec-search');
@@ -780,7 +794,8 @@
     var asOfInput = $('#lw-asof');
     if (asOfInput) {
       var n = new Date(); n.setSeconds(0, 0);
-      asOfInput.value = n.toISOString().slice(0, 16);
+      var pad = function (v) { return String(v).padStart(2, '0'); };
+      asOfInput.value = n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate()) + 'T' + pad(n.getHours()) + ':' + pad(n.getMinutes());
       asOfInput.addEventListener('change', function () { state.asOf = asOfInput.value ? new Date(asOfInput.value).toISOString() : null; showTab(state.tab); });
     }
 

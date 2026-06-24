@@ -69,13 +69,13 @@ def compute_attention_deltas(
     attention: pl.DataFrame,
     as_of: datetime,
 ) -> pl.DataFrame:
-    """Aggregated social attention deltas: mention change and rank change.
+    """Aggregated social attention deltas: mention change and raw rank.
 
     ``attention`` must contain ``security_id``, ``effective_date``,
     ``available_at``, ``cohort``, ``mentions``, ``rank``.
 
     Returns:
-        ``mention_delta_pct``, ``rank_change``, ``mention_pctile`` per
+        ``mention_delta_pct``, ``rank`` per
         ``(security_id, cohort, effective_date)``.
     """
     pit = attention.filter(pl.col("available_at") <= as_of).sort(
@@ -162,7 +162,7 @@ def compute_sentiment_ratios(
             tagged_positive = day_rows.filter(
                 pl.col("sentiment_label").str.to_lowercase().str.contains("bullish")
             )
-            positive_ratio = len(tagged_positive) / total if total > 0 else None
+            positive_ratio = len(tagged_positive) / total
             mean_score = day_rows["sentiment_score"].mean()
 
             rows.append(
