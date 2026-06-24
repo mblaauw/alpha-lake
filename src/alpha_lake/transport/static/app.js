@@ -561,7 +561,6 @@
             '<div style="display:flex;gap:20px"><div><div class="lw-detail-lbl">Messages</div><div class="lw-mono" style="font-size:13px;color:var(--lw-ink)">' + fmtNum(l.total_messages) + '</div></div>' + (l.cohort ? '<div><div class="lw-detail-lbl">Cohort</div><div class="lw-mono" style="font-size:13px;color:var(--lw-snap)">' + esc(l.cohort) + '</div></div>' : '') + '</div>' +
           '</div>' +
         '</div></div>';
-      html += '</div>';
     });
     lead.innerHTML = html;
     $$('.lw-lead-row', lead).forEach(function (row) { row.addEventListener('click', function () { var sym = row.parentNode.dataset.sym; state.expanded = state.expanded === sym ? null : sym; drawLeaders(); }); });
