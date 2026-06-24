@@ -208,17 +208,23 @@ def cli_compute_indicators(
         None, help="Security ID (optional; computes for all symbols when omitted)"
     ),
 ):
-    """Compute all technical indicators from lake_bars and store in the lake."""
+    """Compute all technical indicators from lake_bars and store in the lake.
+
+    Uses wall-clock ``as_of`` because this is an interactive command, not a
+    canonical pipeline step (invariant I7 exception for non-replay paths).
+    """
     _require_infra(get_config())
     con = connect(get_config())
     ids = [security_id] if security_id else None
+    from alpha_lake.clock import get_clock
+
     with progress() as p:
         tid = p.add_task("Computing indicators…", total=1)
 
         def _on_step(cur: int, total: int | None, label: str) -> None:
             p.update(tid, completed=cur, total=total or 1, description=label)
 
-        count = compute_indicators(con, security_ids=ids, on_step=_on_step)
+        count = compute_indicators(con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step)
         p.update(tid, completed=1)
     panel(
         "Compute Indicators",

@@ -43,7 +43,10 @@ def compute_insider_cluster_metrics(
                     "source_id": "derived",
                     "buy_count": len(buys),
                     "sell_count": len(sells),
-                    "net_value": float(buys["value"].sum() or 0) - float(sells["value"].sum() or 0),
+                    "net_value": float(
+                        buys["value"].sum() if buys["value"].sum() is not None else 0
+                    )
+                    - float(sells["value"].sum() if sells["value"].sum() is not None else 0),
                     "source_fetch_id": "",
                     "raw_payload_hash": "",
                     "ingestion_run_id": "",
