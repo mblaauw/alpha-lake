@@ -27,6 +27,38 @@ _RECURSIVE_MULTIPLIER: dict[str, int] = {
 }
 
 _MAX_LOOKBACK_DAYS = 365 * 3
+_VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
+
+
+def _validate_price_mode(price_mode: str) -> None:
+    """Raise ``HTTPException(422)`` on invalid ``price_mode`` values."""
+    if price_mode not in _VALID_PRICE_MODES:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            422,
+            f"Unknown price_mode '{price_mode}'. Valid: {sorted(_VALID_PRICE_MODES)}",
+        )
+
+
+def _serialize_bars_df(df: pl.DataFrame) -> dict[str, list[Any]]:
+    """Convert a bars DataFrame (row-oriented) to a JSON-safe column-oriented dict.
+
+    Handles datetime -> isoformat, float from numeric, str from string columns.
+    """
+    result: dict[str, list[Any]] = {}
+    for col in df.columns:
+        if col in ("effective_date",):
+            result[col] = [d.isoformat() if d is not None else None for d in df[col]]
+        elif col in ("available_at",):
+            result[col] = [str(v) if v is not None else None for v in df[col]]
+        elif df[col].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32):
+            result[col] = [float(v) if v is not None else None for v in df[col]]
+        elif df[col].dtype in (pl.Utf8, pl.String):
+            result[col] = [str(v) if v is not None else None for v in df[col]]
+        else:
+            result[col] = [str(v) if v is not None else None for v in df[col]]
+    return result
 
 
 def _now() -> datetime:
@@ -34,14 +66,29 @@ def _now() -> datetime:
 
 
 def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
-    parts = spec.split(",")
+    """Parse indicator spec like ``sma:20;ema:12;bollinger:20,2;macd:12,26,9``.
+
+    Supports two separator styles:
+    - ``;`` separates indicators, ``:`` separates name from comma-delimited args.
+    - Legacy: ``sma,ema,rsi`` (bare names, no args — separated by ``,``, only
+      used when no ``:`` or ``;`` is present).
+
+    Args that represent whole numbers are returned as ``int`` so they pass
+    cleanly to window-size parameters.
+    """
+    sep = ";" if ";" in spec or ":" in spec else ","
     result: list[tuple[str, list[int | float]]] = []
-    for part in parts:
+    for part in spec.split(sep):
         part = part.strip()
+        if not part:
+            continue
         if ":" in part:
-            name, *args_str = part.split(":")
-            args = [float(a) for a in args_str]
-            result.append((name, args))
+            name, args_str = part.split(":", 1)
+            args: list[int | float] = []
+            for a in args_str.split(","):
+                v = float(a.strip())
+                args.append(int(v) if v == int(v) else v)
+            result.append((name.strip(), args))
         else:
             result.append((part, []))
     return result
