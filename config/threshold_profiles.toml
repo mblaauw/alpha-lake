@@ -1,0 +1,211 @@
+[profile.daily_move_v1]
+definition_id = "price_action.daily_move"
+description = "Daily close-to-close change zones"
+version = "1.0.0"
+method = "discrete"
+
+[profile.daily_move_v1.zones]
+flat = { operator = "between", min = -0.005, max = 0.005 }
+up = { operator = "gte", value = 0.005 }
+down = { operator = "lte", value = -0.005 }
+
+[profile.intraday_volatility_v1]
+definition_id = "price_action.intraday_volatility"
+description = "Intraday range/close trailing percentile bands — 252-day lookback"
+version = "1.0.0"
+method = "percentile"
+
+[profile.intraday_volatility_v1.percentiles]
+low = { operator = "lte", percentile = 0.20 }
+normal = { operator = "between", min_percentile = 0.21, max_percentile = 0.70 }
+elevated = { operator = "between", min_percentile = 0.71, max_percentile = 0.90 }
+extreme = { operator = "gte", percentile = 0.91 }
+
+[profile.gap_v1]
+definition_id = "price_action.gap"
+description = "Overnight gap percentage zones"
+version = "1.0.0"
+method = "discrete"
+
+[profile.gap_v1.zones]
+no_gap = { operator = "between", min = -0.003, max = 0.003 }
+gap_up = { operator = "gte", value = 0.003 }
+gap_down = { operator = "lte", value = -0.003 }
+
+[profile.trend_regime_v1]
+definition_id = "trend.regime"
+description = "ADX-based trend classification"
+version = "1.0.0"
+method = "discrete"
+
+[profile.trend_regime_v1.zones]
+weak = { operator = "lte", value = 20.0 }
+trending = { operator = "between", min = 20.01, max = 39.99 }
+strong = { operator = "gte", value = 40.0 }
+
+[profile.directional_bias_v1]
+definition_id = "trend.directional_bias"
+description = "+DI vs -DI comparison; resolved in code"
+version = "1.0.0"
+method = "discrete"
+
+[profile.directional_bias_v1.zones]
+upward = { operator = "gte", value = 0.0 }
+downward = { operator = "lte", value = 0.0 }
+mixed = { operator = "between", min = -0.0, max = 0.0 }
+
+[profile.trend_strength_v1]
+definition_id = "trend.strength"
+description = "ADX raw value trailing percentile — 252-day lookback"
+version = "1.0.0"
+method = "percentile"
+
+[profile.trend_strength_v1.percentiles]
+weak = { operator = "lte", percentile = 0.33 }
+moderate = { operator = "between", min_percentile = 0.34, max_percentile = 0.66 }
+strong = { operator = "gte", percentile = 0.67 }
+
+[profile.rsi_14_v1]
+definition_id = "momentum.rsi_14"
+description = "RSI(14) classic zones — Wilder 1978"
+version = "1.0.0"
+method = "discrete"
+
+[profile.rsi_14_v1.zones]
+oversold = { operator = "lte", value = 30.0 }
+neutral = { operator = "between", min = 30.01, max = 69.99 }
+overbought = { operator = "gte", value = 70.0 }
+
+[profile.macd_cross_v1]
+definition_id = "momentum.macd_cross"
+description = "MACD line vs signal line cross detection; resolved in code"
+version = "1.0.0"
+method = "discrete"
+
+[profile.macd_cross_v1.zones]
+positive_cross = { operator = "gte", value = 0.0 }
+negative_cross = { operator = "lte", value = 0.0 }
+no_cross = { operator = "between", min = -0.0, max = 0.0 }
+
+[profile.momentum_quality_v1]
+definition_id = "momentum.quality"
+description = "ROC(10)+ROC(21) consensus zones"
+version = "1.0.0"
+method = "discrete"
+
+[profile.momentum_quality_v1.zones]
+constructive = { operator = "gte", value = 0.0 }
+weak = { operator = "lte", value = 0.0 }
+neutral = { operator = "between", min = -0.0, max = 0.0 }
+
+[profile.atr_percent_v1]
+definition_id = "volatility.atr_percent"
+description = "ATR% trailing percentile bands — 252-day lookback"
+version = "1.0.0"
+method = "percentile"
+
+[profile.atr_percent_v1.percentiles]
+low = { operator = "lte", percentile = 0.20 }
+normal = { operator = "between", min_percentile = 0.21, max_percentile = 0.70 }
+elevated = { operator = "between", min_percentile = 0.71, max_percentile = 0.90 }
+extreme = { operator = "gte", percentile = 0.91 }
+
+[profile.bollinger_width_v1]
+definition_id = "volatility.bollinger_width"
+description = "Bollinger bandwidth squeeze/expanding/blown — combined discrete + percentile"
+version = "1.0.0"
+method = "combined"
+
+[profile.bollinger_width_v1.zones]
+squeeze = { operator = "lte", value = 0.05 }
+expanding = { operator = "between", min = 0.0501, max = 0.30 }
+blown = { operator = "gte", value = 0.30 }
+
+[profile.bollinger_width_v1.percentiles]
+squeeze = { operator = "lte", percentile = 0.10 }
+expanding = { operator = "between", min_percentile = 0.11, max_percentile = 0.90 }
+blown = { operator = "gte", percentile = 0.91 }
+
+[profile.volatility_regime_v1]
+definition_id = "volatility.regime"
+description = "HV(21)/HV(63) ratio trailing percentile"
+version = "1.0.0"
+method = "percentile"
+
+[profile.volatility_regime_v1.percentiles]
+low = { operator = "lte", percentile = 0.20 }
+normal = { operator = "between", min_percentile = 0.21, max_percentile = 0.70 }
+elevated = { operator = "between", min_percentile = 0.71, max_percentile = 0.90 }
+extreme = { operator = "gte", percentile = 0.91 }
+
+[profile.rvol_v1]
+definition_id = "participation.rvol"
+description = "Relative volume trailing percentile bands"
+version = "1.0.0"
+method = "percentile"
+
+[profile.rvol_v1.percentiles]
+quiet = { operator = "lte", percentile = 0.20 }
+normal = { operator = "between", min_percentile = 0.21, max_percentile = 0.70 }
+elevated = { operator = "between", min_percentile = 0.71, max_percentile = 0.90 }
+extreme = { operator = "gte", percentile = 0.91 }
+
+[profile.volume_trend_v1]
+definition_id = "participation.volume_trend"
+description = "Volume slope over 5 bars — discrete thresholds"
+version = "1.0.0"
+method = "discrete"
+
+[profile.volume_trend_v1.zones]
+declining = { operator = "lte", value = -0.05 }
+neutral = { operator = "between", min = -0.0499, max = 0.0499 }
+surging = { operator = "gte", value = 0.05 }
+
+[profile.rs_vs_benchmark_v1]
+definition_id = "relative_strength.vs_benchmark"
+description = "21-bar RS ratio vs SPY — discrete thresholds"
+version = "1.0.0"
+method = "discrete"
+
+[profile.rs_vs_benchmark_v1.zones]
+weak = { operator = "lte", value = -0.02 }
+in_line = { operator = "between", min = -0.0199, max = 0.0199 }
+leading = { operator = "gte", value = 0.02 }
+
+[profile.rs_regime_v1]
+definition_id = "relative_strength.regime"
+description = "RS ratio slope over 5 periods — discrete thresholds"
+version = "1.0.0"
+method = "discrete"
+
+[profile.rs_regime_v1.zones]
+deteriorating = { operator = "lte", value = -0.01 }
+stable = { operator = "between", min = -0.0099, max = 0.0099 }
+improving = { operator = "gte", value = 0.01 }
+
+[profile.breakout_state_v1]
+definition_id = "market_regime.breakout_state"
+description = "Close position within 20-bar range; resolved in code"
+version = "1.0.0"
+method = "discrete"
+
+[profile.breakout_state_v1.zones]
+range = { operator = "between", min = 0.0, max = 1.0 }
+breaking_out = { operator = "gte", value = 1.0 }
+reversing = { operator = "lte", value = 0.0 }
+
+[profile.keltner_touch_v1]
+definition_id = "market_regime.keltner_touch"
+description = "Close position relative to Keltner Channel bands"
+version = "1.0.0"
+method = "combined"
+
+[profile.keltner_touch_v1.zones]
+inside = { operator = "between", min = -0.95, max = 0.95 }
+touch = { operator = "between", min = 0.96, max = 1.05 }
+break = { operator = "gte", value = 1.05 }
+
+[profile.keltner_touch_v1.percentiles]
+inside = { operator = "between", min_percentile = 0.0, max_percentile = 0.90 }
+touch = { operator = "between", min_percentile = 0.91, max_percentile = 0.95 }
+break = { operator = "gte", percentile = 0.96 }
