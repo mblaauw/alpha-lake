@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dagster_assets.py`)
 - **Typo in conftest.py** — fixed `# ty: ignore` → `# type: ignore`
 - **Debug print in fixtures** — replaced `print()` with `cli_ui.info()`
+- **Container profile path** — added `config/` COPY to Dockerfile so
+  `config/threshold_profiles.toml` is found at runtime
+- **String→float crash in readouts** — `_build_indicator_dict` no longer attempts
+  to `float()` metadata columns (`security_id`, timestamps, etc.)
 
 ## [v0.1.0-alpha.2] — 2026-06-24
 

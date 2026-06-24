@@ -15,5 +15,6 @@ FROM python:3.13-slim AS runtime
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
+COPY config/ config/
 ENV PATH="/app/.venv/bin:$PATH"
 ENTRYPOINT ["alpha-lake"]

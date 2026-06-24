@@ -652,14 +652,37 @@ def compute_all_readouts(
     return results
 
 
+_SKIP_INDICATOR_COLS = frozenset(
+    {
+        "security_id",
+        "effective_date",
+        "available_at",
+        "source_id",
+        "version_hash",
+        "content_hash",
+        "source_fetch_id",
+        "raw_payload_hash",
+        "ingestion_run_id",
+        "schema_version",
+        "parser_version",
+        "quality_status",
+        "normalization_version",
+    }
+)
+
+
 def _build_indicator_dict(
     indicators: pl.DataFrame,
 ) -> dict[str, float | None]:
-    """Build a flat dict of the most recent indicator values."""
+    """Build a flat dict of the most recent indicator values, skipping metadata columns."""
     if indicators.is_empty():
         return {}
     last = indicators.row(-1, named=True)
-    return {k: float(v) if v is not None else None for k, v in last.items()}
+    return {
+        k: float(v) if isinstance(v, (int, float)) else None
+        for k, v in last.items()
+        if k not in _SKIP_INDICATOR_COLS
+    }
 
 
 __all__ = [
