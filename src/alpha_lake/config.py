@@ -84,9 +84,16 @@ class TransportConfig(pydantic.BaseModel):
         return self
 
 
+class ReadoutsConfig(pydantic.BaseModel):
+    profile_file: str = "config/threshold_profiles.toml"
+    benchmark_symbol: str = "SPY"
+    phases: dict[str, list[str]] = {}
+
+
 class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
     s3: S3Config = S3Config()
+    readouts: ReadoutsConfig = ReadoutsConfig()
     transport: TransportConfig = TransportConfig()
     quality: dict[str, QualityConfig] = {}
     reconcile: dict[str, ReconciliationConfig] = {}
