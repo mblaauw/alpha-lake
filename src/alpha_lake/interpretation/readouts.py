@@ -94,7 +94,8 @@ def _make_obs(
     attention: str = "normal",
     risk: str = "normal",
     data_confidence: str = "high",
-    as_of: datetime.datetime | None = None,
+    *,
+    as_of: datetime.datetime,
 ) -> ReadoutObservation:
     color = defn.color_mapping.get(state, "gray")
     return ReadoutObservation(
@@ -106,7 +107,7 @@ def _make_obs(
         risk=risk,
         data_confidence=data_confidence,
         color=color,
-        as_of=as_of or datetime.datetime.now(datetime.UTC),
+        as_of=as_of,
         calculation_version=_CALC_VERSION,
     )
 

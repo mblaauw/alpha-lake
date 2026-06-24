@@ -24,7 +24,6 @@ class SourceConfig(pydantic.BaseModel):
 class SourceDatasetConfig(pydantic.BaseModel):
     enabled: bool = True
     parser_version: int = 1
-    endpoint_override: str | None = None
 
 
 class DatasetPostureConfig(pydantic.BaseModel):

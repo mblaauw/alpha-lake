@@ -711,8 +711,8 @@ def ingest_dataset(
 
 def compute_indicators(
     con: duckdb.DuckDBPyConnection,
+    as_of: datetime,
     security_ids: list[str] | None = None,
-    as_of: datetime | None = None,
     on_step: StepCallback | None = None,
 ) -> int:
     """Compute all technical indicators from lake_bars and write to technical_indicators.
@@ -722,9 +722,13 @@ def compute_indicators(
     the result PIT in the technical_indicators table.
 
     When *security_ids* is None (default), processes every symbol in lake_bars.
+
+    Raises
+    ------
+    ValueError
+        If *as_of* is not provided (wall-clock fallback is forbidden in the
+        canonical path — see invariants I5/I7).
     """
-    if as_of is None:
-        as_of = get_clock().now()
 
     if security_ids is None:
         rows = con.execute(

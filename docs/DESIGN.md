@@ -400,7 +400,7 @@ lake.indicators.bollinger(symbol="AAPL", window=20, stddev=2.0, as_of=A)
 
 ### 14.2 Indicator categories
 
-Alpha-Lake may provide any indicator that is mechanically derivable from daily OHLCV bars and described by a neutral parameter set (window, smoothing, price mode). Categories include: price transforms, returns, moving averages, trend, momentum, volatility, bands/channels, volume, range/breakout, risk/statistics, support/resistance helpers, candlestick facts, relative strength, and calendar/bar metadata. See `src/alpha_lake/derived/indicators/` for the full catalog.
+Alpha-Lake may provide any indicator that is mechanically derivable from daily OHLCV bars and described by a neutral parameter set (window, smoothing, price mode). Categories include: price transforms, returns, moving averages, trend, momentum, volatility, bands/channels, volume, range/breakout, risk/statistics, support/resistance helpers, candlestick facts, relative strength, and calendar/bar metadata. See `src/alpha_lake/derived/indicators.py` for the full catalog.
 
 Candlestick pattern helpers are allowed only as neutral structural descriptions of OHLC shapes. They must not be named or exposed as trading advice.
 
@@ -474,7 +474,7 @@ Five canonical datasets cover text: `news_articles`, `social_posts` (source-grou
 
 ### 15.3 Derived metric categories
 
-Categories include: volume, velocity, sentiment, entity linkage, topic/event, novelty, engagement, source quality, co-mentions, and text features (embeddings, summaries). See `src/alpha_lake/derived/text/` for the full catalog.
+Categories include: volume, velocity, sentiment, entity linkage, topic/event, novelty, engagement, source quality, co-mentions, and text features (embeddings, summaries). See `src/alpha_lake/derived/` for the full catalog.
 
 ### 15.4 Annotation versioning
 
@@ -514,7 +514,7 @@ else:
 #       → DuckLake SCD2 write on knowledge time → snapshot tagged ingestion_run_id
 ```
 
-**Connector contract:** connectors fetch and archive. They return a `RawFetch` with body + manifest metadata. They must not parse, validate, write canonical, or hide partial failure. Per-entity outcomes (`ok`, `empty`, `failed`, `quarantined`) are recorded as an outcome ledger, not dlt incremental state.
+**Connector contract:** connectors fetch and archive. They return a `RawFetch` with body + manifest metadata. They must not parse, validate, write canonical, or hide partial failure. Per-entity outcomes (`ok`, `empty`, `failed`, `quarantined`) are recorded as an outcome ledger.
 
 **Synthetic fallback:** when no API credentials are available (CI, offline), `_ingest_synthetic()` generates deterministic OHLCV data (252 bars per symbol, symbol-specific prices via hash seed) that passes market sanity checks. Data is tagged with `source_id = "demo"` to distinguish it from real ingestions. The config flag `synthetic_mode` (in `[lake]`) controls whether the dashboard displays a DEMO MODE banner. This preserves end-to-end test coverage without live API access.
 
@@ -608,7 +608,7 @@ flowchart LR
 
 **Reference execution:** `just up` starts Postgres + RustFS + the app container; `just ingest ...` executes the CLI in the app container against the real stack.
 
-**Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates. SQLMesh is the optional endstate for a growing derived layer; v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
+**Dagster (optional stack service):** each dataset becomes a **partitioned asset** (date partitions = backfill UX); **asset checks** wrap the Patito gates. v1 uses DuckDB views. Dagster is a shell over `flows/`, not the owner of business logic.
 
 ## 20. Observability — structured logs & catalog health
 
@@ -729,7 +729,7 @@ alpha-lake/
 │   ├── catalog/ storage/ serving/ replay/ fixtures/
 │   ├── flows/                                           # pipeline logic (truth)
 │   ├── obs.py  config.py  cli.py                        # dormant OTel seam · settings · Typer
-│   └── assets.py                                        # Dagster (thin over flows)
+│   └── dagster_assets.py                                # Dagster (thin over flows)
 └── tests/{unit,integration,contract,replay,boundary}/
 ```
 
@@ -787,7 +787,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 | Engine | DuckDB |
 | Ingestion | httpx + tenacity (per-source connector registry + synthetic fallback) |
 | Dataframes + models + validation | Polars + Patito |
-| Transform | DuckDB SQL ▸ SQLMesh |
+| Transform | DuckDB SQL |
 | Orchestration | Typer CLI in app container first; Dagster optional over `flows/` |
 | Observability | Structured JSON logs + catalog health (CLI); Prometheus (future REST) |
 | Remote serving | REST (FastAPI, optional `[server]` extra); Arrow Flight SQL / ADBC deferred for bulk |
@@ -798,7 +798,7 @@ One dataframe lib (Polars), one SQL engine (DuckDB) — never both for the same 
 
 ## 30. Non-goals (v1)
 
-Strategy logic; materialized features; intraday/streaming; distributed compute; hosted multi-tenant service; ML online feature store; governance UI; Kubernetes platformization; RustFS clustering. Design the seams (object storage, Postgres catalog, Flight serving, Dagster/SQLMesh, Kubernetes deployment, clustering); do not build the distributed platform in v1.
+Strategy logic; materialized features; intraday/streaming; distributed compute; hosted multi-tenant service; ML online feature store; governance UI; Kubernetes platformization; RustFS clustering. Design the seams (object storage, Postgres catalog, Flight serving, Dagster, Kubernetes deployment, clustering); do not build the distributed platform in v1.
 
 ## 31. Summary
 

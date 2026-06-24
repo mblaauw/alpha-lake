@@ -384,6 +384,4 @@ def readouts_by_category(category: str) -> list[ReadoutDefinition]:
 __all__ = [
     "ReadoutDefinition",
     "READOUTS",
-    "CATEGORIES",
-    "readouts_by_category",
 ]

@@ -47,6 +47,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   / `max_percentile=0.0` treated as falsy in `_matches_percentile` (#453)
 - **Low: Dashboard category filter sentinel** — `ReadoutDefinition` class
   returned as sentinel instead of None when definition_id missing (#453)
+- **I5/I7 violation: wall-clock fallback in `_make_obs`** — removed
+  `datetime.now(UTC)` default from `_make_obs`; `as_of` is now a required
+  keyword-only parameter for determinism in the interpretation layer
+- **I5/I7 violation: wall-clock fallback in `compute_indicators`** — made
+  `as_of` a required parameter; CLI now passes `get_clock().now()` explicitly
+- **Falsy guard in `event_aggregations.py`** — `sum() or 0` replaced with
+  explicit `None` check to distinguish "no data" from "genuine zero"
+- **SQL injection in `kernel/__init__.py`** — replaced string concatenation in
+  INSERT with parameterized `executemany()` for `_kernel_source_priority`
+- **Stale config field** — removed unused `endpoint_override` from
+  `SourceDatasetConfig` in config.py
+- **Dead exports** — removed unused `CATEGORIES` and `readouts_by_category`
+  from interpretation `__all__`
+- **DESIGN.md drift** — fixed 6 stale references (`indicators/` → `indicators.py`,
+  `text/` → `derived/`, `dlt` reference, `SQLMesh` references, `assets.py` →
+  `dagster_assets.py`)
+- **Typo in conftest.py** — fixed `# ty: ignore` → `# type: ignore`
+- **Debug print in fixtures** — replaced `print()` with `cli_ui.info()`
 
 ## [v0.1.0-alpha.2] — 2026-06-24
 

@@ -21,7 +21,7 @@ def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
         "dataset VARCHAR, source_id VARCHAR, priority INT)"
     )
     con.execute("DELETE FROM _kernel_source_priority")
-    values = []
+    rows: list[tuple[str, str, int]] = []
     precedence_datasets: set[str] = {"bars_daily"}
     try:
         from alpha_lake.config import get_config as _get_cfg
@@ -33,9 +33,12 @@ def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
     for dataset in sorted(precedence_datasets):
         sources = get_source_precedence(dataset)
         for i, source_id in enumerate(sources):
-            values.append(f"('{dataset}', '{source_id}', {i})")
-    if values:
-        con.execute("INSERT INTO _kernel_source_priority VALUES " + ", ".join(values))
+            rows.append((dataset, source_id, i))
+    if rows:
+        con.executemany(
+            "INSERT INTO _kernel_source_priority (dataset, source_id, priority) VALUES (?, ?, ?)",
+            rows,
+        )
 
     # Ensure referenced tables exist so SQL macros compile at parse time.
     # In production the DuckLake catalog provides them; in tests we create
