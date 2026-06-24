@@ -69,6 +69,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config/threshold_profiles.toml` is found at runtime
 - **String→float crash in readouts** — `_build_indicator_dict` no longer attempts
   to `float()` metadata columns (`security_id`, timestamps, etc.)
+- **`/v1/bars/indicators` datetime crash** — fixed datetime→JSON serialization bug
+  (same fix applied to both authenticated and dashboard routers)
+- **`price_mode` 500→422** — added input validation for `price_mode` parameter;
+  invalid values now return 422 instead of crashing with 500
+- **Dead `sec_id is None` guards removed** — 6 endpoints had unreachable 404
+  checks; `resolve_security()` always returns a string
+- **Dead `return_126`/`return_252` mappings removed** — unreachable entries in
+  `_store_indicators_into`
+- **`search_securities()` now has `lake_bars` fallback** — when `security_master`
+  is empty, falls back to scanning `lake_bars` for matching security IDs
+- **Missing `corp_actions` table handled** — `read_bars_adjusted` falls back to
+  raw bars when `corp_actions` doesn't exist
+- **Shared serialization helper** — extracted `_serialize_bars_df()` into
+  `_shared.py` so both routers share the same datetime/numeric conversion logic
 
 ## [v0.1.0-alpha.2] — 2026-06-24
 

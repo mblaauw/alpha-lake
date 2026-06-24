@@ -31,6 +31,8 @@ from alpha_lake.transport._shared import (
     _now,
     _parse_indicators,
     _pl_to_dicts,
+    _serialize_bars_df,
+    _validate_price_mode,
 )
 
 _STATIC = Path(__file__).parent / "static"
@@ -123,10 +125,8 @@ async def bars(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
-    # resolve() expects a date (effective_start/effective_end are DATE columns)
+    _validate_price_mode(price_mode)
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Symbol '{symbol}' not found")
 
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
     if start:
@@ -162,10 +162,7 @@ async def bars_indicators(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
-    # resolve() expects a date (effective_start/effective_end are DATE columns)
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Symbol '{symbol}' not found")
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
@@ -189,8 +186,7 @@ async def bars_indicators(
         return JSONResponse([])
 
     bars_df = bars_df.sort("effective_date")
-    result = bars_df.to_dict(as_series=False)
-    result["effective_date"] = [str(d) for d in result["effective_date"]]
+    result = _serialize_bars_df(bars_df)
 
     for name, args in parsed:
         fn = _INDICATOR_MAP[name]
@@ -207,7 +203,7 @@ async def bars_indicators(
             result[name] = [float(x) if x is not None else None for x in series]
 
     if start and warmup_start and warmup_start < start:
-        mask = [str(d) >= start.isoformat() for d in result["effective_date"]]
+        mask = [str(d) >= start.isoformat() for d in bars_df["effective_date"].to_list()]
         for key in list(result.keys()):
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 

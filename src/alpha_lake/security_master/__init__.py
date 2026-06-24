@@ -88,16 +88,14 @@ def mint_security_id(figi: str = "", cik: str = "", isin: str = "", composite: s
     return ""
 
 
-def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
+def resolve(con: Any, symbol: str, as_of: date | None = None) -> str:
     """Resolve a symbol to security_id at a given as_of.
 
-    Args:
-        con: DuckDB connection with security_master table.
-        symbol: Ticker symbol.
-        as_of: Point in time for resolution. None = latest.
-
-    Returns:
-        security_id or None if not found.
+    Tries the ``security_master`` table first. If the table is missing or empty,
+    falls back to ``lake_bars`` (where security_id == ticker symbol in the
+    current synthetic/demo data). Returns *symbol* itself if neither table
+    contains it — this matches the ``bars/symbols`` endpoint behaviour where
+    ``security_id`` may be the ticker directly.
     """
     try:
         if as_of:
@@ -122,9 +120,22 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
                 """,
                 [symbol],
             ).fetchall()
-        return rows[0][0] if rows else None
+        if rows:
+            return rows[0][0]
     except Exception:
-        return None
+        pass
+
+    try:
+        rows = con.execute(
+            "SELECT DISTINCT security_id FROM lake_bars WHERE security_id = ? LIMIT 1",
+            [symbol],
+        ).fetchall()
+        if rows:
+            return rows[0][0]
+    except Exception:
+        pass
+
+    return symbol
 
 
 def search(
@@ -176,6 +187,28 @@ def search(
             substring_results = [
                 {"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows
             ]
+    except Exception:
+        pass
+
+    if prefix_results or substring_results:
+        return prefix_results + substring_results
+
+    try:
+        prefix_q = f"{query}%"
+        rows = con.execute(
+            "SELECT DISTINCT security_id FROM lake_bars WHERE security_id LIKE ? LIMIT ?",
+            [prefix_q, str(limit)],
+        ).fetchall()
+        prefix_results = [{"symbol": r[0], "security_id": r[0], "name": ""} for r in rows]
+        remaining = limit - len(prefix_results)
+        if remaining > 0:
+            sub_q = f"%{query}%"
+            rows = con.execute(
+                "SELECT DISTINCT security_id FROM lake_bars"
+                " WHERE security_id LIKE ? AND security_id NOT LIKE ? LIMIT ?",
+                [sub_q, prefix_q, str(remaining)],
+            ).fetchall()
+            substring_results = [{"symbol": r[0], "security_id": r[0], "name": ""} for r in rows]
     except Exception:
         pass
 

@@ -231,11 +231,21 @@ def read_bars_adjusted(
             snapshot_id=snapshot_id,
         )
 
-    return duckdb_to_polars(
-        con,
-        "SELECT * FROM bars_adjusted_asof(?, ?, ?, ?)",
-        [security_ids, as_of, start_date, end_date],
-    )
+    try:
+        return duckdb_to_polars(
+            con,
+            "SELECT * FROM bars_adjusted_asof(?, ?, ?, ?)",
+            [security_ids, as_of, start_date, end_date],
+        )
+    except Exception:
+        return read_bars_asof(
+            con,
+            security_ids,
+            as_of,
+            start_date,
+            end_date,
+            snapshot_id=snapshot_id,
+        )
 
 
 def read_bars_latest(

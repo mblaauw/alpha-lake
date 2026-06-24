@@ -57,6 +57,8 @@ from alpha_lake.transport._shared import (
     _now,
     _parse_indicators,
     _pl_to_dicts,
+    _serialize_bars_df,
+    _validate_price_mode,
 )
 
 router = APIRouter(prefix="/v1/dashboard")
@@ -268,9 +270,8 @@ async def bars(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
+    _validate_price_mode(price_mode)
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Symbol '{symbol}' not found")
 
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
     if start:
@@ -306,8 +307,6 @@ async def bars_indicators(
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
     sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Symbol '{symbol}' not found")
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
@@ -331,8 +330,7 @@ async def bars_indicators(
         return JSONResponse([])
 
     bars_df = bars_df.sort("effective_date")
-    result = bars_df.to_dict(as_series=False)
-    result["effective_date"] = [str(d) for d in result["effective_date"]]
+    result = _serialize_bars_df(bars_df)
 
     for name, args in parsed:
         fn = _INDICATOR_MAP[name]
@@ -349,7 +347,7 @@ async def bars_indicators(
             result[name] = [float(x) if x is not None else None for x in series]
 
     if start and warmup_start and warmup_start < start:
-        mask = [str(d) >= start.isoformat() for d in result["effective_date"]]
+        mask = [str(d) >= start.isoformat() for d in bars_df["effective_date"].to_list()]
         for key in list(result.keys()):
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
@@ -591,8 +589,6 @@ async def bars_summary(
         as_of = _now()
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    if sec_id is None:
-        sec_id = symbol
     start = shift_trading_days(as_of.date(), -180)
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
     if price_mode != "raw":
@@ -719,8 +715,6 @@ def _store_indicators_into(summary: dict[str, Any], row: dict[str, Any]) -> None
         "return_5": "return_5d",
         "return_21": "return_21d",
         "return_63": "return_63d",
-        "return_126": "return_126",
-        "return_252": "return_252",
     }
     for col, val in row.items():
         if col in (
@@ -971,7 +965,10 @@ async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: i
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
         sec_id = symbol
-    df = pit_read(con, table="analyst_estimates", security_ids=[sec_id], as_of=as_of)
+    try:
+        df = pit_read(con, table="analyst_estimates", security_ids=[sec_id], as_of=as_of)
+    except Exception:
+        return JSONResponse([])
     if df.is_empty():
         return JSONResponse([])
     df = df.sort("effective_date", descending=True).head(min(limit, 500))
