@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw bars when `corp_actions` doesn't exist
 - **Shared serialization helper** — extracted `_serialize_bars_df()` into
   `_shared.py` so both routers share the same datetime/numeric conversion logic
+- **Frontend redesign** — replaced htmx-based SPA with Vanilla JS SPA;
+  FT salmon-paper design system (light-first); 6 nav tabs; SVG charts;
+  AS OF popup control; readout cards with tooltip glossary; sentiment
+  leaderboard; indicator tiles with pin/unpin; PIT playground; removed
+  service-worker.js (PWA dropped); added icons/
 
 ## [v0.1.0-alpha.2] — 2026-06-24
 

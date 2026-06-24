@@ -1,11 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lake Watch</title>
-<meta name="description" content="Alpha-Lake data-validation dashboard">
-<meta name="theme-color" content="#14110a">
+<meta name="description" content="Alpha-Lake data-validation desk">
+<meta name="theme-color" content="#FFF1E5">
+<!-- Progressive enhancement: degrades to Georgia / system mono offline -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/static/icons/icon-192.svg">
@@ -13,68 +17,57 @@
 </head>
 <body>
 <div class="lw-page">
+
   <header class="lw-masthead">
-    <div id="lw-syn-banner" style="display:none;align-items:center;justify-content:center;gap:8px;padding:6px 12px;margin-bottom:10px;background:var(--lw-accent-soft);border:1px solid var(--lw-accent);border-radius:6px;font-size:12px;color:var(--lw-ink-2);">
-      <span style="font-size:14px;">&#9888;</span>
-      <span><strong>DEMO MODE</strong> — data shown is synthetic. Set API keys in <code>.env</code> for live data.</span>
-    </div>
     <div class="lw-mast-top">
-      <h1 class="lw-wordmark">
-        <span class="lw-wordmark-word">LAKE</span><span class="lw-wordmark-word">WATCH</span>
-      </h1>
-      <div class="lw-settings-wrap">
-        <button class="lw-settings-btn" id="lw-settings-btn" aria-label="Settings">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-        <div class="lw-settings-pop" id="lw-settings-pop">
-          <div class="lw-settings-section">
-            <div class="lw-settings-label">Theme</div>
-            <div class="lw-settings-options">
-              <button class="lw-theme-btn" data-theme="dark">Dark</button>
-              <button class="lw-theme-btn" data-theme="light">Light</button>
+      <h1 class="lw-wordmark">Lake&#8202;Watch<span class="lw-kicker">Market-data lakehouse · validation desk</span></h1>
+      <div class="lw-mast-ctrls">
+        <!-- AS OF control (replaces the old price-mode + snapshot dropdowns) -->
+        <div class="lw-asof-wrap">
+          <button class="lw-asof-btn" id="lw-asof-btn" aria-haspopup="true" aria-expanded="false">
+            <span class="lw-asof-state">
+              <span class="lw-asof-dot" id="lw-asof-dot"></span>
+              <span class="lw-asof-kicker" id="lw-asof-kicker">Live</span>
+            </span>
+            <span class="lw-asof-val" id="lw-asof-val">Live</span>
+            <span class="lw-asof-caret">&#9662;</span>
+          </button>
+          <div class="lw-asof-pop" id="lw-asof-pop">
+            <div class="lw-pop-label">Read the lake as of</div>
+            <div class="lw-asof-presets" id="lw-asof-presets"></div>
+            <div class="lw-pop-label">Exact instant</div>
+            <input type="datetime-local" step="1" class="lw-asof-input" id="lw-asof-input">
+            <div class="lw-pop-label" id="lw-snap-label" style="margin-top:11px;display:none;">Snapshots</div>
+            <div class="lw-asof-snaps" id="lw-asof-snaps"></div>
+            <div class="lw-asof-foot">
+              <span class="lw-asof-hint" id="lw-asof-hint">reading live data</span>
+              <button class="lw-golive" id="lw-golive">&#8635; Go live</button>
             </div>
           </div>
         </div>
+        <button class="lw-theme-btn" id="lw-theme-btn" title="Toggle theme" aria-label="Toggle theme">&#9790;</button>
       </div>
     </div>
     <div class="lw-mast-date lw-mono" id="lw-header-time"></div>
-    <div class="lw-header-controls">
-      <select id="lw-price-mode">
-        <option value="raw">raw</option>
-        <option value="split_adjusted">split</option>
-      </select>
-      <label>as_of <input type="datetime-local" id="lw-asof" step="1"></label>
-      <select id="lw-snapshot"><option value="">live</option></select>
-    </div>
   </header>
 
-  <nav id="lw-tabs">
-    <div class="lw-tabs" role="tablist">
-      <button class="lw-tab is-active" role="tab" data-tab="overview">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Overview
-      </button>
-      <button class="lw-tab" role="tab" data-tab="bars">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Bars
-      </button>
-      <button class="lw-tab" role="tab" data-tab="sentiment">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>Sentiment
-      </button>
-      <button class="lw-tab" role="tab" data-tab="indicators">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Indicators
-      </button>
-      <button class="lw-tab" role="tab" data-tab="securities">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>Securities
-      </button>
-      <button class="lw-tab" role="tab" data-tab="pit">
-        <span class="lw-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>PIT
-      </button>
-    </div>
+  <nav class="lw-nav" id="lw-nav">
+    <button class="lw-nav-tab is-active" data-tab="overview">Overview</button>
+    <button class="lw-nav-tab" data-tab="bars">Bars</button>
+    <button class="lw-nav-tab" data-tab="readouts">Readouts</button>
+    <button class="lw-nav-tab" data-tab="sentiment">Sentiment</button>
+    <button class="lw-nav-tab" data-tab="indicators">Indicators</button>
+    <button class="lw-nav-tab" data-tab="pit">PIT</button>
   </nav>
 
-  <main id="lw-content">
-    <div class="lw-loading">Loading</div>
-  </main>
+  <div class="lw-syn-banner" id="lw-syn-banner" style="display:none;">
+    <span class="lw-tag">Demo</span>
+    <span>Figures are synthetic. Set API keys in <code>.env</code> for live data.</span>
+  </div>
+
+  <main id="lw-content"><div class="lw-loading">Loading</div></main>
 </div>
+<div class="lw-tooltip" id="lw-tooltip"></div>
 <script src="/static/app.js"></script>
 </body>
 </html>

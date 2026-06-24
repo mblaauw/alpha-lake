@@ -1,12 +1,12 @@
 {
-  "name": "Lake Watch — Alpha-Lake",
+  "name": "Lake Watch",
   "short_name": "Lake Watch",
-  "description": "Alpha-Lake data-validation dashboard",
+  "description": "Alpha-Lake data-validation desk",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#14110a",
-  "theme_color": "#14110a",
+  "background_color": "#FFF1E5",
+  "theme_color": "#990F3D",
   "icons": [
     {
       "src": "/static/icons/icon-192.svg",

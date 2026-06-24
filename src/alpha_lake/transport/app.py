@@ -239,14 +239,6 @@ async def home():
     return FileResponse(_STATIC / "index.html")
 
 
-@app.get("/service-worker.js")
-async def service_worker():
-    sw = _STATIC / "service-worker.js"
-    if not sw.exists():
-        raise HTTPException(404)
-    return FileResponse(sw, media_type="application/javascript")
-
-
 @app.get("/manifest.webmanifest")
 async def manifest():
     mf = _STATIC / "manifest.webmanifest"
