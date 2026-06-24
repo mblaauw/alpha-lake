@@ -102,14 +102,14 @@ def resolve_state(
 def _match_zone(zones: dict[str, ZoneDef], value: float) -> str | None:
     for state, zd in zones.items():
         if zd.operator == "lte":
-            if value <= (zd.value or 0):
+            if value <= (zd.value if zd.value is not None else 0):
                 return state
         elif zd.operator == "gte":
-            if value >= (zd.value or 0):
+            if value >= (zd.value if zd.value is not None else 0):
                 return state
         elif zd.operator == "between":
-            lo = zd.min or float("-inf")
-            hi = zd.max or float("inf")
+            lo = zd.min if zd.min is not None else float("-inf")
+            hi = zd.max if zd.max is not None else float("inf")
             if lo <= value <= hi:
                 return state
     return None
@@ -117,12 +117,12 @@ def _match_zone(zones: dict[str, ZoneDef], value: float) -> str | None:
 
 def _matches_percentile(pdef: PercentileDef, pct: float) -> bool:
     if pdef.operator == "lte":
-        return pct <= (pdef.percentile or 0)
+        return pct <= (pdef.percentile if pdef.percentile is not None else 0)
     if pdef.operator == "gte":
-        return pct >= (pdef.percentile or 0)
+        return pct >= (pdef.percentile if pdef.percentile is not None else 0)
     if pdef.operator == "between":
-        lo = pdef.min_percentile or 0.0
-        hi = pdef.max_percentile or 1.0
+        lo = pdef.min_percentile if pdef.min_percentile is not None else 0.0
+        hi = pdef.max_percentile if pdef.max_percentile is not None else 1.0
         return lo <= pct <= hi
     return False
 

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Symbol Readouts** — neutral interpretation layer over bars and technical
+  indicators. 18 readouts across 7 categories: price action, trend, momentum,
+  volatility, participation, relative strength, market regime (#447)
+- **Readout definitions** — `ReadoutDefinition` dataclass + `READOUTS` registry
+  with metadata (category, surface, formula, display hints) (#448)
+- **Threshold profiles** — versioned TOML profiles (discrete, percentile,
+  combined) + `resolve_state()` with insufficient-history guard (#449)
+- **Readout computation** — 18 pure compute functions + `compute_all_readouts()`
+  orchestrator with source-requirement gating (#450)
+- **Readout REST endpoint** — `GET /v1/dashboard/symbol/{symbol}/readouts`
+  with `as_of`, `latest`, `categories`, `readout_ids` params (#451)
+- **ReadoutsConfig model** — typed `ReadoutsConfig` in config.py with
+  profile_file, benchmark_symbol, phases fields (#451)
+- **Interpretation test suite** — 52 tests covering all 18 readout functions,
+  threshold profiles, orchestrator, determinism, and edge cases (#452)
+
+### Fixed
+
+- **Critical: `_match_zone` falsy-`min` bug** — `min=0.0` was treated as falsy
+  and replaced with `-inf`, breaking the "range" zone in `breakout_state_v1`
+  profile (#453)
+- **Critical: MACD cross indicator fallback** — `macd_ema=0.0` was treated as
+  falsy, falling through to `macd_signal` and producing spurious cross
+  detection (#453)
+- **Critical: Overlapping threshold zones** — `directional_bias_v1`,
+  `macd_cross_v1`, and `momentum_quality_v1` zones overlapped at exactly 0.0,
+  making neutral/mixed states unreachable (#453)
+- **High: NaN/Inf propagation in `_last_or_none`** — helper functions passed
+  NaN/Inf as valid floats through to state resolution, silently producing
+  incorrect results (#453)
+- **High: NaN/Inf in momentum quality** — `close / close.shift(10)` could
+  produce NaN via zero-divide, not caught by `is None` guard (#453)
+- **Medium: Bollinger width `"unavailable"` mislabeled as `"quiet"`** —
+  unguarded attention/risk fallback for unavailable state (#453)
+- **Medium: Percentile matching falsy-`percentile` bug** — `min_percentile=0.0`
+  / `max_percentile=0.0` treated as falsy in `_matches_percentile` (#453)
+- **Low: Dashboard category filter sentinel** — `ReadoutDefinition` class
+  returned as sentinel instead of None when definition_id missing (#453)
+
 ## [v0.1.0-alpha.2] — 2026-06-24
 
 ### Added

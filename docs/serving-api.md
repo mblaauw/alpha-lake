@@ -147,6 +147,7 @@ read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
 | `GET /v1/dashboard/analyst/{symbol}` | `as_of`, `limit` | Analyst estimate consensus (strong_buy … target_low) |
 | `GET /v1/dashboard/bars/symbols` | — | Distinct symbols with data in the lake |
 | `GET /v1/dashboard/indicators/glossary` | — | Full indicator glossary (name, description, formula) |
+| `GET /v1/dashboard/symbol/{symbol}/readouts` | `as_of`, `latest`, `categories`, `readout_ids` | 18 symbol readouts across 7 categories |
 | `GET /v1/dashboard/health` | — | Catalog health + synthetic_mode flag |
 
 These endpoints mirror the authenticated `/v1/*` endpoints but are gated by the

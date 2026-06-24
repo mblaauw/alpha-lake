@@ -50,9 +50,9 @@ version = "1.0.0"
 method = "discrete"
 
 [profile.directional_bias_v1.zones]
-upward = { operator = "gte", value = 0.0 }
-downward = { operator = "lte", value = 0.0 }
-mixed = { operator = "between", min = -0.0, max = 0.0 }
+upward = { operator = "gte", value = 0.001 }
+downward = { operator = "lte", value = -0.001 }
+mixed = { operator = "between", min = -0.001, max = 0.001 }
 
 [profile.trend_strength_v1]
 definition_id = "trend.strength"
@@ -83,9 +83,9 @@ version = "1.0.0"
 method = "discrete"
 
 [profile.macd_cross_v1.zones]
-positive_cross = { operator = "gte", value = 0.0 }
-negative_cross = { operator = "lte", value = 0.0 }
-no_cross = { operator = "between", min = -0.0, max = 0.0 }
+positive_cross = { operator = "gte", value = 0.001 }
+negative_cross = { operator = "lte", value = -0.001 }
+no_cross = { operator = "between", min = -0.001, max = 0.001 }
 
 [profile.momentum_quality_v1]
 definition_id = "momentum.quality"
@@ -94,9 +94,9 @@ version = "1.0.0"
 method = "discrete"
 
 [profile.momentum_quality_v1.zones]
-constructive = { operator = "gte", value = 0.0 }
-weak = { operator = "lte", value = 0.0 }
-neutral = { operator = "between", min = -0.0, max = 0.0 }
+constructive = { operator = "gte", value = 0.001 }
+weak = { operator = "lte", value = -0.001 }
+neutral = { operator = "between", min = -0.001, max = 0.001 }
 
 [profile.atr_percent_v1]
 definition_id = "volatility.atr_percent"

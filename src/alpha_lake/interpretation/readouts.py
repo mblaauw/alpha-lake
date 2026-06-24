@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,21 +63,27 @@ def _last_or_none(s: pl.Series) -> float | None:
     if len(s) == 0:
         return None
     v = s[-1]
-    return float(v) if v is not None else None
+    if v is None or (isinstance(v, float) and not math.isfinite(v)):
+        return None
+    return float(v)
 
 
 def _prev_or_none(s: pl.Series) -> float | None:
     if len(s) < 2:
         return None
     v = s[-2]
-    return float(v) if v is not None else None
+    if v is None or (isinstance(v, float) and not math.isfinite(v)):
+        return None
+    return float(v)
 
 
 def _value_at(s: pl.Series, idx: int) -> float | None:
     if idx < 0 or idx >= len(s):
         return None
     v = s[idx]
-    return float(v) if v is not None else None
+    if v is None or (isinstance(v, float) and not math.isfinite(v)):
+        return None
+    return float(v)
 
 
 def _make_obs(
@@ -252,7 +259,8 @@ def compute_macd_cross(
 ) -> ReadoutObservation:
     if indicators is not None and "macd" in indicators and indicators["macd"] is not None:
         macd_line = indicators["macd"]
-        macd_ema = indicators.get("macd_ema") or indicators.get("macd_signal", 0)
+        raw_ema = indicators.get("macd_ema")
+        macd_ema = raw_ema if raw_ema is not None else indicators.get("macd_signal", 0)
     else:
         _macd = macd(bars["close"], 12, 26, 9)
         macd_line = _last_or_none(_macd["macd"])
@@ -274,7 +282,7 @@ def compute_momentum_quality(
     close = bars["close"]
     roc10 = _last_or_none(close / close.shift(10) - 1)
     roc21 = _last_or_none(close / close.shift(21) - 1)
-    if roc10 is None or roc21 is None:
+    if roc10 is None or roc21 is None or not math.isfinite(roc10) or not math.isfinite(roc21):
         return _make_obs(definition, None, "unavailable", as_of=as_of)
     avg = (roc10 + roc21) / 2
     state = resolve_state(profile, avg, lookback_bars=22)
@@ -333,14 +341,18 @@ def compute_bollinger_width(
         sma(bars["close"], 20),
     )
     state = resolve_state(profile, val, hist, definition.lookback_bars)
-    attention = (
-        "elevated"
-        if state in ("expanding", "blown")
-        else "normal"
-        if state == "squeeze"
-        else "quiet"
-    )
-    risk = "extreme" if state == "blown" else "elevated" if state == "expanding" else "normal"
+    if state == "unavailable":
+        attention = "normal"
+        risk = "normal"
+    else:
+        attention = (
+            "elevated"
+            if state in ("expanding", "blown")
+            else "normal"
+            if state == "squeeze"
+            else "quiet"
+        )
+        risk = "extreme" if state == "blown" else "elevated" if state == "expanding" else "normal"
     return _make_obs(definition, round(val, 4), state, attention=attention, risk=risk, as_of=as_of)
 
 
@@ -353,7 +365,7 @@ def compute_volatility_regime(
     close = bars["close"]
     hv21 = _last_or_none(realized_vol(close, 21))
     hv63 = _last_or_none(realized_vol(close, 63))
-    if hv21 is None or hv63 is None or hv63 == 0:
+    if hv21 is None or hv63 is None or hv63 == 0 or not math.isfinite(hv21):
         return _make_obs(definition, None, "unavailable", as_of=as_of)
     val = hv21 / hv63
     hist = realized_vol(close, 21) / realized_vol(close, 63)
