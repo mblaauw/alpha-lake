@@ -397,5 +397,15 @@ insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
 sentiment = ["marketaux", "finnhub", "stocktwits"]
 
+[readouts]
+profile_file = "config/threshold_profiles.toml"
+benchmark_symbol = "SPY"
+
+[readouts.phases]
+phase_1 = ["price_action.*", "trend.*", "momentum.*", "volatility.*", "participation.*", "relative_strength.*", "market_regime.*"]
+phase_2 = []
+phase_3 = []
+phase_4 = []
+
 [transport]
 dashboard_enabled = false
