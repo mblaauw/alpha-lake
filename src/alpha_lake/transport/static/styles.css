@@ -50,11 +50,14 @@ html, body {
 
 /* ── Masthead ── */
 .lw-masthead { border-bottom: 2px solid var(--lw-ink); padding-bottom: 12px; }
-.lw-mast-top { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-.lw-wordmark { font-family: var(--lw-serif); font-weight:700; font-size:34px; line-height:.9; letter-spacing:-.01em; color: var(--lw-claret); display:flex; align-items:baseline; gap:14px; }
-.lw-wordmark .lw-kicker { font-family: var(--lw-mono); font-size:10px; font-weight:400; letter-spacing:.16em; text-transform:uppercase; color: var(--lw-ink-3); padding-bottom:3px; }
+.lw-mast-top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.lw-brand { min-width:0; }
+.lw-wordmark { font-family: var(--lw-serif); font-weight:700; font-size:34px; line-height:.92; letter-spacing:-.01em; color: var(--lw-claret); }
+.lw-wordmark-2 { color: var(--lw-ink); }
+.lw-standfirst { font-family: var(--lw-serif); font-style:italic; font-size:13.5px; line-height:1.4; color: var(--lw-ink-2); margin-top:6px; max-width:560px; }
+.lw-standfirst b { font-style:normal; font-weight:600; color: var(--lw-claret); }
 .lw-mast-ctrls { display:flex; align-items:center; gap:10px; }
-.lw-mast-date { font-family: var(--lw-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color: var(--lw-ink-3); margin-top:8px; }
+.lw-mast-date { font-family: var(--lw-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color: var(--lw-ink-3); margin-top:13px; }
 
 /* ── AS OF control ── */
 .lw-asof-wrap { position:relative; }
@@ -83,7 +86,8 @@ html, body {
 .lw-theme-btn { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; background: var(--lw-paper); border:1px solid var(--lw-rule-2); border-radius:3px; color: var(--lw-ink-2); cursor:pointer; font-size:14px; }
 
 /* ── Section nav ── */
-.lw-nav { display:flex; gap:2px; border-bottom:1px solid var(--lw-rule-2); margin:0 0 22px; overflow-x:auto; }
+.lw-nav { display:flex; gap:2px; border-bottom:1px solid var(--lw-rule-2); margin:0 0 22px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -ms-overflow-style:none; }
+.lw-nav::-webkit-scrollbar { display:none; }
 .lw-nav-tab { background:none; border:0; border-bottom:2px solid transparent; padding:12px 16px 10px; cursor:pointer; white-space:nowrap; font-family: var(--lw-serif); font-size:15px; font-weight:600; color: var(--lw-ink-3); margin-bottom:-1px; }
 .lw-nav-tab:hover { color: var(--lw-ink-2); }
 .lw-nav-tab.is-active { border-bottom-color: var(--lw-claret); color: var(--lw-claret); }
@@ -279,6 +283,9 @@ html, body {
 .lw-ind-tile.pinned .l { color: var(--lw-accent); }
 .lw-ind-tile .v { font-family: var(--lw-mono); font-size:12px; font-weight:600; color: var(--lw-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .lw-ind-pin { font-size:9px; }
+.ind-tilecard { min-height:98px; position:relative; }
+.ind-pin { background:none; border:0; cursor:pointer; font-size:13px; line-height:1; color:var(--lw-ink-4); padding:0; flex:none; }
+.ind-pin.on, .ind-pin:hover { color:var(--lw-accent); }
 
 /* ── PIT ── */
 .lw-pit-card { background: var(--lw-paper); border:1px solid var(--lw-rule); border-radius:5px; padding:18px 20px; margin-bottom:16px; }

@@ -11,7 +11,7 @@
     symbol: '', barsSort: 'attention', dsSort: 'attention',
     drill: null, drillRow: null,
     roSymbol: '', roSort: 'category', roSymbols: null,
-    indCat: 'All', expanded: null, asofOpen: false
+    indSort: 'category', indSymbol: '', indSymbols: null, expanded: null, asofOpen: false
   };
 
   /* ── small utils ── */
@@ -578,63 +578,91 @@
     { label: 'ADX', key: 'adx_14', cat: 'Trend', fmt: 'num2', gid: 'adx' }, { label: 'DI+', key: 'di_plus_14', cat: 'Trend', fmt: 'num2', gid: 'di_plus' }, { label: 'DI-', key: 'di_minus_14', cat: 'Trend', fmt: 'num2', gid: 'di_minus' }, { label: 'StochK', key: 'stoch_k_14', cat: 'Momentum', fmt: 'num1', gid: 'stoch_k' }, { label: 'Wm%R', key: 'williams_r_14', cat: 'Momentum', fmt: 'num1', gid: 'williams_r' }, { label: 'CCI', key: 'cci_20', cat: 'Momentum', fmt: 'num1', gid: 'cci' },
     { label: 'MFI', key: 'mfi_14', cat: 'Volume', fmt: 'num1', gid: 'mfi' }, { label: 'CMF', key: 'cmf_20', cat: 'Volume', fmt: 'num3', gid: 'cmf' }, { label: '%B', key: 'percent_b', cat: 'Volatility', fmt: 'num2', gid: 'percent_b' }, { label: 'Beta60', key: 'beta_60d', cat: 'Relative', fmt: 'num2', gid: 'beta' }, { label: 'RS20', key: 'rs_spy_20d', cat: 'Relative', fmt: 'pct', gid: 'rs_spy' }, { label: 'Corr', key: 'corr_spy', cat: 'Relative', fmt: 'num2', gid: 'corr_spy' }
   ];
-  var IND_CATS = ['All', 'Trend', 'Momentum', 'Volatility', 'Volume', 'Structure', 'Relative'];
   var pins = getJSON('lw_pins', {});
   function getPins(sym) { return pins[sym] || []; }
   function setPins(sym, arr) { pins[sym] = arr; setLS('lw_pins', JSON.stringify(pins)); }
   var _glossary = null, _glossaryReq = null;
   function fetchGlossary() { if (_glossary) return Promise.resolve(_glossary); if (!_glossaryReq) _glossaryReq = api('/indicators/glossary').then(function (g) { _glossary = g || {}; return _glossary; }).catch(function () { _glossary = {}; return _glossary; }); return _glossaryReq; }
 
+  var _indCache = null;
   function renderIndicators(c) {
-    c.innerHTML = '<div class="lw-ind-cats" id="lw-ind-cats"></div><div class="lw-sym-grid" id="lw-ind-grid"><div class="lw-loading">Loading indicators</div></div>';
-    var cats = $('#lw-ind-cats');
-    IND_CATS.forEach(function (cat) {
-      var b = document.createElement('button'); b.className = 'lw-ind-cat' + (cat === state.indCat ? ' is-active' : ''); b.textContent = cat;
-      b.addEventListener('click', function () { state.indCat = cat; renderIndicators(c); }); cats.appendChild(b);
-    });
-    if (_indResults) { drawIndicators(_indResults); return; }
-    api('/bars/symbols').then(function (list) {
-      list = list || [];
-      if (!list.length) { $('#lw-ind-grid').innerHTML = '<div class="lw-empty">No symbols in lake</div>'; return; }
-      Promise.all(list.map(function (it) { var sym = it.symbol || it.security_id; return barApi('/bars/summary', sym).then(function (s) { s._sym = sym; s._name = it.name || s.name || ''; return s; }).catch(function () { return null; }); }))
-        .then(function (res) { _indResults = res.filter(function (r) { return r; }); drawIndicators(_indResults); });
-    }).catch(function () { $('#lw-ind-grid').innerHTML = '<div class="lw-error">Failed to load symbols</div>'; });
+    c.innerHTML =
+      '<div class="lw-sec-head"><div class="lw-sec-title">Indicators</div><div class="lw-sort"><span class="lw-sort-lbl">Order</span><span id="lw-ind-sort"></span></div></div>' +
+      '<div class="lw-ro-syms" id="lw-ind-syms"><span class="lw-empty-mono">loading symbols…</span></div>' +
+      '<div id="lw-ind-body"></div>';
+    sortButtons('lw-ind-sort', [['category', 'By category'], ['name', 'Name']], state.indSort, function (v) { state.indSort = v; loadIndBody(); });
+    var doSyms = function (list) {
+      state.indSymbols = list;
+      if (!list.length) { $('#lw-ind-syms').innerHTML = '<span class="lw-empty-mono">no symbols in lake</span>'; $('#lw-ind-body').innerHTML = '<div class="lw-empty">Ingest bars to compute indicators.</div>'; return; }
+      if (!state.indSymbol || !list.some(function (x) { return (x.symbol || x.security_id) === state.indSymbol; })) state.indSymbol = list[0].symbol || list[0].security_id;
+      drawIndSyms(list); loadIndBody();
+    };
+    if (state.indSymbols) doSyms(state.indSymbols);
+    else api('/bars/symbols').then(function (l) { doSyms(l || []); }).catch(function () { $('#lw-ind-syms').innerHTML = '<span class="lw-empty-mono">could not load symbols</span>'; });
   }
-  var _indResults = null;
-  function drawIndicators(results) {
-    var grid = $('#lw-ind-grid'); if (!grid) return;
-    if (!results.length) { grid.innerHTML = '<div class="lw-empty">No indicator data</div>'; return; }
-    grid.innerHTML = ''; results.forEach(function (s) { grid.appendChild(indicatorCard(s)); });
-    // tooltips
-    $$('.lw-ind-tile', grid).forEach(function (t) {
-      t.addEventListener('mouseenter', function (e) {
-        var gid = t.dataset.gid; fetchGlossary().then(function (g) { var en = g[gid]; if (!en) return; showTip(e, en.full_name || en.name || gid, en.description || '', en.formula || ''); });
-      });
-      t.addEventListener('mouseleave', hideTip);
+  function drawIndSyms(list) {
+    var box = $('#lw-ind-syms'); box.innerHTML = '';
+    list.forEach(function (it) {
+      var sym = it.symbol || it.security_id;
+      var b = document.createElement('button'); b.className = 'lw-ro-sym' + (sym === state.indSymbol ? ' is-active' : ''); b.innerHTML = esc(sym);
+      b.addEventListener('click', function () { state.indSymbol = sym; drawIndSyms(list); loadIndBody(); }); box.appendChild(b);
     });
   }
-  function indicatorCard(s) {
-    var sym = s._sym || s.symbol; var stale = false;
-    if (s.latest_date) { var ref = state.asOf ? new Date(state.asOf) : new Date(); stale = (ref.getTime() - new Date(s.latest_date).getTime()) / 86400000 > 3; }
-    var pinsArr = getPins(sym);
-    var eligible = IND_DEFS.filter(function (d) { return state.indCat === 'All' || d.cat === state.indCat; });
-    var pinned = eligible.filter(function (d) { return pinsArr.indexOf(d.label) !== -1; });
-    var rest = eligible.filter(function (d) { return pinsArr.indexOf(d.label) === -1; }).slice(0, 18);
-    var card = document.createElement('div'); card.className = 'lw-ind-card' + (stale ? ' lw-stale' : '');
+  function loadIndBody() {
+    var body = $('#lw-ind-body'); if (!body) return;
+    var sym = state.indSymbol;
+    if (_indCache && _indCache[sym]) { drawIndBody(body, _indCache[sym]); return; }
+    body.innerHTML = '<div class="lw-loading">Loading indicators</div>';
+    barApi('/bars/summary', sym).then(function (s) { s._sym = sym; _indCache = _indCache || {}; _indCache[sym] = s; drawIndBody(body, s); })
+      .catch(function () { body.innerHTML = '<div class="lw-empty"><div class="lw-empty-mono">No indicators for ' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);margin-top:6px">Needs daily bars in the lake to compute.</div></div>'; });
+  }
+  var IND_CAT_ORDER = [['Trend', 'Trend'], ['Momentum', 'Momentum'], ['Volatility', 'Volatility'], ['Volume', 'Volume'], ['Structure', 'Structure'], ['Relative', 'Relative']];
+  function drawIndBody(body, s) {
+    var sb = state.indSymbols ? state.indSymbols.filter(function (x) { return (x.symbol || x.security_id) === state.indSymbol; })[0] : null;
+    var name = (sb && sb.name) || s.name || '';
     var up = (s.change_pct || 0) >= 0;
-    var tiles = pinned.concat(rest).map(function (d) {
-      var raw = s[d.key], isP = pinsArr.indexOf(d.label) !== -1;
-      var vc = 'var(--lw-ink)';
-      if (d.key === 'rsi' && raw != null) vc = raw > 70 ? 'var(--lw-down)' : raw < 30 ? 'var(--lw-up)' : 'var(--lw-ink)';
-      else if (raw != null && (d.fmt === 'pct')) vc = raw >= 0 ? 'var(--lw-up)' : 'var(--lw-down)';
-      return '<div class="lw-ind-tile' + (isP ? ' pinned' : '') + '" data-sym="' + esc(sym) + '" data-label="' + esc(d.label) + '" data-gid="' + esc(d.gid) + '"><div class="l"><span class="lw-ind-pin">' + (isP ? '★ ' : '') + '</span>' + esc(d.label) + '</div><div class="v" style="color:' + vc + '">' + fmtInd(raw, d.fmt) + '</div></div>';
-    }).join('') || '<div class="lw-c-dim" style="grid-column:1/-1;padding:18px;text-align:center">No indicators in this category</div>';
-    card.innerHTML =
-      '<div class="lw-ind-head"><div style="display:flex;align-items:center;gap:8px"><span class="sym">' + esc(sym) + '</span>' + (s._name ? '<span class="nm">' + esc(s._name) + '</span>' : '') + (stale ? '<span class="lw-stale-badge">stale</span>' : '') + '</div>' +
-        '<div style="display:flex;align-items:center;gap:11px"><span class="lw-mono" style="font-size:13px;font-weight:600;color:var(--lw-ink)">' + fmtMoney(s.last) + '</span><span class="lw-mono" style="font-size:12px;color:' + (up ? 'var(--lw-up)' : 'var(--lw-down)') + '">' + (up ? '+' : '') + (s.change_pct || 0).toFixed(2) + '%</span><span class="lw-mono" style="font-size:10px;color:var(--lw-ink-4)">' + (s.latest_date ? ago(s.latest_date) : '—') + '</span></div></div>' +
-      '<div class="lw-ind-grid">' + tiles + '</div>';
-    $$('.lw-ind-tile', card).forEach(function (t) { t.addEventListener('click', function () { var arr = getPins(sym); var i = arr.indexOf(t.dataset.label); if (i < 0) arr.push(t.dataset.label); else arr.splice(i, 1); setPins(sym, arr); drawIndicators(_indResults); }); });
-    return card;
+    var avail = IND_DEFS.filter(function (d) { return s[d.key] != null; }).length;
+    var head = '<div class="lw-ro-symhead"><span class="t">' + esc(state.indSymbol) + '</span><span class="n">' + esc(name) + '</span>' +
+      '<span class="m"><span style="font-weight:700;color:var(--lw-ink)">' + fmtMoney(s.last) + '</span> <span style="color:' + (up ? 'var(--lw-up)' : 'var(--lw-down)') + '">' + (up ? '+' : '') + (s.change_pct || 0).toFixed(2) + '%</span> · ' + avail + ' indicators · as of ' + (state.asOf ? esc(String(s.latest_date || '').slice(0, 10)) : 'now') + '</span></div>';
+    var html = head;
+    var pin = getPins(state.indSymbol);
+    var byPin = function (arr) { return arr.slice().sort(function (a, b) { return (pin.indexOf(b.label) > -1) - (pin.indexOf(a.label) > -1); }); };
+    if (state.indSort === 'name') {
+      html += indGroup('All · A–Z', byPin(IND_DEFS.slice().sort(function (a, b) { return a.label < b.label ? -1 : 1; })), s);
+    } else {
+      IND_CAT_ORDER.forEach(function (cat) { var items = IND_DEFS.filter(function (d) { return d.cat === cat[0]; }); if (items.length) html += indGroup(cat[1], byPin(items), s); });
+    }
+    body.innerHTML = html;
+    $$('.ind-tilecard', body).forEach(function (card) {
+      card.addEventListener('mouseenter', function (e) { var gid = card.dataset.gid; fetchGlossary().then(function (g) { var en = g[gid]; if (!en) return; showTip(e, en.full_name || en.name || gid, en.description || '', en.formula || ''); }); });
+      card.addEventListener('mouseleave', hideTip);
+    });
+    $$('.ind-pin', body).forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation(); hideTip();
+        var sym = btn.getAttribute('data-sym'), label = btn.getAttribute('data-pin');
+        var arr = getPins(sym); var i = arr.indexOf(label); if (i < 0) arr.push(label); else arr.splice(i, 1); setPins(sym, arr); loadIndBody();
+      });
+    });
+  }
+  function indGroup(label, items, s) {
+    var html = '<div class="lw-ro-group"><div class="lw-ro-grouphead"><span class="c">' + esc(label) + '</span><span class="rule"></span><span class="ct">' + items.length + '</span></div><div class="lw-ro-grid">';
+    items.forEach(function (d) { html += indCard(s, d); });
+    return html + '</div></div>';
+  }
+  function indCard(s, d) {
+    var raw = s[d.key], has = raw != null;
+    var col = 'var(--lw-ink-4)';
+    if (d.key === 'rsi' && has) col = raw > 70 ? 'var(--lw-down)' : raw < 30 ? 'var(--lw-up)' : 'var(--lw-snap)';
+    else if (d.fmt === 'pct' && has) col = raw >= 0 ? 'var(--lw-up)' : 'var(--lw-down)';
+    else if (has) col = 'var(--lw-snap)';
+    var valColor = ((d.key === 'rsi' || d.fmt === 'pct') && has) ? col : 'var(--lw-ink)';
+    var isP = getPins(s._sym).indexOf(d.label) !== -1;
+    return '<div class="lw-ro-card ind-tilecard" style="border-top-color:' + col + '" data-sym="' + esc(s._sym) + '" data-gid="' + esc(d.gid) + '">' +
+      '<div class="lw-ro-card-head"><span class="lw-ro-name">' + esc(d.label) + '</span>' +
+        '<button class="ind-pin' + (isP ? ' on' : '') + '" data-sym="' + esc(s._sym) + '" data-pin="' + esc(d.label) + '" title="Pin indicator">' + (isP ? '★' : '☆') + '</button></div>' +
+      '<div class="lw-ro-val" style="color:' + valColor + '">' + fmtInd(raw, d.fmt) + '</div>' +
+      '<div class="lw-ro-foot"><span class="lw-ro-state" style="color:var(--lw-ink-3)"><span class="d" style="background:' + col + '"></span>' + esc(d.cat) + '</span></div></div>';
   }
   function fmtInd(v, t) { if (v == null) return '—'; if (t === 'bool') return v ? 'yes' : 'no'; if (t === 'pct') return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%'; if (t === 'price') return fmtMoney(v); if (t === 'big') return fmtBig(v); if (t === 'num1') return Number(v).toFixed(1); if (t === 'num2') return Number(v).toFixed(2); if (t === 'num3') return Number(v).toFixed(3); return Number(v).toFixed(1); }
 
