@@ -16,3 +16,4 @@ tests/replay/fixtures/
 .pytest_cache/
 .ruff_cache/
 :memory:/
+docs/gates/
