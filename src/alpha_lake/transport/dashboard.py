@@ -40,7 +40,7 @@ from alpha_lake.derived.indicators import (
     returns,
     vwap,
 )
-from alpha_lake.interpretation import READOUTS, ReadoutDefinition
+from alpha_lake.interpretation import READOUTS
 from alpha_lake.interpretation.profiles import load_threshold_profiles
 from alpha_lake.interpretation.readouts import (
     compute_all_readouts,
@@ -470,7 +470,7 @@ async def symbol_readouts(
         observations = [
             o
             for o in observations
-            if READOUTS.get(o.definition_id, ReadoutDefinition).category in wanted_cats
+            if (defn := READOUTS.get(o.definition_id)) is not None and defn.category in wanted_cats
         ]
     if readout_ids:
         wanted_ids = {r.strip() for r in readout_ids.split(",")}
