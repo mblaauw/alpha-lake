@@ -7,6 +7,7 @@ import polars as pl
 
 from alpha_lake.clock import get_clock
 from alpha_lake.interop import duckdb_to_polars
+from alpha_lake.serving.fundamentals import read_fundamental_metrics_asof
 
 
 def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> None:
@@ -144,6 +145,7 @@ def _infer_dataset(table: str) -> str | None:
         "lake_bars": "bars_daily",
         "corp_actions": "corp_actions",
         "fundamentals": "fundamentals",
+        "fundamental_metrics": "fundamental_metrics",
         "insider_tx": "insider_tx",
         "news_articles": "news",
         "earnings_calendar": "earnings_calendar",
@@ -310,3 +312,15 @@ def read_asof_join(
         source_precedence_dataset=_infer_dataset(dataset),
         snapshot_id=snapshot_id,
     )
+
+
+__all__ = [
+    "pit_read",
+    "read_asof_join",
+    "read_bars_adjusted",
+    "read_bars_asof",
+    "read_bars_latest",
+    "read_fundamental_metrics_asof",
+    "read_macro_series_asof",
+    "read_panel",
+]

@@ -47,8 +47,10 @@ def register_kernel(con: duckdb.DuckDBPyConnection) -> None:
     # schema authority (see epic-308 / issue #364).
     from alpha_lake.interop import generate_ddl
     from alpha_lake.models.bar_fact import BarFact
+    from alpha_lake.models.fundamental_metric_fact import FundamentalMetricFact
 
     con.execute(generate_ddl(BarFact, "lake_bars"))
+    con.execute(generate_ddl(FundamentalMetricFact, "fundamental_metrics"))
     con.execute(
         "CREATE OR REPLACE TEMPORARY VIEW _spine AS "
         "SELECT CAST(NULL AS VARCHAR) AS security_id, "
