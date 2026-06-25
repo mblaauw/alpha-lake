@@ -113,6 +113,18 @@ _ECON_SERIES_MAP: dict[str, dict[str, Any]] = {
     "durables": {"function": "DURABLES"},
     "unemployment": {"function": "UNEMPLOYMENT"},
     "nonfarm_payroll": {"function": "NONFARM_PAYROLL"},
+    # Commodities
+    "wti": {"function": "WTI"},
+    "brent": {"function": "BRENT"},
+    "natural_gas": {"function": "NATURAL_GAS"},
+    "copper": {"function": "COPPER"},
+    "aluminum": {"function": "ALUMINUM"},
+    "wheat": {"function": "WHEAT"},
+    "corn": {"function": "CORN"},
+    "cotton": {"function": "COTTON"},
+    "sugar": {"function": "SUGAR"},
+    "coffee": {"function": "COFFEE"},
+    "all_commodities": {"function": "ALL_COMMODITIES"},
 }
 
 
