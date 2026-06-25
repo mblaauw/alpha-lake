@@ -108,7 +108,7 @@ _config: RootConfig | None = None
 def load_config(path: str | None = None) -> RootConfig:
     global _config
     if path is None:
-        path = os.environ.get("ALPHA_LAKE_CONFIG", "config/stack.toml")
+        path = os.environ.get("ALPHA_LAKE_CONFIG") or "config/stack.toml"
 
     with open(path, "rb") as f:
         raw = tomllib.load(f)
