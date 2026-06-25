@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from typing import Any
+
+import httpx
+
+from alpha_lake.connectors.base import RawFetch, build_manifest, check_budget
+from alpha_lake.source_registry import get_source
+
+_AV_BASE = "https://www.alphavantage.co"
+
+
+async def fetch_fundamentals(symbol: str) -> RawFetch:
+    """Fetch INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW for a symbol.
+
+    Free tier: 25 calls/day, 5 calls/min. Each symbol = 3 calls.
+    Calls are sequenced with a 12-second gap to stay within rate limits.
+    Returns the merged JSON with all three reports in the ``body``.
+    """
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params: dict[str, Any] = {"apikey": cfg.api_key, "symbol": symbol}
+
+    async def _fetch_one(function: str) -> dict[str, Any]:
+        p = {**params, "function": function}
+        async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+            r = await c.get("/query", params=p)
+            r.raise_for_status()
+            return r.json()
+
+    is_data = await _fetch_one("INCOME_STATEMENT")
+    await asyncio.sleep(12)
+    bs_data = await _fetch_one("BALANCE_SHEET")
+    await asyncio.sleep(12)
+    cf_data = await _fetch_one("CASH_FLOW")
+
+    merged = {
+        "source": "alphav",
+        "symbol": symbol,
+        "incomeStatement": is_data,
+        "balanceSheet": bs_data,
+        "cashFlow": cf_data,
+    }
+    body = json.dumps(merged, default=str).encode()
+    manifest = build_manifest(
+        "alphav",
+        "/query",
+        params,
+        body,
+        200,
+        1,
+    )
+    return RawFetch(manifest=manifest, body=body)
