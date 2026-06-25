@@ -168,6 +168,13 @@ base_url = "https://data.sec.gov"
 rate_limit_per_sec = 10.0
 max_retries = 5
 
+[sources.alphav]
+api_key_env = "ALPHA_LAKE_ALPHAV_API_KEY"
+base_url = "https://www.alphavantage.co"
+rate_limit_per_sec = 1.0
+rate_limit_per_day = 25
+max_retries = 3
+
 [sources.openfigi]
 base_url = "https://api.openfigi.com/v3"
 rate_limit_per_sec = 0.33
@@ -197,6 +204,11 @@ base_url = "https://api.quiverquant.com/beta"
 rate_limit_per_sec = 1.0
 rate_limit_per_day = 100
 max_retries = 3
+
+[source_datasets.alphav]
+[source_datasets.alphav.fundamentals]
+enabled = true
+parser_version = 1
 
 [source_datasets.eodhd]
 [source_datasets.eodhd.bars_daily]
@@ -397,6 +409,7 @@ max_staleness_days = 2
 [precedence]
 analyst_estimates = ["finnhub", "fmp"]
 bars_daily = ["eodhd", "tiingo"]
+fundamentals = ["tiingo", "alphav"]
 insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
 sentiment = ["marketaux", "finnhub", "stocktwits"]

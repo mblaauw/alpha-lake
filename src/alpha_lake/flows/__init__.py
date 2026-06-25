@@ -719,17 +719,30 @@ def ingest_dataset(
                 available_at=clock_now,
             )
     elif dataset == "fundamentals":
-        from alpha_lake.normalize import fundamentals_from_json
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import fundamentals_from_json
 
-        df = fundamentals_from_json(
-            raw=records,
-            security_id=kwargs.get("symbol", security_id or "AAPL"),
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
+            df = fundamentals_from_json(
+                raw=records,
+                security_id=kwargs.get("symbol", security_id or "AAPL"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            from alpha_lake.normalize import fundamentals_from_json
+
+            df = fundamentals_from_json(
+                raw=records,
+                security_id=kwargs.get("symbol", security_id or "AAPL"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
     else:
         raise ValueError(f"No normalize function wired for dataset '{dataset}'")
 
