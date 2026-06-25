@@ -44,7 +44,14 @@ _ANALYST_KEYS = ("security_id", "effective_date", "source_id")
 _BARS_KEYS = ("security_id", "effective_date", "source_id")
 _CONGRESS_KEYS = ("transaction_id",)
 _CORP_KEYS = ("security_id", "action_type", "effective_date", "source_id")
-_FUND_KEYS = ("security_id", "fiscal_period", "statement_type", "line_item", "source_id")
+_FUND_KEYS = (
+    "security_id",
+    "period_kind",
+    "period_end",
+    "statement_type",
+    "line_item",
+    "source_id",
+)
 _INSIDER_KEYS = (
     "security_id",
     "filer_cik",
