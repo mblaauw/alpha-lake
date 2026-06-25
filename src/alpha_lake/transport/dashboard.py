@@ -817,17 +817,21 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     _check_enabled()
     if as_of is None:
         as_of = _now()
+    limit = min(limit, 100)
     con = _get_con()
 
     try:
         att = con.execute(
-            "SELECT * FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ", [_aware(as_of)]
+            "SELECT security_id, effective_date, available_at, mentions, rank, cohort, upvotes"
+            " FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ",
+            [_aware(as_of)],
         ).pl()
     except Exception:
         att = pl.DataFrame()
     try:
         sent = con.execute(
-            "SELECT * FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
+            "SELECT security_id, effective_date, available_at, sentiment_label, sentiment_score, annotation_kind"
+            " FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
             [_aware(as_of)],
         ).pl()
     except Exception:
