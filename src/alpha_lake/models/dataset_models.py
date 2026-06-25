@@ -10,12 +10,20 @@ class FundamentalFact(pt.Model):
     effective_date: datetime.date
     available_at: datetime.datetime
     source_id: str
+    source_published_at: datetime.datetime | None = None
+    ingested_at: datetime.datetime | None = None
+    validated_at: datetime.datetime | None = None
     fiscal_period: str
+    period_kind: str
+    period_end: datetime.date
+    measurement_kind: str
     statement_type: str
     line_item: str
     value: float
     currency: str = "USD"
+    source_currency: str = "USD"
     unit: str = "raw"
+    source_priority: int | None = None
     source_fetch_id: str
     raw_payload_hash: str
     ingestion_run_id: str

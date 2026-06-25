@@ -23,12 +23,20 @@ def _make(name: str) -> list[str]:
             "effective_date",
             "available_at",
             "source_id",
+            "source_published_at",
+            "ingested_at",
+            "validated_at",
             "fiscal_period",
+            "period_kind",
+            "period_end",
+            "measurement_kind",
             "statement_type",
             "line_item",
             "value",
             "currency",
+            "source_currency",
             "unit",
+            "source_priority",
             "source_fetch_id",
             "raw_payload_hash",
             "ingestion_run_id",
@@ -212,6 +220,9 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "source_dataset_version",
         "security_id",
         "name",
+        "measurement_kind",
+        "period_kind",
+        "source_currency",
     }
     int_cols = {
         "schema_version",
@@ -223,6 +234,7 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "unique_author_count",
         "mentions",
         "mentions_24h_ago",
+        "source_priority",
     }
     float_cols = {
         "value",
@@ -237,7 +249,7 @@ def _td(name: str, **kw) -> pl.DataFrame:
         "negative_share",
         "velocity_score",
     }
-    date_cols = {"window_start", "window_end", "report_date", "effective_date"}
+    date_cols = {"window_start", "window_end", "report_date", "effective_date", "period_end"}
     dt_cols = {"available_at", "published_at", "source_published_at", "ingested_at", "validated_at"}
 
     data = {}
@@ -273,11 +285,25 @@ def test_fundamental_fact():
         available_at=datetime(2025, 1, 2, 12, 0),
         source_id="sec",
         fiscal_period="2024Q4",
-        statement_type="BS",
-        line_item="Assets",
+        period_kind="quarter",
+        period_end=date(2024, 12, 28),
+        measurement_kind="instant",
+        statement_type="balance_sheet",
+        line_item="total_assets",
         value=1000000.0,
     )
     assert FundamentalFact.validate(df).height == 1
+    assert set(FundamentalFact.columns).issuperset(
+        {
+            "period_kind",
+            "period_end",
+            "measurement_kind",
+            "source_currency",
+            "source_published_at",
+            "ingested_at",
+            "validated_at",
+        }
+    )
 
 
 def test_insider_tx_fact():
@@ -393,6 +419,7 @@ def test_normalize_value():
 
 
 def test_standardize_line_item():
-    assert standardize_line_item("Total Assets") == "Assets"
-    assert standardize_line_item("EPS") == "EarningsPerShare"
+    assert standardize_line_item("Total Assets") == "total_assets"
+    assert standardize_line_item("EPS") == "diluted_eps"
+    assert standardize_line_item("Operating Cash Flow") == "operating_cash_flow"
     assert standardize_line_item("custom_item") == "custom_item"

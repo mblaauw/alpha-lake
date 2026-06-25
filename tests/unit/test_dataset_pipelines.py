@@ -76,8 +76,11 @@ def test_write_datasets():
                 security_id="sec_t",
                 source_id="sec",
                 fiscal_period="2024Q4",
-                statement_type="BS",
-                line_item="Assets",
+                period_kind="quarter",
+                period_end=date(2024, 12, 28),
+                measurement_kind="instant",
+                statement_type="balance_sheet",
+                line_item="total_assets",
                 value=1e6,
             ),
         ),
@@ -167,4 +170,45 @@ def test_write_datasets():
         assert count == 1
         assert row == 1, f"{table}: expected 1 row, got {row}"
 
+    con.close()
+
+
+def test_fundamentals_restatement_creates_new_available_at_version():
+    con = duckdb.connect()
+    con.execute("SET timezone = 'UTC'")
+    base = dict(
+        security_id="sec_t",
+        source_id="sec",
+        fiscal_period="2024Q4",
+        period_kind="quarter",
+        period_end=date(2024, 12, 28),
+        measurement_kind="flow",
+        statement_type="income_statement",
+        line_item="revenue",
+        value=100.0,
+    )
+    first = _mk(
+        "fundamentals",
+        **base,
+        available_at=datetime(2025, 1, 30, 12, 0, tzinfo=UTC),
+    )
+    restated = _mk(
+        "fundamentals",
+        **{**base, "value": 105.0},
+        available_at=datetime(2025, 2, 15, 12, 0, tzinfo=UTC),
+    )
+
+    assert write_dataset(con, "fundamentals", first) == 1
+    assert write_dataset(con, "fundamentals", restated) == 1
+
+    rows = con.execute(
+        """
+        SELECT value, available_at, version_hash
+        FROM fundamentals
+        WHERE security_id = 'sec_t' AND line_item = 'revenue'
+        ORDER BY available_at
+        """
+    ).fetchall()
+    assert [row[0] for row in rows] == [100.0, 105.0]
+    assert rows[0][2] != rows[1][2]
     con.close()
