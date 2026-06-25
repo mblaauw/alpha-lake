@@ -7,10 +7,11 @@ from pydantic import BaseModel
 
 
 class HealthResponse(BaseModel):
-    status: str
-    row_count: int
-    snapshot_count: int
-    synthetic_mode: bool
+    snapshots: int = 0
+    latest_snapshot_id: str | None = None
+    synthetic_mode: bool = False
+
+    model_config = {"extra": "allow"}
 
 
 class SymbolInfo(BaseModel):
