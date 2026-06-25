@@ -228,3 +228,100 @@ def test_fundamental_reader_applies_central_threshold_profile():
     assert row["tone"][0] == "gray"
     assert row["display_value"][0] == "40.00%"
     con.close()
+
+
+def test_pe_unavailable_for_non_positive_denominator():
+    con = _con()
+    metric_id = "fundamentals.profitability.diluted_eps_ttm"
+    price_metric = "fundamentals.valuation.price_to_earnings_ttm"
+
+    for eps, expected_reason in [
+        (0.0, "non_positive_denominator"),
+        (-5.0, "non_positive_denominator"),
+    ]:
+        write_dataset(
+            con,
+            "fundamental_metrics",
+            _metric(
+                metric_id,
+                eps,
+                date(2025, 3, 31),
+                datetime(2025, 5, 1, tzinfo=UTC),
+                category="profitability",
+                unit="currency",
+                currency="USD",
+            ),
+        )
+        write_bars(con, _bar(100.0, date(2025, 5, 5), datetime(2025, 5, 5, 21, tzinfo=UTC)))
+
+        result = read_fundamental_metrics_asof(
+            con, ["sec_t"], datetime(2025, 5, 10, tzinfo=UTC), categories=["valuation"]
+        )
+
+        row = result.filter(pl.col("metric_id") == price_metric)
+        assert row["value"][0] is None
+        assert row["quality_status"][0] in ("not_meaningful", "unavailable")
+        assert row["unavailable_reason"][0] == expected_reason
+
+        con.execute("DELETE FROM fundamental_metrics")
+        con.execute("DELETE FROM lake_bars")
+    con.close()
+
+
+def test_ps_uses_revenue_ttm():
+    con = _con()
+    write_dataset(
+        con,
+        "fundamental_metrics",
+        _metric(
+            "fundamentals.scale.revenue_ttm",
+            500.0,
+            date(2025, 3, 31),
+            datetime(2025, 5, 1, tzinfo=UTC),
+            category="Scale",
+            unit="currency",
+            currency="USD",
+        ),
+    )
+    write_dataset(
+        con,
+        "fundamental_metrics",
+        _metric(
+            "fundamentals.scale.revenue_per_share_ttm",
+            25.0,
+            date(2025, 3, 31),
+            datetime(2025, 5, 1, tzinfo=UTC),
+            category="Scale",
+            unit="currency",
+            currency="USD",
+        ),
+    )
+    write_bars(con, _bar(200.0, date(2025, 5, 5), datetime(2025, 5, 5, 21, tzinfo=UTC)))
+
+    result = read_fundamental_metrics_asof(
+        con, ["sec_t"], datetime(2025, 5, 10, tzinfo=UTC), categories=["valuation"]
+    )
+
+    ps = result.filter(pl.col("metric_id") == "fundamentals.valuation.price_to_sales_ttm")
+    assert ps.height == 1
+    assert ps["value"][0] == pytest.approx(200.0 / 25.0)
+    assert ps["quality_status"][0] == "valid"
+    con.close()
+
+
+def test_pit_excludes_metrics_not_yet_available_at_as_of():
+    con = _con()
+    metric_id = "fundamentals.profitability.gross_margin_ttm"
+
+    write_dataset(
+        con,
+        "fundamental_metrics",
+        _metric(metric_id, 40.0, date(2025, 3, 31), datetime(2025, 5, 1, tzinfo=UTC)),
+    )
+
+    before = read_fundamental_metrics_asof(con, ["sec_t"], datetime(2025, 4, 1, tzinfo=UTC))
+    assert before.filter(pl.col("metric_id") == metric_id).is_empty()
+
+    after = read_fundamental_metrics_asof(con, ["sec_t"], datetime(2025, 5, 15, tzinfo=UTC))
+    assert not after.filter(pl.col("metric_id") == metric_id).is_empty()
+    con.close()

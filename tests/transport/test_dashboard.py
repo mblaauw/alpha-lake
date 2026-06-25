@@ -11,9 +11,34 @@ import subprocess
 import pytest
 from fastapi.testclient import TestClient  # type: ignore[unresolved-import]
 
+from alpha_lake import config as _cfg_mod
+from alpha_lake.config import LakeConfig, RootConfig, S3Config, TransportConfig
+from alpha_lake.interpretation.fundamentals_glossary import FUNDAMENTAL_GLOSSARY
 from alpha_lake.transport.app import app
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def _enable_dashboard():
+    cfg = RootConfig(
+        lake=LakeConfig(
+            runtime="embedded",
+            catalog="ducklake:sqlite::memory:",
+            canonical_data_path="/tmp/lake/",
+            raw_archive_uri="/tmp/lake/",
+            calendar_version="4.13.2",
+        ),
+        transport=TransportConfig(dashboard_enabled=True),
+        s3=S3Config(),
+    )
+    saved = _cfg_mod._config
+    _cfg_mod._config = cfg
+    from alpha_lake.transport import app as tapp
+
+    tapp._DASHBOARD_ENABLED = None
+    yield
+    _cfg_mod._config = saved
 
 
 def _stack_available() -> bool:
@@ -26,7 +51,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except subprocess.SubprocessError, FileNotFoundError, OSError:
         return False
 
 
@@ -81,3 +106,24 @@ def test_bars_requires_auth():
     """Existing /v1/bars should require API key."""
     resp = client.get("/v1/bars?symbol=AAPL")
     assert resp.status_code == 401
+
+
+def test_dashboard_fundamentals_glossary_returns_entries(_enable_dashboard):
+    resp = client.get("/v1/dashboard/fundamentals/glossary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == len(FUNDAMENTAL_GLOSSARY)
+    ids = {e["metric_id"] for e in data}
+    assert "fundamentals.scale.revenue_ttm" in ids
+    assert "fundamentals.valuation.price_to_earnings_ttm" in ids
+
+
+def test_dashboard_fundamentals_glossary_category_filter(_enable_dashboard):
+    resp = client.get("/v1/dashboard/fundamentals/glossary?categories=Valuation")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    for entry in data:
+        assert entry["category"] == "Valuation"
+    assert len(data) == 3
