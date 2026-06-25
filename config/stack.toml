@@ -212,6 +212,9 @@ parser_version = 1
 [source_datasets.alphav.insider_transactions]
 enabled = true
 parser_version = 1
+[source_datasets.alphav.institutional_holdings]
+enabled = true
+parser_version = 1
 [source_datasets.alphav.fundamentals]
 enabled = true
 parser_version = 1
