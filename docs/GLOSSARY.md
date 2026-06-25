@@ -418,14 +418,19 @@ Number of trading days available in the lookback window for the symbol. Used to 
 
 ## Fundamentals
 
-Fundamental metrics are derived from SEC EDGAR company filings and computed
-read-time valuations. Categories match the dashboard **Fundamentals** tab:
-**Scale**, **Profitability**, **Cash Flow Quality**, **Growth**, **Financial Health**,
+Fundamental metrics are derived from SEC EDGAR company filings, analyst
+estimates, earnings calendar events, and read-time valuations. Categories match
+the dashboard **Fundamentals** tab: **Scale**, **Profitability**, **Cash Flow
+Quality**, **Growth**, **Financial Health**, **Estimates**, **Events**,
 **Valuation**.
 
 Metrics with `⚠ not materialized` are registered for API exploration but are not
 yet produced by the batch compute pipeline. They will return `unavailable` with
 condition `not_materialized`.
+
+Metrics with `⚠ no source data` are registered for API exploration but depend on
+data sources not yet connected. They will return `unavailable` with condition
+`no_source_data`.
 
 ### Scale
 
@@ -539,6 +544,59 @@ Total debt divided by total equity as of the most recent quarter.
 `total_debt / total_equity`
 Category: Financial Health · Basis: mrq · Unit: multiple
 
+### Estimates
+
+The following are computed at read time from the latest PIT-safe analyst estimates
+snapshot. Metrics marked `⚠ no source data` depend on forward EPS/revenue
+estimates not yet available from current connectors.
+
+#### Target Price
+Mean analyst price target from the latest available consensus.
+`latest_analyst_target_mean`
+Category: Estimates · Basis: snapshot · Unit: currency
+
+#### Target High
+Highest analyst price target from the latest available consensus.
+`latest_analyst_target_high`
+Category: Estimates · Basis: snapshot · Unit: currency
+
+#### Target Low
+Lowest analyst price target from the latest available consensus.
+`latest_analyst_target_low`
+Category: Estimates · Basis: snapshot · Unit: currency
+
+#### Buy Ratio
+Percentage of analyst ratings that are buy or strong buy.
+`(strong_buy + buy) / (strong_buy + buy + hold + sell + strong_sell) × 100`
+Category: Estimates · Basis: snapshot · Unit: percent
+
+#### Forward EPS Growth
+Projected year-over-year EPS growth based on consensus forward estimates.
+`(forward_eps − trailing_eps) / |trailing_eps|`
+Category: Estimates · Basis: snapshot · Unit: percent · ⚠ no source data
+
+#### EPS Revision (30d)
+Percentage change in consensus EPS estimate over the last 30 days.
+`(current_eps_estimate − eps_estimate_30d_ago) / |eps_estimate_30d_ago|`
+Category: Estimates · Basis: snapshot · Unit: percent · ⚠ no source data
+
+#### Revenue Revision (30d)
+Percentage change in consensus revenue estimate over the last 30 days.
+`(current_revenue_estimate − revenue_estimate_30d_ago) / |revenue_estimate_30d_ago|`
+Category: Estimates · Basis: snapshot · Unit: percent · ⚠ no source data
+
+### Events
+
+#### Days to Earnings
+Number of calendar days until the next confirmed earnings report date.
+`next_earnings_report_date − as_of`
+Category: Events · Basis: snapshot · Unit: days
+
+#### Earnings Surprise
+Percentage difference between actual and estimated EPS for the latest reported quarter.
+`(actual_eps − estimated_eps) / |estimated_eps| × 100`
+Category: Events · Basis: snapshot · Unit: percent · ⚠ no source data
+
 ### Valuation (read-time)
 
 The following are computed at read time by combining the latest available price
@@ -581,4 +639,5 @@ versioned TOML-derived data in `src/alpha_lake/interpretation/fundamentals_gloss
 | `cash_conversion_v1` | discrete | FCF/net income: low (<0.5×), median (0.5–1×), high (≥1×) |
 | `share_count_change_v1` | discrete | Share count Δ: diluting, stable, reducing |
 | `payout_ratio_v1` | discrete | Payout ratio: low (<20%), median (20–60%), high (≥60%) |
-| `estimate_revision_v1` | discrete | Analyst revision direction (not yet implemented) |
+| `estimate_revision_v1` | discrete | Analyst revision direction |
+| `proximity_v1` | discrete | Time proximity: imminent (<3d), near (3–14d), distant (≥14d) |

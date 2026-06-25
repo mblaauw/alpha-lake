@@ -696,6 +696,17 @@ def ingest_dataset(
             content_hash=content_hash,
             available_at=clock_now,
         )
+    elif dataset == "earnings_calendar":
+        from alpha_lake.normalize import earnings_calendar_from_json
+
+        df = earnings_calendar_from_json(
+            raw=records,
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
     else:
         raise ValueError(f"No normalize function wired for dataset '{dataset}'")
 

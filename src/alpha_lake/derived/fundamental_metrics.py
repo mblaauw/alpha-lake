@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
@@ -694,6 +694,184 @@ def _quarter_number(fiscal_period: str) -> int | None:
 def _fiscal_year(fiscal_period: str, period_end: date) -> int:
     match = re.search(r"(20\d{2}|19\d{2})", fiscal_period)
     return int(match.group(1)) if match else period_end.year
+
+
+def compute_estimate_metrics(
+    estimates: pl.DataFrame,
+    earnings: pl.DataFrame,
+    as_of: datetime,
+    *,
+    ingestion_run_id: str = "",
+    calculation_version: str = CALCULATION_VERSION,
+) -> pl.DataFrame:
+    """Compute estimate and event metrics from analyst estimates and earnings calendar data.
+
+    Parameters
+    ----------
+    estimates
+        Canonical ``AnalystEstimateFact``-shaped rows, pre-filtered to PIT boundary.
+    earnings
+        Canonical ``EarningsEventFact``-shaped rows, pre-filtered to PIT boundary.
+    as_of
+        The knowledge timestamp for PIT resolution.
+    """
+    if estimates.is_empty() and earnings.is_empty():
+        return _empty_output()
+
+    rows: list[dict[str, Any]] = []
+
+    if not estimates.is_empty():
+        estimates = estimates.filter(pl.col("available_at") <= as_of)
+    if not earnings.is_empty():
+        earnings = earnings.filter(pl.col("available_at") <= as_of)
+
+    # ── Estimate metrics ────────────────────────────────────────────────
+    if not estimates.is_empty():
+        est_sids = sorted({str(r["security_id"]) for r in estimates.rows(named=True)})
+        for sid in est_sids:
+            sid_df = estimates.filter(pl.col("security_id") == sid)
+            pe = _pick_latest_estimate(sid_df)
+            if pe is None:
+                continue
+            ts = pe["available_at"]
+            item = _snapshot_item(pe["effective_date"], ts)
+
+            # target_price
+            if pe.get("target_mean") is not None:
+                rows.append(
+                    _metric_row(
+                        sid,
+                        "fundamentals.estimates.target_price",
+                        "Estimates",
+                        item,
+                        float(pe["target_mean"]),
+                        "currency",
+                        ingestion_run_id,
+                        calculation_version,
+                    )
+                )
+            # target_high
+            if pe.get("target_high") is not None:
+                rows.append(
+                    _metric_row(
+                        sid,
+                        "fundamentals.estimates.target_high",
+                        "Estimates",
+                        item,
+                        float(pe["target_high"]),
+                        "currency",
+                        ingestion_run_id,
+                        calculation_version,
+                    )
+                )
+            # target_low
+            if pe.get("target_low") is not None:
+                rows.append(
+                    _metric_row(
+                        sid,
+                        "fundamentals.estimates.target_low",
+                        "Estimates",
+                        item,
+                        float(pe["target_low"]),
+                        "currency",
+                        ingestion_run_id,
+                        calculation_version,
+                    )
+                )
+            # buy_ratio
+            _add_estimate_buy_ratio(rows, sid, pe, item, ingestion_run_id, calculation_version)
+
+    # ── Event metrics ───────────────────────────────────────────────────
+    if not earnings.is_empty():
+        earn_sids = sorted({str(r["security_id"]) for r in earnings.rows(named=True)})
+        for sid in earn_sids:
+            sid_df = earnings.filter(pl.col("security_id") == sid)
+            next_rows = sid_df.filter(pl.col("report_date") > as_of.date()).sort("report_date")
+            if next_rows.is_empty():
+                continue
+            rd = next_rows["report_date"][0]
+            if rd is None:
+                continue
+            ptr = next_rows["available_at"][0]
+            item = _snapshot_item(rd, ptr if isinstance(ptr, datetime) else as_of)
+            days = (rd - as_of.date()).days
+            rows.append(
+                _metric_row(
+                    sid,
+                    "fundamentals.events.days_to_earnings",
+                    "Events",
+                    item,
+                    float(days),
+                    "days",
+                    ingestion_run_id,
+                    calculation_version,
+                )
+            )
+
+    if not rows:
+        return _empty_output()
+    df = pl.DataFrame(rows)
+    df = compute_version_hash(df)
+    if "normalization_version" in df.columns:
+        df = df.drop("normalization_version")
+    df = df.with_columns(
+        pl.col("currency").cast(pl.String),
+        pl.col("source_currency").cast(pl.String),
+        pl.col("period_end").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+    return FundamentalMetricFact.validate(df)
+
+
+def _pick_latest_estimate(df: pl.DataFrame) -> dict[str, Any] | None:
+    """Pick the latest estimate row by effective_date and available_at."""
+    sorted_df = df.sort(["effective_date", "available_at"], descending=True)
+    row = sorted_df.rows(named=True)
+    return row[0] if row else None
+
+
+def _snapshot_item(period_end: date, available_at: datetime) -> dict[str, Any]:
+    return {
+        "period_kind": "snapshot",
+        "period_end": period_end if isinstance(period_end, date) else date.today(),
+        "available_at": available_at if isinstance(available_at, datetime) else datetime.now(UTC),
+        "currency": "USD",
+        "source_currency": "USD",
+        "source_period_ends": [],
+        "source_version_hashes": [],
+        "calculation_basis": "latest_estimate",
+    }
+
+
+def _add_estimate_buy_ratio(
+    rows: list[dict[str, Any]],
+    sid: str,
+    pe: dict[str, Any],
+    item: dict[str, Any],
+    run_id: str,
+    calc_version: str,
+) -> None:
+    sb = pe.get("strong_buy", 0)
+    b = pe.get("buy", 0)
+    h = pe.get("hold", 0)
+    s = pe.get("sell", 0)
+    ss = pe.get("strong_sell", 0)
+    total = sb + b + h + s + ss
+    if total <= 0:
+        return
+    ratio = (sb + b) / total * 100.0
+    rows.append(
+        _metric_row(
+            sid,
+            "fundamentals.estimates.buy_ratio",
+            "Estimates",
+            item,
+            ratio,
+            "percent",
+            run_id,
+            calc_version,
+        )
+    )
 
 
 def _empty_output() -> pl.DataFrame:

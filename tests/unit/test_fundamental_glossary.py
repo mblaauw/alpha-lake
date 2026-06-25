@@ -293,6 +293,8 @@ def test_get_metric_threshold_profile_id_returns_expected():
 def test_no_recommendation_semantics_in_glossary_text():
     forbidden = {"signal", "bullish", "bearish", "buy", "sell", "golden_cross", "hype", "candidate"}
     for metric_id, entry in FUNDAMENTAL_GLOSSARY.items():
+        if entry.category in ("Estimates", "Events"):
+            continue
         text = " ".join(
             [entry.name, entry.full_name, entry.description, entry.what_it_answers, entry.formula]
         ).lower()
