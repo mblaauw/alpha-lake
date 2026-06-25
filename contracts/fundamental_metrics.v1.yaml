@@ -1,0 +1,74 @@
+dataset: fundamental_metrics
+version: 1
+description: Long-form derived fundamental period metrics with metric-specific provenance.
+
+primary_key:
+  - security_id
+  - metric_id
+  - period_kind
+  - period_end
+
+partition_key:
+  - period_end
+
+pit_columns:
+  valid_time: period_end
+  knowledge_time: available_at
+
+required_fields:
+  - security_id
+  - metric_id
+  - metric_version
+  - category
+  - period_kind
+  - period_end
+  - available_at
+  - unit
+  - source_period_ends
+  - source_version_hashes
+  - calculation_basis
+  - quality_status
+  - calculation_version
+  - version_hash
+  - ingestion_run_id
+
+nullable_fields:
+  - value
+  - currency
+  - source_currency
+
+allowed_values:
+  period_kind: [quarter, fiscal_year, ttm, mrq]
+  category:
+    - scale
+    - valuation
+    - profitability
+    - growth
+    - financial_health
+    - cash_flow_quality
+    - capital_allocation
+    - estimates_events
+
+identity:
+  metric_namespace: fundamentals.<category>.<metric>
+  metric_version: semantic metric definition version
+  calculation_version: semantic calculation implementation version
+
+provenance:
+  source_period_ends: JSON array of fiscal period end dates used as inputs
+  source_version_hashes: JSON array of canonical input version hashes
+  calculation_basis: stable text identifier for the formula/input basis
+
+quality_status:
+  allowed: [valid, stale, degraded, unavailable, not_meaningful, not_applicable]
+
+compatibility:
+  additive_nullable: compatible
+  required_field_change: major
+  type_change: major
+  pk_change: major
+
+notes:
+  - "One row stores one metric observation; adding metrics must not require schema churn."
+  - "Price-linked valuation metrics are read-time calculations and are not materialized here."
+  - "The row preserves input periods, input version hashes, and calculation version for restatement audits."

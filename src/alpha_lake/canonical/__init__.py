@@ -24,6 +24,7 @@ from alpha_lake.models.dataset_models import (
     SocialPostFact,
 )
 from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
+from alpha_lake.models.fundamental_metric_fact import FundamentalMetricFact
 from alpha_lake.models.macro_fact import MacroSeriesFact
 from alpha_lake.models.market_breadth_fact import MarketBreadthFact
 from alpha_lake.models.relative_strength_fact import RelativeStrengthFact
@@ -52,6 +53,7 @@ _FUND_KEYS = (
     "line_item",
     "source_id",
 )
+_FUND_METRIC_KEYS = ("security_id", "metric_id", "period_kind", "period_end")
 _INSIDER_KEYS = (
     "security_id",
     "filer_cik",
@@ -76,6 +78,7 @@ DATASETS: dict[str, Dataset] = {
     "lake_bars": Dataset("lake_bars", BarFact, _BARS_KEYS),
     "corp_actions": Dataset("corp_actions", CorpActionFact, _CORP_KEYS),
     "fundamentals": Dataset("fundamentals", FundamentalFact, _FUND_KEYS),
+    "fundamental_metrics": Dataset("fundamental_metrics", FundamentalMetricFact, _FUND_METRIC_KEYS),
     "insider_tx": Dataset("insider_tx", InsiderTxFact, _INSIDER_KEYS),
     "news_articles": Dataset("news_articles", NewsArticleFact, ("article_id", "source_id")),
     "social_posts": Dataset("social_posts", SocialPostFact, ("post_id_hash", "source_id")),
