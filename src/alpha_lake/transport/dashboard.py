@@ -53,11 +53,11 @@ from alpha_lake.transport._glossary import _GLOSSARY
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
-    _compute_warmup,
+    _compute_and_serialize_indicators,
+    _fetch_bars,
     _now,
     _parse_indicators,
     _pl_to_dicts,
-    _serialize_bars_df,
     _validate_price_mode,
 )
 
@@ -271,23 +271,13 @@ async def bars(
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
     _validate_price_mode(price_mode)
-    sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
-
-    kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
-    if start:
-        kwargs["start_date"] = start
-    if end:
-        kwargs["end_date"] = end
-    if snapshot_id:
-        kwargs["snapshot_id"] = snapshot_id
-    if price_mode != "raw":
-        kwargs["price_mode"] = price_mode
-
-    if price_mode != "raw":
-        df = read_bars_adjusted(_get_con(), **kwargs)
-    else:
-        df = read_bars_asof(_get_con(), **kwargs)
-    return JSONResponse(_pl_to_dicts(df))
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    return JSONResponse(
+        _fetch_bars(
+            con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
+        )
+    )
 
 
 @router.get("/bars/indicators")
@@ -306,51 +296,15 @@ async def bars_indicators(
     if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
         raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
 
-    sec_id = resolve_security(_get_con(), symbol, as_of=as_of.date())
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
         if name not in _INDICATOR_MAP:
             raise HTTPException(422, f"Unknown indicator: {name}")
 
-    warmup_start = start
-    for name, args in parsed:
-        w = _compute_warmup(name, args, start)
-        if w and (warmup_start is None or w < warmup_start):
-            warmup_start = w
-
-    kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
-    if warmup_start:
-        kwargs["start_date"] = warmup_start
-    if end:
-        kwargs["end_date"] = end
-
-    bars_df = read_bars_asof(_get_con(), **kwargs)
-    if bars_df.height == 0:
-        return JSONResponse([])
-
-    bars_df = bars_df.sort("effective_date")
-    result = _serialize_bars_df(bars_df)
-
-    for name, args in parsed:
-        fn = _INDICATOR_MAP[name]
-        if name == "atr":
-            series = fn(bars_df["high"], bars_df["low"], bars_df["close"], *args)
-            result[name] = [float(x) if x is not None else None for x in series]
-        elif name in ("bollinger", "macd"):
-            bands = fn(bars_df["close"], *args)
-            if isinstance(bands, dict):
-                for k, v in bands.items():
-                    result[f"{name}_{k}"] = [float(x) if x is not None else None for x in v]
-        else:
-            series = fn(bars_df["close"], *args)
-            result[name] = [float(x) if x is not None else None for x in series]
-
-    if start and warmup_start and warmup_start < start:
-        mask = [str(d) >= start.isoformat() for d in bars_df["effective_date"].to_list()]
-        for key in list(result.keys()):
-            result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
-
+    result = _compute_and_serialize_indicators(con, sec_id, parsed, as_of, start=start, end=end)
     return JSONResponse(result)
 
 
