@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -8,85 +7,14 @@ import duckdb
 import polars as pl
 
 from alpha_lake.interop import duckdb_to_polars
+from alpha_lake.interpretation.fundamentals_glossary import (
+    get_metric_threshold_profile_id,
+    get_threshold_profile,
+    resolve_fundamental_state,
+)
 
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 _PRICE_CURRENCY = "USD"
-
-
-@dataclass(frozen=True)
-class ThresholdBand:
-    state: str
-    tone: str
-    label: str
-    min_value: float | None = None
-    max_value: float | None = None
-
-
-@dataclass(frozen=True)
-class ThresholdProfile:
-    profile_id: str
-    bands: tuple[ThresholdBand, ...]
-
-
-_THRESHOLD_PROFILES: dict[str, ThresholdProfile] = {
-    "margin_percent_v1": ThresholdProfile(
-        "margin_percent_v1",
-        (
-            ThresholdBand("low", "red", "low", max_value=10.0),
-            ThresholdBand("middle", "amber", "middle", min_value=10.0, max_value=30.0),
-            ThresholdBand("high", "green", "high", min_value=30.0),
-        ),
-    ),
-    "growth_percent_v1": ThresholdProfile(
-        "growth_percent_v1",
-        (
-            ThresholdBand("contracting", "red", "contracting", max_value=-0.01),
-            ThresholdBand("stable", "gray", "stable", min_value=-0.01, max_value=0.01),
-            ThresholdBand("expanding", "green", "expanding", min_value=0.01),
-        ),
-    ),
-    "leverage_multiple_v1": ThresholdProfile(
-        "leverage_multiple_v1",
-        (
-            ThresholdBand("low", "green", "low", max_value=2.0),
-            ThresholdBand("middle", "amber", "middle", min_value=2.0, max_value=4.0),
-            ThresholdBand("high", "red", "high", min_value=4.0),
-        ),
-    ),
-    "liquidity_multiple_v1": ThresholdProfile(
-        "liquidity_multiple_v1",
-        (
-            ThresholdBand("low", "red", "low", max_value=1.0),
-            ThresholdBand("middle", "amber", "middle", min_value=1.0, max_value=2.0),
-            ThresholdBand("high", "green", "high", min_value=2.0),
-        ),
-    ),
-    "valuation_multiple_v1": ThresholdProfile(
-        "valuation_multiple_v1",
-        (
-            ThresholdBand("low", "green", "low", min_value=0.0, max_value=15.0),
-            ThresholdBand("middle", "gray", "middle", min_value=15.0, max_value=30.0),
-            ThresholdBand("high", "amber", "high", min_value=30.0),
-        ),
-    ),
-}
-
-_METRIC_PROFILE_IDS: dict[str, str] = {
-    "fundamentals.profitability.gross_margin_ttm": "margin_percent_v1",
-    "fundamentals.profitability.operating_margin_ttm": "margin_percent_v1",
-    "fundamentals.profitability.ebitda_margin_ttm": "margin_percent_v1",
-    "fundamentals.profitability.net_margin_ttm": "margin_percent_v1",
-    "fundamentals.profitability.fcf_margin_ttm": "margin_percent_v1",
-    "fundamentals.growth.revenue_yoy_ttm": "growth_percent_v1",
-    "fundamentals.growth.eps_diluted_yoy_ttm": "growth_percent_v1",
-    "fundamentals.growth.ebitda_yoy_ttm": "growth_percent_v1",
-    "fundamentals.financial_health.net_debt_to_ebitda_ttm": "leverage_multiple_v1",
-    "fundamentals.financial_health.current_ratio_mrq": "liquidity_multiple_v1",
-    "fundamentals.financial_health.debt_to_equity_mrq": "leverage_multiple_v1",
-    "fundamentals.valuation.price_to_earnings_ttm": "valuation_multiple_v1",
-    "fundamentals.valuation.price_to_sales_ttm": "valuation_multiple_v1",
-    "fundamentals.valuation.price_to_fcf_ttm": "valuation_multiple_v1",
-}
 
 _VALUATION_INPUTS: dict[str, tuple[str, str]] = {
     "fundamentals.valuation.price_to_earnings_ttm": (
@@ -272,7 +200,14 @@ def _enrich_metric(
     unavailable_reason: str = "",
 ) -> dict[str, Any]:
     state = _state_for(row)
-    threshold_state, tone, label, profile_id = _threshold(row["metric_id"], row.get("value"), state)
+    profile_id = get_metric_threshold_profile_id(row["metric_id"])
+    profile = get_threshold_profile(profile_id) if profile_id else None
+    if state != "available" or row.get("value") is None:
+        threshold_state, tone, label = state, "gray", state.replace("_", " ")
+    elif profile is not None:
+        threshold_state, tone, label = resolve_fundamental_state(profile, row["value"])
+    else:
+        threshold_state, tone, label = "available", "gray", "available"
     return {
         **row,
         "state": state,
@@ -299,26 +234,6 @@ def _state_for(row: dict[str, Any]) -> str:
     if row.get("value") is None:
         return "unavailable"
     return "available"
-
-
-def _threshold(metric_id: str, value: Any, state: str) -> tuple[str, str, str, str]:
-    if state != "available" or value is None:
-        return state, "gray", state.replace("_", " "), ""
-    profile_id = _METRIC_PROFILE_IDS.get(metric_id, "")
-    profile = _THRESHOLD_PROFILES.get(profile_id)
-    if profile is None:
-        return "available", "gray", "available", ""
-    numeric = float(value)
-    for band in profile.bands:
-        if _band_matches(band, numeric):
-            return band.state, band.tone, band.label, profile.profile_id
-    return "available", "gray", "available", profile.profile_id
-
-
-def _band_matches(band: ThresholdBand, value: float) -> bool:
-    if band.min_value is not None and value < band.min_value:
-        return False
-    return not (band.max_value is not None and value > band.max_value)
 
 
 def _display_value(value: Any, unit: Any) -> str:

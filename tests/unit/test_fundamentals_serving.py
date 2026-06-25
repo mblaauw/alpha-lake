@@ -223,8 +223,8 @@ def test_fundamental_reader_applies_central_threshold_profile():
     row = result.filter(pl.col("metric_id") == metric_id)
 
     assert row["state"][0] == "available"
-    assert row["threshold_profile_id"][0] == "margin_percent_v1"
-    assert row["threshold_state"][0] == "high"
-    assert row["tone"][0] == "green"
+    assert row["threshold_profile_id"][0] == "profitability_peer_percentile_v1"
+    assert row["threshold_state"][0] == "raw_value"
+    assert row["tone"][0] == "gray"
     assert row["display_value"][0] == "40.00%"
     con.close()
