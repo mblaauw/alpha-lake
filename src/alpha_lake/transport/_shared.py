@@ -1,3 +1,5 @@
+"""Shared utilities for the Alpha-Lake REST API transport layer."""
+
 from __future__ import annotations
 
 import json
@@ -9,7 +11,7 @@ import polars as pl  # type: ignore[unresolved-import]
 
 from alpha_lake.calendar_ import shift_trading_days
 from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
-from alpha_lake.serving import read_bars_adjusted, read_bars_asof
+from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof
 
 _INDICATOR_MAP: dict[str, Any] = {
     "sma": sma,
@@ -43,10 +45,8 @@ _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 
 
 def _validate_price_mode(price_mode: str) -> None:
-    """Raise ``HTTPException(422)`` on invalid ``price_mode`` values."""
     if price_mode not in _VALID_PRICE_MODES:
         from fastapi import HTTPException
-
         raise HTTPException(
             422,
             f"Unknown price_mode '{price_mode}'. Valid: {sorted(_VALID_PRICE_MODES)}",
@@ -54,10 +54,6 @@ def _validate_price_mode(price_mode: str) -> None:
 
 
 def _serialize_bars_df(df: pl.DataFrame) -> dict[str, list[Any]]:
-    """Convert a bars DataFrame (row-oriented) to a JSON-safe column-oriented dict.
-
-    Handles datetime -> isoformat, float from numeric, str from string columns.
-    """
     result: dict[str, list[Any]] = {}
     for col in df.columns:
         if col in ("effective_date",):
@@ -88,16 +84,6 @@ def _now() -> datetime:
 
 
 def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
-    """Parse indicator spec like ``sma:20;ema:12;bollinger:20,2;macd:12,26,9``.
-
-    Supports two separator styles:
-    - ``;`` separates indicators, ``:`` separates name from comma-delimited args.
-    - Legacy: ``sma,ema,rsi`` (bare names, no args — separated by ``,``, only
-      used when no ``:`` or ``;`` is present).
-
-    Args that represent whole numbers are returned as ``int`` so they pass
-    cleanly to window-size parameters.
-    """
     sep = ";" if ";" in spec or ":" in spec else ","
     result: list[tuple[str, list[int | float]]] = []
     for part in spec.split(sep):
@@ -135,11 +121,9 @@ def _fundamental_row_to_item(
 ) -> dict[str, Any]:
     if _get_glossary_entry is None:
         from alpha_lake.interpretation.fundamentals_glossary import get_glossary_entry
-
         _get_glossary_entry = get_glossary_entry
     if _get_threshold_profile is None:
         from alpha_lake.interpretation.fundamentals_glossary import get_threshold_profile
-
         _get_threshold_profile = get_threshold_profile
 
     entry = _get_glossary_entry(row["metric_id"])
@@ -238,11 +222,6 @@ def _fetch_bars(
     snapshot_id: str | None = None,
     price_mode: str = "raw",
 ) -> list[dict[str, Any]]:
-    """Fetch bars for a pre-validated security.
-
-    All inputs (sec_id, as_of, price_mode, lookback) must be validated
-    by the caller. This function only builds kwargs and queries.
-    """
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
     if start:
         kwargs["start_date"] = start
@@ -256,6 +235,64 @@ def _fetch_bars(
     return _pl_to_dicts(df)
 
 
+def _fetch_dataset(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    sec_id: str,
+    as_of: datetime,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    snapshot_id: str | None = None,
+    source_precedence_dataset: str | None = None,
+) -> list[dict[str, Any]]:
+    kwargs: dict[str, Any] = {
+        "table": table,
+        "security_ids": [sec_id],
+        "as_of": as_of,
+    }
+    if start:
+        kwargs["start_date"] = start
+    if end:
+        kwargs["end_date"] = end
+    if snapshot_id:
+        kwargs["snapshot_id"] = snapshot_id
+    if source_precedence_dataset:
+        kwargs["source_precedence_dataset"] = source_precedence_dataset
+    df = pit_read(con, **kwargs)
+    return _pl_to_dicts(df)
+
+
+def _dataset_health(
+    con: duckdb.DuckDBPyConnection,
+    tables: list[str],
+    *,
+    snapshot_id: str | None = None,
+) -> dict[str, dict[str, object]]:
+    datasets: dict[str, dict[str, object]] = {}
+    for table in tables:
+        try:
+            row = con.execute(
+                "SELECT COUNT(*) AS cnt, MAX(effective_date) AS latest, MAX(available_at) AS newest "
+                f"FROM {table}"
+            ).fetchone()
+            count = row[0] if row else 0
+            latest_eff = str(row[1]) if row and row[1] else None
+            latest_avail = str(row[2]) if row and row[2] else None
+            datasets[table] = {
+                "status": "ok" if count > 0 else "empty",
+                "row_count": count,
+                "latest_effective_date": latest_eff,
+                "latest_available_at": latest_avail,
+            }
+        except Exception as exc:
+            datasets[table] = {"status": "error", "detail": str(exc)}
+    result: dict[str, dict[str, object]] = {"datasets": datasets}
+    if snapshot_id:
+        result["snapshot_id"] = snapshot_id
+    return result
+
+
 def _compute_and_serialize_indicators(
     con: duckdb.DuckDBPyConnection,
     sec_id: str,
@@ -265,12 +302,6 @@ def _compute_and_serialize_indicators(
     start: date | None = None,
     end: date | None = None,
 ) -> dict[str, list[Any]]:
-    """Compute requested indicators and return a column-oriented dict.
-
-    ``parsed`` must be pre-validated (all names in ``_INDICATOR_MAP``).
-    The warmup window is computed automatically to ensure stable indicator
-    values at the requested ``start`` date.
-    """
     parsed = [(n, list(a) if a else list(_DEFAULT_ARGS.get(n, []))) for n, a in parsed]
     warmup_start = start
     for name, args in parsed:

@@ -1,6 +1,6 @@
 """FastAPI application for the Alpha-Lake REST API.
 
-This module defines the authenticated REST endpoints (/v1/bars, /v1/health, …),
+This module defines the authenticated REST endpoints (/v1/bars, /v1/health, ),
 the dashboard gate, and static file mounting. Shared indicator/format utilities
 live in ``_shared.py``.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 
@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-i
 from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
+from alpha_lake.calendar_ import is_trading_day
 from alpha_lake.catalog import catalog_health, connect
 from alpha_lake.config import get_config, load_config
 from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
@@ -31,7 +32,9 @@ from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
     _compute_and_serialize_indicators,
+    _dataset_health,
     _fetch_bars,
+    _fetch_dataset,
     _fundamental_row_to_item,
     _now,
     _parse_indicators,
@@ -243,7 +246,125 @@ async def fundamentals_glossary(
     return JSONResponse(payloads)
 
 
-# ── Dashboard / static —─────────────────────────────────────────────────────
+# ── Insider Transactions ────────────────────────────────────────────────────
+
+
+@app.get("/v1/insider-transactions/{symbol}")
+async def insider_transactions(
+    request: Request,
+    symbol: str,
+    as_of: datetime | None = None,
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    rows = _fetch_dataset(
+        con, "insider_tx", sec_id, as_of, snapshot_id=snapshot_id,
+        source_precedence_dataset="insider_tx",
+    )
+    if not rows:
+        raise HTTPException(404, f"No insider data for symbol: {symbol}")
+    return JSONResponse({"symbol": symbol, "as_of": as_of.isoformat(), "transactions": rows})
+
+
+# ── Earnings Calendar ───────────────────────────────────────────────────────
+
+
+@app.get("/v1/earnings-calendar")
+async def earnings_calendar(
+    request: Request,
+    symbol: str | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    as_of: datetime | None = None,
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date()) if symbol else None
+    if sec_id is None and symbol:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    rows = _fetch_dataset(
+        con, "earnings_calendar", sec_id or "", as_of,
+        start=start, end=end, snapshot_id=snapshot_id,
+    )
+    return JSONResponse({"as_of": as_of.isoformat(), "earnings": rows})
+
+
+# ── Attention Metrics ───────────────────────────────────────────────────────
+
+
+@app.get("/v1/attention-metrics/{symbol}")
+async def attention_metrics(
+    request: Request,
+    symbol: str,
+    days: int = 30,
+    as_of: datetime | None = None,
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    start = as_of.date() - timedelta(days=days - 1)
+    rows = _fetch_dataset(
+        con, "attention_metrics", sec_id, as_of,
+        start=start, end=as_of.date(), snapshot_id=snapshot_id,
+    )
+    if not rows:
+        raise HTTPException(404, f"No attention data for symbol: {symbol}")
+    return JSONResponse({"symbol": symbol, "as_of": as_of.isoformat(), "mentions": rows})
+
+
+# ── Trading Calendar ────────────────────────────────────────────────────────
+
+
+@app.get("/v1/trading-calendar")
+async def trading_calendar(
+    request: Request,
+    start: date,
+    end: date,
+    as_of: datetime | None = None,
+):
+    _auth(request)
+    _ = as_of
+    days: list[dict[str, object]] = []
+    current = start
+    while current <= end:
+        open_day = is_trading_day(current)
+        days.append({
+            "date": current.isoformat(),
+            "is_open": open_day,
+            "session": "regular" if open_day else None,
+        })
+        current += timedelta(days=1)
+    return JSONResponse({"start": start.isoformat(), "end": end.isoformat(), "days": days})
+
+
+# ── Dataset Health ──────────────────────────────────────────────────────────
+
+
+@app.get("/v1/dataset-health")
+async def dataset_health(
+    request: Request,
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    con = _get_con()
+    tables = [
+        "lake_bars", "fundamentals", "insider_tx",
+        "earnings_calendar", "attention_metrics",
+    ]
+    return _dataset_health(con, tables, snapshot_id=snapshot_id)
+
+
+# ── Dashboard / static ──────────────────────────────────────────────────────
 
 _DASHBOARD_ENABLED: bool | None = None
 
@@ -288,7 +409,7 @@ async def service_worker():
     return FileResponse(sw, media_type="application/javascript")
 
 
-# ── Dashboard API router —───────────────────────────────────────────────────
+# ── Dashboard API router ────────────────────────────────────────────────────
 
 from alpha_lake.transport.dashboard import router as dashboard_router  # noqa: E402
 

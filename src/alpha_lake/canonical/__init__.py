@@ -24,13 +24,16 @@ from alpha_lake.models.dataset_models import (
     SocialPostFact,
 )
 from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
+from alpha_lake.models.etp_profile_fact import ETPProfileFact
 from alpha_lake.models.fundamental_metric_fact import FundamentalMetricFact
 from alpha_lake.models.insider_transaction_fact import InsiderTransactionFact
 from alpha_lake.models.institutional_holding_fact import InstitutionalHoldingFact
+from alpha_lake.models.ipo_event_fact import IPOEventFact
 from alpha_lake.models.macro_fact import MacroSeriesFact
 from alpha_lake.models.market_breadth_fact import MarketBreadthFact
 from alpha_lake.models.relative_strength_fact import RelativeStrengthFact
 from alpha_lake.models.technical_fact import TechnicalIndicatorFact
+from alpha_lake.models.top_mover_fact import TopMoverFact
 from alpha_lake.models.vol_term_structure_fact import VolTermStructureFact
 
 NORMALIZATION_VERSION: int = 1
@@ -102,6 +105,11 @@ DATASETS: dict[str, Dataset] = {
     "relative_strength": Dataset("relative_strength", RelativeStrengthFact, _RS_KEYS),
     "market_breadth": Dataset("market_breadth", MarketBreadthFact, _BREADTH_KEYS),
     "vol_term_structure": Dataset("vol_term_structure", VolTermStructureFact, _VOL_TERM_KEYS),
+    "etf_profiles": Dataset("etf_profiles", ETPProfileFact, ("security_id", "source_id")),
+    "ipo_calendar": Dataset("ipo_calendar", IPOEventFact, ("symbol", "source_id")),
+    "top_movers": Dataset(
+        "top_movers", TopMoverFact, ("security_id", "effective_date", "mover_type", "source_id")
+    ),
 }
 
 

@@ -486,7 +486,7 @@ def ingest_dataset(
         _now = get_clock().now()
         kwargs["from_date"] = from_date or _now.strftime("%Y-%m-01")
         kwargs["to_date"] = to_date or _now.strftime("%Y-%m-%d")
-    elif dataset == "congress_trades":
+    elif dataset in ("congress_trades", "top_movers", "ipo_calendar", "listing_status"):
         pass
     else:
         kwargs["symbol"] = security_id or "AAPL"
@@ -799,6 +799,49 @@ def ingest_dataset(
             from alpha_lake.normalize.alphav import institutional_holdings_from_json
 
             df = institutional_holdings_from_json(
+                raw=records,
+                security_id=kwargs.get("symbol", security_id or "AAPL"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            raise ValueError(f"No normalize function for {src}/{dataset}")
+    elif dataset == "top_movers":
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import top_movers_from_json
+
+            df = top_movers_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            raise ValueError(f"No normalize function for {src}/{dataset}")
+    elif dataset == "ipo_calendar":
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import ipo_calendar_from_json
+
+            df = ipo_calendar_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            raise ValueError(f"No normalize function for {src}/{dataset}")
+    elif dataset == "etf_profiles":
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import etf_profile_from_json
+
+            df = etf_profile_from_json(
                 raw=records,
                 security_id=kwargs.get("symbol", security_id or "AAPL"),
                 source_id=src,

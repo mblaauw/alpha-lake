@@ -6,13 +6,12 @@ from typing import TYPE_CHECKING
 from alpha_lake.connectors.alpaca_bars import fetch_daily_bars as _alpaca_bars
 from alpha_lake.connectors.alphav import fetch_corp_actions as _alphav_corp_actions
 from alpha_lake.connectors.alphav import fetch_econ_indicator as _alphav_econ
+from alpha_lake.connectors.alphav import fetch_etf_profile as _alphav_etf
 from alpha_lake.connectors.alphav import fetch_fundamentals as _alphav_fundamentals
-from alpha_lake.connectors.alphav import (
-    fetch_insider_transactions as _alphav_insider_tx,
-)
-from alpha_lake.connectors.alphav import (
-    fetch_institutional_holdings as _alphav_holdings,
-)
+from alpha_lake.connectors.alphav import fetch_insider_transactions as _alphav_insider_tx
+from alpha_lake.connectors.alphav import fetch_institutional_holdings as _alphav_holdings
+from alpha_lake.connectors.alphav import fetch_ipo_calendar as _alphav_ipo
+from alpha_lake.connectors.alphav import fetch_top_movers as _alphav_movers
 from alpha_lake.connectors.apewisdom import fetch_attention as _apewisdom
 from alpha_lake.connectors.corp_actions_eodhd import fetch_splits as _eodhd_splits
 from alpha_lake.connectors.corp_actions_tiingo import fetch_splits as _tiingo_splits
@@ -78,6 +77,9 @@ register("alphav", "macro_series", _alphav_econ)
 register("alphav", "fundamentals", _alphav_fundamentals)
 register("alphav", "insider_transactions", _alphav_insider_tx)
 register("alphav", "institutional_holdings", _alphav_holdings)
+register("alphav", "etf_profiles", _alphav_etf)
+register("alphav", "ipo_calendar", _alphav_ipo)
+register("alphav", "top_movers", _alphav_movers)
 register("alpaca", "bars_daily", _alpaca_bars)
 register("apewisdom", "attention_metrics", _apewisdom)
 register("eodhd", "bars_daily", _eodhd_bars)

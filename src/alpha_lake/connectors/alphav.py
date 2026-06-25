@@ -173,3 +173,55 @@ async def fetch_corp_actions(symbol: str) -> RawFetch:
     body = json.dumps(merged, default=str).encode()
     manifest = build_manifest("alphav", "/query", params, body, 200, 1)
     return RawFetch(manifest=manifest, body=body)
+
+
+async def fetch_top_movers() -> RawFetch:
+    """Fetch TOP_GAINERS_LOSERS. Single call, no symbol needed."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params = {"apikey": cfg.api_key, "function": "TOP_GAINERS_LOSERS"}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)
+
+
+async def fetch_etf_profile(symbol: str) -> RawFetch:
+    """Fetch ETF_PROFILE for a symbol."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params = {"apikey": cfg.api_key, "symbol": symbol, "function": "ETF_PROFILE"}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)
+
+
+async def fetch_ipo_calendar() -> RawFetch:
+    """Fetch IPO_CALENDAR. Single call, no symbol needed."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params = {"apikey": cfg.api_key, "function": "IPO_CALENDAR"}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)
+
+
+async def fetch_listing_status() -> RawFetch:
+    """Fetch LISTING_STATUS. Returns active/delisted US stocks & ETFs."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params = {"apikey": cfg.api_key, "function": "LISTING_STATUS"}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)

@@ -156,6 +156,14 @@ News and social datasets are **experimental** (tier 3), disabled by default, and
 Do not add or expand text connectors unless explicitly requested and the dataset config posture is
 updated first. Deepen core facts (bars, fundamentals, corp actions, reconciliation) instead.
 
+## Alpha Vantage connector
+
+All AV connectors live in `src/alpha_lake/connectors/alphav.py` and are named
+`fetch_<dataset>(...)`. The normalize functions are in
+`src/alpha_lake/normalize/alphav.py`. Precedence for fundamentals is
+`tiingo → alphav`. AV uses free tier (25 calls/day, 5 calls/min) — respect this
+in any batch ingestion work. See ADR-0030 for architecture details.
+
 ## Relevant Files
 
 - `src/alpha_lake/derived/indicators.py` — 57+ indicator functions (SMA, EMA, RSI, MACD, Bollinger, ATR, OBV, VWAP, ADX, Aroon, CCI, stochastic, Keltner, Donchian, WMA, KAMA, beta, alpha, etc.)
