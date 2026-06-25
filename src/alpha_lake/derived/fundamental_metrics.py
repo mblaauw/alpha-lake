@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import polars as pl
@@ -371,18 +371,62 @@ def _derive_q4(annual: dict[str, Any], first_three: list[dict[str, Any]]) -> dic
     }
 
 
+def _consecutive_quarters(rows: list[dict[str, Any]]) -> bool:
+    """Verify rows form four consecutive standalone fiscal quarters."""
+    if len(rows) != 4:
+        return False
+    q_nums: list[int | None] = [_quarter_number(r.get("fiscal_period", "")) for r in rows]
+    years: list[int] = [_fiscal_year(r.get("fiscal_period", ""), r["period_end"]) for r in rows]
+    if any(q is None for q in q_nums):
+        return False
+    qs = [q for q in q_nums if q is not None]
+    expected = _expected_quarter_sequence(qs[0])
+    return qs == expected and _year_gap_ok(years, q_nums)
+
+
+def _expected_quarter_sequence(first_q: int) -> list[int]:
+    if first_q == 1:
+        return [1, 2, 3, 4]
+    if first_q == 2:
+        return [2, 3, 4, 1]
+    if first_q == 3:
+        return [3, 4, 1, 2]
+    return [4, 1, 2, 3]
+
+
+def _year_gap_ok(years: list[int], q_nums: list[int | None]) -> bool:
+    """Check fiscal-year transitions across the 4-quarter window."""
+    qs: list[int] = [q for q in q_nums if q is not None]
+    if len(qs) != 4:
+        return False
+    offset = 0
+    for i in range(1, 4):
+        if qs[i] < qs[i - 1]:
+            offset += 1
+        expected_year = years[0] + offset
+        if years[i] != expected_year:
+            return False
+    return offset <= 1
+
+
 def _latest_ttm(quarters: dict[str, list[dict[str, Any]]], item: str) -> dict[str, Any] | None:
     rows = quarters.get(item, [])
     if len(rows) < 4:
         return None
-    return _aggregate(rows[-4:], "sum_last_four_standalone_quarters")
+    candidate = rows[-4:]
+    if not _consecutive_quarters(candidate):
+        return None
+    return _aggregate(candidate, "sum_last_four_standalone_quarters")
 
 
 def _prior_ttm(quarters: dict[str, list[dict[str, Any]]], item: str) -> dict[str, Any] | None:
     rows = quarters.get(item, [])
     if len(rows) < 8:
         return None
-    return _aggregate(rows[-8:-4], "sum_prior_four_standalone_quarters")
+    candidate = rows[-8:-4]
+    if not _consecutive_quarters(candidate):
+        return None
+    return _aggregate(candidate, "sum_prior_four_standalone_quarters")
 
 
 def _aggregate(rows: list[dict[str, Any]], basis: str) -> dict[str, Any]:
@@ -833,8 +877,8 @@ def _pick_latest_estimate(df: pl.DataFrame) -> dict[str, Any] | None:
 def _snapshot_item(period_end: date, available_at: datetime) -> dict[str, Any]:
     return {
         "period_kind": "snapshot",
-        "period_end": period_end if isinstance(period_end, date) else date.today(),
-        "available_at": available_at if isinstance(available_at, datetime) else datetime.now(UTC),
+        "period_end": period_end,
+        "available_at": available_at,
         "currency": "USD",
         "source_currency": "USD",
         "source_period_ends": [],

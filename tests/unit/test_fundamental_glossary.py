@@ -4,6 +4,7 @@ import json
 
 from alpha_lake.interpretation.fundamentals_glossary import (
     FUNDAMENTAL_GLOSSARY,
+    FUNDAMENTALS_OVERVIEW,
     get_glossary_entry,
     get_metric_threshold_profile_id,
     get_threshold_profile,
@@ -174,17 +175,17 @@ def test_discrete_growth_boundary_exact_cutoffs():
     profile = get_threshold_profile("growth_yoy_v1")
     assert profile is not None
 
-    state, tone, _ = resolve_fundamental_state(profile, -0.02)
+    state, tone, _ = resolve_fundamental_state(profile, -2.0)
     assert state == "contracting"
     assert tone == "red"
 
-    state, tone, _ = resolve_fundamental_state(profile, -0.01)
+    state, tone, _ = resolve_fundamental_state(profile, -1.0)
     assert state == "stable"
 
     state, tone, _ = resolve_fundamental_state(profile, 0.0)
     assert state == "stable"
 
-    state, tone, _ = resolve_fundamental_state(profile, 0.01)
+    state, tone, _ = resolve_fundamental_state(profile, 1.0)
     assert state == "expanding"
     assert tone == "green"
 
@@ -288,6 +289,32 @@ def test_get_metric_threshold_profile_id_returns_expected():
         == "leverage_v1"
     )
     assert get_metric_threshold_profile_id("nonexistent.metric") == ""
+
+
+def test_overview_ids_all_exist_in_glossary():
+    for mid in FUNDAMENTALS_OVERVIEW:
+        entry = get_glossary_entry(mid)
+        assert entry is not None, f"overview ID {mid} missing from glossary"
+        assert entry.implemented, f"overview ID {mid} has implemented=False"
+
+
+def test_every_overview_id_has_a_dashboard_category():
+    known = {
+        "Scale",
+        "Valuation",
+        "Profitability",
+        "Growth",
+        "Financial Health",
+        "Cash Flow Quality",
+        "Cash Flow",
+        "Capital Allocation",
+        "Estimates",
+        "Events",
+    }
+    for mid in FUNDAMENTALS_OVERVIEW:
+        entry = get_glossary_entry(mid)
+        assert entry is not None
+        assert entry.category in known, f"{mid} has unknown category {entry.category}"
 
 
 def test_no_recommendation_semantics_in_glossary_text():

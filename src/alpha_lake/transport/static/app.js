@@ -701,13 +701,12 @@
   function fmtInd(v, t) { if (v == null) return '—'; if (t === 'bool') return v ? 'yes' : 'no'; if (t === 'pct') return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%'; if (t === 'price') return fmtMoney(v); if (t === 'big') return fmtBig(v); if (t === 'num1') return Number(v).toFixed(1); if (t === 'num2') return Number(v).toFixed(2); if (t === 'num3') return Number(v).toFixed(3); return Number(v).toFixed(1); }
 
   /* ════ FUNDAMENTALS ════ */
-  var FUND_CATS = [['Overview', 'Overview'], ['Valuation', 'Valuation'], ['Profitability', 'Profitability'], ['Growth', 'Growth'], ['Financial Health', 'Financial Health'], ['Cash Flow', 'Cash Flow'], ['Capital Allocation', 'Capital Allocation'], ['Scale', 'Scale'], ['Capital Efficiency', 'Capital Efficiency'], ['Estimates', 'Estimates']];
-  var _OVERVIEW = ['fundamentals.scale.revenue_ttm', 'fundamentals.valuation.price_to_earnings_ttm', 'fundamentals.valuation.ev_to_ebitda', 'fundamentals.cash_flow_quality.fcf_yield', 'fundamentals.growth.revenue_growth_yoy', 'fundamentals.growth.diluted_eps_growth_yoy', 'fundamentals.profitability.operating_margin_ttm', 'fundamentals.capital_efficiency.return_on_invested_capital', 'fundamentals.financial_health.net_debt_to_ebitda', 'fundamentals.financial_health.current_ratio', 'fundamentals.cash_flow_quality.fcf_conversion', 'fundamentals.capital_allocation.shares_outstanding_growth'];
+  var FUND_CATS = [['Overview', 'Overview'], ['Valuation', 'Valuation'], ['Profitability', 'Profitability'], ['Growth', 'Growth'], ['Financial Health', 'Financial Health'], ['Cash Flow', 'Cash Flow'], ['Scale', 'Scale'], ['Estimates', 'Estimates']];
   var _fundPins = getJSON('lw_fund_pins', {});
   function getFundPins(sym) { return _fundPins[sym] || []; }
   function setFundPins(sym, arr) { _fundPins[sym] = arr; setLS('lw_fund_pins', JSON.stringify(_fundPins)); }
-  var _fundGlossary = null, _fundGlossaryReq = null;
-  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (g) { _fundGlossary = g || {}; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
+  var _fundGlossary = null, _fundGlossaryReq = null, _fundOverviewIds = [];
+  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (r) { _fundGlossary = (r && r.entries) || {}; _fundOverviewIds = (r && r.overview_ids) || []; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
   var _fundCache = null;
   function renderFundamentals(c) {
     c.innerHTML =
@@ -765,7 +764,7 @@
       var sorted = metrics.slice().sort(function (a, b) { return (a.name || a.metric_id) < (b.name || b.metric_id) ? -1 : 1; });
       html += fundGroup('All · A-Z', byPin(sorted));
     } else {
-      var overviewItems = metrics.filter(function (m) { return _OVERVIEW.indexOf(m.metric_id) !== -1; });
+      var overviewItems = metrics.filter(function (m) { return _fundOverviewIds.indexOf(m.metric_id) !== -1; });
       if (overviewItems.length) html += fundGroup('Overview', byPin(overviewItems));
       FUND_CATS.forEach(function (cat) {
         if (cat[0] === 'Overview') return;
