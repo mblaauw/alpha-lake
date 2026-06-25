@@ -208,6 +208,9 @@ def _enrich_metric(
         threshold_state, tone, label = resolve_fundamental_state(profile, row["value"])
     else:
         threshold_state, tone, label = "available", "gray", "available"
+    display_val = _display_value(row.get("value"), row.get("unit"))
+    if state == "not_meaningful" and unavailable_reason:
+        display_val = f"N/M · {unavailable_reason.replace('_', ' ')}"
     return {
         **row,
         "state": state,
@@ -215,7 +218,7 @@ def _enrich_metric(
         "threshold_state": threshold_state,
         "tone": tone,
         "label": label,
-        "display_value": _display_value(row.get("value"), row.get("unit")),
+        "display_value": display_val,
         "display_decimals": _display_decimals(row.get("unit")),
         "display_suffix": _display_suffix(row.get("unit")),
         "unavailable_reason": unavailable_reason,

@@ -224,7 +224,7 @@ def test_fundamental_reader_applies_central_threshold_profile():
 
     assert row["state"][0] == "available"
     assert row["threshold_profile_id"][0] == "profitability_peer_percentile_v1"
-    assert row["threshold_state"][0] == "raw_value"
+    assert row["threshold_state"][0] == "contextual"
     assert row["tone"][0] == "gray"
     assert row["display_value"][0] == "40.00%"
     con.close()

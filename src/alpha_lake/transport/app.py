@@ -181,6 +181,7 @@ async def fundamentals_metrics(
     request: Request,
     symbol: str,
     as_of: datetime | None = None,
+    snapshot_id: str | None = None,
     categories: str | None = None,
     metric_ids: str | None = None,
     include: str | None = None,
@@ -206,6 +207,7 @@ async def fundamentals_metrics(
         categories=cat_list,
         metric_ids=mid_list,
         price_mode=price_mode,
+        snapshot_id=snapshot_id,
     )
 
     if df.is_empty():
@@ -218,6 +220,7 @@ async def fundamentals_metrics(
         {
             "symbol": symbol,
             "as_of": as_of.isoformat(),
+            "snapshot_id": snapshot_id,
             "metrics": metrics,
             "metadata": {
                 "computed_at": _now().isoformat(),

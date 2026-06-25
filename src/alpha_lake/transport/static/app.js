@@ -706,7 +706,7 @@
   function getFundPins(sym) { return _fundPins[sym] || []; }
   function setFundPins(sym, arr) { _fundPins[sym] = arr; setLS('lw_fund_pins', JSON.stringify(_fundPins)); }
   var _fundGlossary = null, _fundGlossaryReq = null, _fundOverviewIds = [];
-  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (r) { _fundGlossary = (r && r.entries) || {}; _fundOverviewIds = (r && r.overview_ids) || []; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
+  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (r) { var entries = (r && r.entries) || []; _fundGlossary = {}; entries.forEach(function (e) { _fundGlossary[e.metric_id] = e; }); _fundOverviewIds = (r && r.overview_ids) || []; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
   var _fundCache = null;
   function renderFundamentals(c) {
     c.innerHTML =
@@ -799,9 +799,19 @@
     var valColor = isUnavail ? 'var(--lw-ink-3)' : col;
     var stateTxt = m.label || title(m.threshold_state || 'available');
     var isP = getFundPins(state.fundSymbol).indexOf(m.metric_id) !== -1;
-    var tipDesc = '';
-    if (m.unavailable_reason) tipDesc = esc(m.unavailable_reason.replace(/_/g, ' '));
-    return '<div class="lw-ro-card" style="border-top-color:' + borderCol + '" data-tip-name="' + esc(m.name) + '" data-tip-body="' + tipDesc + '">' +
+    var g = _fundGlossary && _fundGlossary[m.metric_id];
+    var tipBody = '';
+    if (g) {
+      if (g.what_it_answers) tipBody += esc(g.what_it_answers);
+      if (g.formula) tipBody += '<br><br><b>Formula:</b> <code>' + esc(g.formula) + '</code>';
+      if (g.inputs && g.inputs.length) tipBody += '<br><b>Inputs:</b> ' + esc(g.inputs.join(', '));
+      if (g.basis) tipBody += '<br><b>Basis:</b> ' + esc(g.basis);
+      if (m.unavailable_reason) tipBody += '<br><br><b>' + esc(m.unavailable_reason.replace(/_/g, ' ')) + '</b>';
+    } else {
+      if (m.unavailable_reason) tipBody = esc(m.unavailable_reason.replace(/_/g, ' '));
+    }
+    var tipFormula = g ? (g.formula || '') : '';
+    return '<div class="lw-ro-card" style="border-top-color:' + borderCol + '" data-tip-name="' + esc(m.name) + '" data-tip-body="' + tipBody + '" data-tip-formula="' + esc(tipFormula) + '">' +
       '<div class="lw-ro-card-head"><span class="lw-ro-name">' + esc(m.name) + '</span>' +
         '<button class="ind-pin' + (isP ? ' on' : '') + '" data-sym="' + esc(state.fundSymbol) + '" data-pin="' + esc(m.metric_id) + '" title="Pin metric">' + (isP ? '★' : '☆') + '</button></div>' +
       '<div class="lw-ro-val" style="color:' + valColor + '">' + esc(valTxt) + '</div>' +

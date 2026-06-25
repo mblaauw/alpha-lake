@@ -193,17 +193,15 @@ def test_discrete_growth_boundary_exact_cutoffs():
 def test_discrete_valuation_boundary_exact_cutoffs():
     profile = get_threshold_profile("relative_valuation_multiple_v1")
     assert profile is not None
+    assert profile.method == "context"
 
     state, tone, _ = resolve_fundamental_state(profile, 10.0)
-    assert state == "low"
+    assert state == "contextual"
     assert tone == "gray"
 
-    state, tone, _ = resolve_fundamental_state(profile, 15.0)
-    assert state == "median_range"
-
     state, tone, _ = resolve_fundamental_state(profile, 30.0)
-    assert state == "high"
-    assert tone == "amber"
+    assert state == "contextual"
+    assert tone == "gray"
 
 
 def test_discrete_none_returns_unavailable():
@@ -215,41 +213,22 @@ def test_discrete_none_returns_unavailable():
     assert label == "unavailable"
 
 
-def test_peer_percentile_returns_gray_raw_value_without_baseline():
+def test_peer_percentile_returns_contextual_without_baseline():
     profile = get_threshold_profile("profitability_peer_percentile_v1")
     assert profile is not None
-    assert profile.method == "peer_percentile"
-    assert profile.min_peer_count > 0
+    assert profile.method == "context"
 
     state, tone, label = resolve_fundamental_state(profile, 40.0)
-    assert state == "raw_value"
+    assert state == "contextual"
     assert tone == "gray"
-    assert "peer data insufficient" in label
-
-
-def test_peer_percentile_returns_gray_raw_value_with_insufficient_peers():
-    profile = get_threshold_profile("profitability_peer_percentile_v1")
-    assert profile is not None
-
-    state, tone, _ = resolve_fundamental_state(profile, 40.0, has_peer_baseline=True, peer_count=2)
-    assert state == "raw_value"
-    assert tone == "gray"
-
-
-def test_peer_percentile_returns_raw_value_with_sufficient_peers_but_not_implemented():
-    profile = get_threshold_profile("profitability_peer_percentile_v1")
-    assert profile is not None
-
-    state, tone, _ = resolve_fundamental_state(profile, 40.0, has_peer_baseline=True, peer_count=10)
-    assert state == "raw_value"
-    assert tone == "gray"
+    assert label == "contextual"
 
 
 def test_peer_percentile_none_returns_unavailable():
     profile = get_threshold_profile("profitability_peer_percentile_v1")
     assert profile is not None
 
-    state, _, _ = resolve_fundamental_state(profile, None, has_peer_baseline=True, peer_count=10)
+    state, _, _ = resolve_fundamental_state(profile, None)
     assert state == "unavailable"
 
 
@@ -279,7 +258,7 @@ def test_glossary_to_json_includes_threshold_profile_metadata():
     )
     assert pe_entry["threshold_profile"] is not None
     assert pe_entry["threshold_profile"]["profile_id"] == "relative_valuation_multiple_v1"
-    assert len(pe_entry["threshold_profile"]["bands"]) == 3
+    assert isinstance(pe_entry["threshold_profile"]["bands"], list)
 
 
 def test_get_metric_threshold_profile_id_returns_expected():

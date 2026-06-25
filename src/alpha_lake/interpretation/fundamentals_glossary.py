@@ -62,15 +62,9 @@ FUNDAMENTAL_THRESHOLDS: dict[str, FundamentalThresholdProfile] = {
     "relative_valuation_multiple_v1": FundamentalThresholdProfile(
         "relative_valuation_multiple_v1",
         "1.0.0",
-        "discrete",
-        "Absolute bands for price-relative multiples (P/E, P/S, P/FCF).",
-        bands=(
-            FundamentalBand("low", TONE_GRAY, "low", min_value=0.0, max_value=15.0),
-            FundamentalBand(
-                "median_range", TONE_GRAY, "median range", min_value=15.0, max_value=30.0
-            ),
-            FundamentalBand("high", TONE_AMBER, "high", min_value=30.0),
-        ),
+        "context",
+        "Peer/history baseline unavailable; displays raw value until peer reader exists.",
+        bands=(),
     ),
     "yield_v1": FundamentalThresholdProfile(
         "yield_v1",
@@ -88,14 +82,10 @@ FUNDAMENTAL_THRESHOLDS: dict[str, FundamentalThresholdProfile] = {
     "profitability_peer_percentile_v1": FundamentalThresholdProfile(
         "profitability_peer_percentile_v1",
         "1.0.0",
-        "peer_percentile",
-        "Profitability margins classified against a peer baseline; requires sufficient peers.",
-        min_peer_count=5,
-        bands=(
-            FundamentalBand("below_median", TONE_GRAY, "below median"),
-            FundamentalBand("median_range", TONE_GRAY, "median range"),
-            FundamentalBand("above_median", TONE_GRAY, "above median"),
-        ),
+        "context",
+        "Peer baseline unavailable; margins display as contextual until peer reader exists.",
+        min_peer_count=0,
+        bands=(),
     ),
     "roic_absolute_v1": FundamentalThresholdProfile(
         "roic_absolute_v1",
