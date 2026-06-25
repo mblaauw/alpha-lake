@@ -84,6 +84,55 @@ def _parse_date(s: str) -> date | None:
         return None
 
 
+def _append_row(
+    rows: list[dict[str, Any]],
+    security_id: str,
+    effective_date: date,
+    available_at: datetime,
+    source_id: str,
+    fiscal_period: str,
+    period_kind: str,
+    period_end: date,
+    measurement_kind: str,
+    statement_type: str,
+    line_item: str,
+    value: float,
+    source_fetch_id: str,
+    content_hash: str,
+    ingestion_run_id: str,
+) -> None:
+    rows.append(
+        {
+            "security_id": security_id,
+            "effective_date": effective_date,
+            "available_at": available_at,
+            "source_id": source_id,
+            "source_published_at": available_at,
+            "ingested_at": available_at,
+            "validated_at": None,
+            "fiscal_period": fiscal_period,
+            "period_kind": period_kind,
+            "period_end": period_end,
+            "measurement_kind": measurement_kind,
+            "statement_type": statement_type,
+            "line_item": line_item,
+            "value": value,
+            "currency": "USD",
+            "source_currency": "USD",
+            "unit": "raw",
+            "source_priority": None,
+            "source_fetch_id": source_fetch_id,
+            "raw_payload_hash": content_hash,
+            "ingestion_run_id": ingestion_run_id,
+            "content_hash": content_hash,
+            "version_hash": "",
+            "schema_version": 1,
+            "parser_version": 1,
+            "quality_status": "valid",
+        }
+    )
+
+
 def fundamentals_from_json(
     raw: list[dict[str, Any]],
     security_id: str,
@@ -126,35 +175,11 @@ def fundamentals_from_json(
                     val = _av_value(report.get(av_key))
                     if val is None:
                         continue
-                    rows.append(
-                        {
-                            "security_id": security_id,
-                            "effective_date": period_end,
-                            "available_at": available_at,
-                            "source_id": source_id,
-                            "source_published_at": available_at,
-                            "ingested_at": available_at,
-                            "validated_at": None,
-                            "fiscal_period": fiscal_period,
-                            "period_kind": period_kind_label,
-                            "period_end": period_end,
-                            "measurement_kind": measure_kind,
-                            "statement_type": stmt_type,
-                            "line_item": line_item,
-                            "value": val,
-                            "currency": "USD",
-                            "source_currency": "USD",
-                            "unit": "raw",
-                            "source_priority": None,
-                            "source_fetch_id": source_fetch_id,
-                            "raw_payload_hash": content_hash,
-                            "ingestion_run_id": ingestion_run_id,
-                            "content_hash": content_hash,
-                            "version_hash": "",
-                            "schema_version": 1,
-                            "parser_version": 1,
-                            "quality_status": "valid",
-                        }
+                    _append_row(
+                        rows, security_id, period_end, available_at, source_id,
+                        fiscal_period, period_kind_label, period_end,
+                        measure_kind, stmt_type, line_item, val,
+                        source_fetch_id, content_hash, ingestion_run_id,
                     )
 
     # ── OVERVIEW ────────────────────────────────────────────────────────
@@ -163,35 +188,11 @@ def fundamentals_from_json(
         val = _av_value(overview.get(av_key))
         if val is None:
             continue
-        rows.append(
-            {
-                "security_id": security_id,
-                "effective_date": available_at.date(),
-                "available_at": available_at,
-                "source_id": source_id,
-                "source_published_at": available_at,
-                "ingested_at": available_at,
-                "validated_at": None,
-                "fiscal_period": "OVERVIEW",
-                "period_kind": "snapshot",
-                "period_end": available_at.date(),
-                "measurement_kind": "overview",
-                "statement_type": "overview",
-                "line_item": line_item,
-                "value": val,
-                "currency": "USD",
-                "source_currency": "USD",
-                "unit": "raw",
-                "source_priority": None,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
-            }
+        _append_row(
+            rows, security_id, available_at.date(), available_at, source_id,
+            "OVERVIEW", "snapshot", available_at.date(),
+            "overview", "overview", line_item, val,
+            source_fetch_id, content_hash, ingestion_run_id,
         )
 
     # ── SHARES OUTSTANDING ──────────────────────────────────────────────
@@ -207,36 +208,67 @@ def fundamentals_from_json(
                 continue
             fy = period_end.year
             q = (period_end.month - 1) // 3 + 1 if pk_label == "quarter" else 4
-            rows.append(
-                {
-                    "security_id": security_id,
-                    "effective_date": period_end,
-                    "available_at": available_at,
-                    "source_id": source_id,
-                    "source_published_at": available_at,
-                    "ingested_at": available_at,
-                    "validated_at": None,
-                    "fiscal_period": f"FY{fy}Q{q}",
-                    "period_kind": pk_label,
-                    "period_end": period_end,
-                    "measurement_kind": "overview",
-                    "statement_type": "overview",
-                    "line_item": "shares_outstanding",
-                    "value": val,
-                    "currency": "USD",
-                    "source_currency": "USD",
-                    "unit": "raw",
-                    "source_priority": None,
-                    "source_fetch_id": source_fetch_id,
-                    "raw_payload_hash": content_hash,
-                    "ingestion_run_id": ingestion_run_id,
-                    "content_hash": content_hash,
-                    "version_hash": "",
-                    "schema_version": 1,
-                    "parser_version": 1,
-                    "quality_status": "valid",
-                }
+            _append_row(
+                rows, security_id, period_end, available_at, source_id,
+                f"FY{fy}Q{q}", pk_label, period_end,
+                "overview", "overview", "shares_outstanding", val,
+                source_fetch_id, content_hash, ingestion_run_id,
             )
+
+    # ── EARNINGS ────────────────────────────────────────────────────────
+    ea = merged.get("earnings", {})
+    for pk_label, pk_key in [("quarter", "quarterlyEarnings"), ("fiscal_year", "annualEarnings")]:
+        reports = ea.get(pk_key, []) if isinstance(ea.get(pk_key), list) else []
+        for report in reports:
+            period_end = _parse_date(report.get("fiscalDateEnding", ""))
+            if not period_end:
+                continue
+            fy = period_end.year
+            q = (period_end.month - 1) // 3 + 1 if pk_label == "quarter" else 4
+            fp = f"FY{fy}Q{q}"
+
+            for av_key, li in [
+                ("reportedEPS", "reported_eps"),
+                ("estimatedEPS", "estimated_eps"),
+                ("surprise", "eps_surprise"),
+                ("surprisePercentage", "eps_surprise_pct"),
+            ]:
+                val = _av_value(report.get(av_key))
+                if val is None:
+                    continue
+                _append_row(
+                    rows, security_id, period_end, available_at, source_id,
+                    fp, pk_label, period_end,
+                    "earnings", "earnings", li, val,
+                    source_fetch_id, content_hash, ingestion_run_id,
+                )
+
+    # ── EARNINGS ESTIMATES ──────────────────────────────────────────────
+    ee = merged.get("earningsEstimates", {})
+    for pk_label, pk_key in [("quarter", "quarterly"), ("fiscal_year", "annual")]:
+        reports = ee.get(pk_key, []) if isinstance(ee.get(pk_key), list) else []
+        for report in reports:
+            period_end = _parse_date(report.get("fiscalDateEnding", ""))
+            if not period_end:
+                continue
+            fy = period_end.year
+            q = (period_end.month - 1) // 3 + 1 if pk_label == "quarter" else 4
+            fp = f"FY{fy}Q{q}"
+
+            for av_key, li in [
+                ("estimatedEPS", "estimated_eps"),
+                ("estimatedRevenue", "estimated_revenue"),
+                ("numberOfAnalysts", "analyst_count"),
+            ]:
+                val = _av_value(report.get(av_key))
+                if val is None:
+                    continue
+                _append_row(
+                    rows, security_id, period_end, available_at, source_id,
+                    fp, pk_label, period_end,
+                    "earnings", "earnings", li, val,
+                    source_fetch_id, content_hash, ingestion_run_id,
+                )
 
     if not rows:
         return pl.DataFrame()
