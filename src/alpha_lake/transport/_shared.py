@@ -21,6 +21,15 @@ _INDICATOR_MAP: dict[str, Any] = {
     "macd": macd,
 }
 
+_DEFAULT_ARGS: dict[str, list[int | float]] = {
+    "sma": [20],
+    "ema": [12],
+    "rsi": [14],
+    "bollinger": [20, 2],
+    "atr": [14],
+    "macd": [12, 26, 9],
+}
+
 _RECURSIVE_MULTIPLIER: dict[str, int] = {
     "sma": 1,
     "ema": 3,
@@ -161,6 +170,7 @@ def _compute_and_serialize_indicators(
     The warmup window is computed automatically to ensure stable indicator
     values at the requested ``start`` date.
     """
+    parsed = [(n, list(a) if a else list(_DEFAULT_ARGS.get(n, []))) for n, a in parsed]
     warmup_start = start
     for name, args in parsed:
         w = _compute_warmup(name, args, start)
