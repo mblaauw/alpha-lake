@@ -91,10 +91,11 @@ Return PIT fundamental metrics for a symbol.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `symbol` | string | yes | — | Ticker symbol |
-| `metric_ids` | string | no | all | Comma-separated metric IDs (e.g. `fundamentals.valuation.pe_ttm,fundamentals.profitability.gross_margin_ttm`) |
-| `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
-| `latest` | bool | no | false | Non-research convenience path — uses current price and latest data |
+| `metric_ids` | string | no | all | Comma-separated metric IDs (e.g. `fundamentals.valuation.price_to_earnings_ttm,fundamentals.profitability.gross_margin_ttm`) |
+| `categories` | string | no | all | Comma-separated category names (Scale, Profitability, Growth, …) |
+| `as_of` | datetime | yes | — | PIT knowledge-time boundary |
 | `include` | string | no | — | Comma-separated extras: `inputs`, `definitions`, `provenance` |
+| `price_mode` | string | no | raw | Price adjustment: `raw` or `split_adjusted` |
 
 Response: JSON object keyed by metric ID, each with value, unit, state, tone,
 label, and (if requested) input breakdown, definition, and provenance metadata.
@@ -132,6 +133,7 @@ In-pod token bucket per API key (v1). Configurable requests per second and burst
 | Status | Meaning |
 |--------|---------|
 | 401 | Missing or invalid API key |
+| 404 | No data for the requested symbol |
 | 422 | Validation error (bad parameters) |
 | 429 | Rate limit exceeded |
 | 500 | Internal error (logged) |

@@ -24,6 +24,7 @@ from alpha_lake.config import RootConfig, get_config, load_config
 from alpha_lake.flows import (
     backfill_bars,
     compact_dataset,
+    compute_fundamentals,
     compute_indicators,
     ingest_bars,
     reparse_bars,
@@ -229,6 +230,45 @@ def cli_compute_indicators(
     panel(
         "Compute Indicators",
         f"Wrote [bold]{count}[/] indicator rows.",
+        style="green",
+    )
+    con.close()
+
+
+@app.command(name="compute-fundamentals", rich_help_panel="Data")
+def cli_compute_fundamentals(
+    security_id: str = typer.Option(
+        None, help="Security ID (optional; computes for all symbols when omitted)"
+    ),
+):
+    """Compute all fundamental period metrics and estimate/event metrics.
+
+    Reads canonical ``fundamentals``, ``analyst_estimates``, and
+    ``earnings_calendar`` tables, runs batch compute, and stores results
+    in ``fundamental_metrics``.
+
+    Uses the clock's ``as_of`` because this is an interactive command,
+    not a canonical pipeline step (invariant I7 exception for non-replay
+    paths).
+    """
+    _require_infra(get_config())
+    con = connect(get_config())
+    ids = [security_id] if security_id else None
+    from alpha_lake.clock import get_clock
+
+    with progress() as p:
+        tid = p.add_task("Computing fundamentals…", total=1)
+
+        def _on_step(cur: int, total: int | None, label: str) -> None:
+            p.update(tid, completed=cur, total=total or 1, description=label)
+
+        count = compute_fundamentals(
+            con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step
+        )
+        p.update(tid, completed=1)
+    panel(
+        "Compute Fundamentals",
+        f"Wrote [bold]{count}[/] fundamental metric rows.",
         style="green",
     )
     con.close()

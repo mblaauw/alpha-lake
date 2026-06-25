@@ -52,7 +52,7 @@ flowchart LR
 - **Immutable raw archive** — every API payload is archived before parsing; replay from scratch never requires re-fetching
 - **Point-in-time correctness** — every research read requires an explicit `as_of` and returns exactly what was knowable at that instant
 - **80+ derived technical indicators** — momentum, volatility, volume, structure, relative performance, and utility indicators with full glossary and dashboard
-- **Fundamental metrics** — scale, profitability, growth, financial health, cash flow quality, and read-time valuation metrics from SEC EDGAR filings
+- **Fundamental metrics** — scale, profitability, growth, financial health, cash flow quality, estimates, events, and read-time valuation metrics from SEC EDGAR filings
 - **Self-contained Compose stack** — Postgres catalog, RustFS S3, and the app server all start with `just up`
 - **Air-gap capable** — all dependencies vendored; zero network at runtime
 - **No strategy semantics** — neutral measurements only; the lake never produces scores, ranks, or trade signals
@@ -65,7 +65,7 @@ A real-time data-validation dashboard runs at `http://localhost:8000/` once the 
 
 - **Overview** — symbol cards with latest price, change, and sparklines
 - **Indicators** — 7 category-filtered tabs (Trend, Momentum, Volatility, Volume, Structure, Relative Performance) with 80+ indicator tiles, pin/unpin, and hover glossary tooltips
-- **Fundamentals** — category-grouped fundamental metric cards (Scale, Profitability, Cash Flow Quality, Growth, Financial Health, Valuation) with glossary tooltips, symbol selector, and latest toggle
+- **Fundamentals** — category-grouped fundamental metric cards (Scale, Profitability, Cash Flow Quality, Growth, Financial Health, Estimates, Events, Valuation) with glossary tooltips, symbol selector, and latest toggle
 - **Bars** — candlestick chart and OHLCV detail per symbol
 - **Sentiment** — leaderboard with honest positive/negative/neutral split
 - **PIT playground** — rewind knowledge time and inspect snapshots

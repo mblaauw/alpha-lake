@@ -190,6 +190,7 @@ class FundamentalMetricItem(BaseModel):
     price_effective_date: str | None = None
     price_available_at: str | None = None
     price_mode: str = "raw"
+    implemented: bool = True
 
     # include=inputs
     inputs: list[str] | None = None

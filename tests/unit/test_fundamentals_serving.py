@@ -260,7 +260,7 @@ def test_pe_unavailable_for_non_positive_denominator():
 
         row = result.filter(pl.col("metric_id") == price_metric)
         assert row["value"][0] is None
-        assert row["quality_status"][0] in ("not_meaningful", "unavailable")
+        assert row["quality_status"][0] == "not_meaningful"
         assert row["unavailable_reason"][0] == expected_reason
 
         con.execute("DELETE FROM fundamental_metrics")

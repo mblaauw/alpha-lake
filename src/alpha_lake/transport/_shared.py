@@ -143,6 +143,7 @@ def _fundamental_row_to_item(
         _get_threshold_profile = get_threshold_profile
 
     entry = _get_glossary_entry(row["metric_id"])
+    implemented = entry.implemented if entry else True
     item: dict[str, Any] = {
         "metric_id": row["metric_id"],
         "name": entry.name if entry else row["metric_id"],
@@ -153,6 +154,7 @@ def _fundamental_row_to_item(
         "value": row.get("value"),
         "unit": row.get("unit", ""),
         "state": row.get("state", ""),
+        "implemented": implemented,
         "threshold_profile_id": row.get("threshold_profile_id", ""),
         "threshold_state": row.get("threshold_state", ""),
         "tone": row.get("tone", ""),

@@ -449,11 +449,6 @@ Earnings before interest, taxes, depreciation, and amortization over TTM.
 `sum(last_four_standalone_quarter_ebitda)`
 Category: Scale · Basis: ttm · Unit: currency
 
-#### EBITDA Margin (TTM)
-EBITDA as a percentage of revenue over TTM.
-`ebitda_ttm / revenue_ttm × 100`
-Category: Profitability · Basis: ttm · Unit: percent
-
 ### Profitability
 
 #### Gross Margin (TTM)
@@ -469,6 +464,11 @@ Category: Profitability · Basis: ttm · Unit: percent
 #### Net Margin (TTM)
 Net income as a percentage of revenue over TTM.
 `net_income_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+#### EBITDA Margin (TTM)
+EBITDA as a percentage of revenue over TTM.
+`ebitda_ttm / revenue_ttm × 100`
 Category: Profitability · Basis: ttm · Unit: percent
 
 #### FCF Margin (TTM)

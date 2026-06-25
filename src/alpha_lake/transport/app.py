@@ -186,6 +186,16 @@ async def fundamentals_metrics(
     include: str | None = None,
     price_mode: str = "raw",
 ):
+    """Return point-in-time fundamental metrics for a symbol.
+
+    Requires ``as_of`` — no default-to-latest (research-read invariant I5).
+
+    ``categories`` filters by CSV category names (Scale, Profitability, …).
+    ``metric_ids`` filters by CSV metric IDs.
+    ``include`` controls extra fields: ``inputs``, ``definitions``, ``provenance``.
+    ``price_mode`` selects raw or split_adjusted price for read-time valuation.
+    Returns 404 when no data is available for the symbol.
+    """
     _auth(request)
 
     if as_of is None:
@@ -232,6 +242,11 @@ async def fundamentals_glossary(
     request: Request,
     categories: str | None = None,
 ):
+    """Return the full fundamentals glossary, optionally filtered by category.
+
+    ``categories`` is a CSV of category names (Scale, Profitability, …).
+    Returns a JSON array of glossary entries with threshold profiles.
+    """
     _auth(request)
     payloads = glossary_to_json()
     if categories:

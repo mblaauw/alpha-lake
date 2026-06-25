@@ -1027,6 +1027,11 @@ async def symbol_fundamentals(
     include: str = "",
     price_mode: str = "raw",
 ):
+    """Return fundamental metrics for a symbol (dashboard gate).
+
+    ``as_of`` is required for PIT reads; use ``latest=true`` for the most
+    recent observation. Falls back to JSONResponse([]) on error.
+    """
     _check_enabled()
     con = _get_con()
 
@@ -1105,9 +1110,10 @@ async def symbol_fundamentals(
 async def fundamentals_glossary(
     categories: str = "",
 ):
-    """Return the full fundamentals glossary.
+    """Return the full fundamentals glossary (dashboard gate).
 
     Query param ``?categories=Scale,Profitability`` to filter.
+    Returns a JSON array of glossary entries with threshold profiles.
     """
     _check_enabled()
     payloads = _fund_glossary_to_json()

@@ -13,7 +13,7 @@ CREATE OR REPLACE MACRO fundamental_metrics_asof(
             ON p.dataset = 'fundamental_metrics' AND p.source_id = m.source_id
         WHERE list_contains(p_security_ids, m.security_id)
           AND m.available_at <= p_as_of::TIMESTAMPTZ
-          AND m.period_end <= p_as_of::DATE
+          AND (m.period_kind = 'snapshot' OR m.period_end <= p_as_of::DATE)
           AND (p_categories IS NULL OR list_contains(p_categories, m.category))
           AND (p_metric_ids IS NULL OR list_contains(p_metric_ids, m.metric_id))
     ) m

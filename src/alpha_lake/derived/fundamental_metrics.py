@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import polars as pl
@@ -831,10 +831,14 @@ def _pick_latest_estimate(df: pl.DataFrame) -> dict[str, Any] | None:
 
 
 def _snapshot_item(period_end: date, available_at: datetime) -> dict[str, Any]:
+    if not isinstance(period_end, date):
+        raise TypeError(f"expected date, got {type(period_end).__name__}")
+    if not isinstance(available_at, datetime):
+        raise TypeError(f"expected datetime, got {type(available_at).__name__}")
     return {
         "period_kind": "snapshot",
-        "period_end": period_end if isinstance(period_end, date) else date.today(),
-        "available_at": available_at if isinstance(available_at, datetime) else datetime.now(UTC),
+        "period_end": period_end,
+        "available_at": available_at,
         "currency": "USD",
         "source_currency": "USD",
         "source_period_ends": [],

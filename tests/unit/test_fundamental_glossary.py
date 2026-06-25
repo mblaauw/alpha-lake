@@ -30,21 +30,27 @@ _MATERIALIZED_METRIC_IDS = [
     "fundamentals.financial_health.net_debt_to_ebitda_ttm",
     "fundamentals.financial_health.current_ratio_mrq",
     "fundamentals.financial_health.debt_to_equity_mrq",
-]
-
-_READ_TIME_METRIC_IDS = [
-    "fundamentals.valuation.price_to_earnings_ttm",
-    "fundamentals.valuation.price_to_sales_ttm",
-    "fundamentals.valuation.price_to_fcf_ttm",
+    "fundamentals.estimates.target_price",
+    "fundamentals.estimates.target_high",
+    "fundamentals.estimates.target_low",
+    "fundamentals.estimates.buy_ratio",
+    "fundamentals.events.days_to_earnings",
 ]
 
 _NOT_MATERIALIZED_IDS = [
     "fundamentals.profitability.diluted_eps_ttm",
     "fundamentals.scale.revenue_per_share_ttm",
     "fundamentals.cash_flow_quality.fcf_per_share_ttm",
+    "fundamentals.valuation.price_to_earnings_ttm",
+    "fundamentals.valuation.price_to_sales_ttm",
+    "fundamentals.valuation.price_to_fcf_ttm",
+    "fundamentals.estimates.forward_eps_growth",
+    "fundamentals.estimates.eps_revision_30d",
+    "fundamentals.estimates.revenue_revision_30d",
+    "fundamentals.events.earnings_surprise_pct",
 ]
 
-_ALL_METRIC_IDS = _MATERIALIZED_METRIC_IDS + _READ_TIME_METRIC_IDS + _NOT_MATERIALIZED_IDS
+_ALL_METRIC_IDS = _MATERIALIZED_METRIC_IDS + _NOT_MATERIALIZED_IDS
 
 _ALL_PROFILE_IDS = [
     "context_only_v1",
@@ -62,6 +68,7 @@ _ALL_PROFILE_IDS = [
     "share_count_change_v1",
     "payout_ratio_v1",
     "estimate_revision_v1",
+    "proximity_v1",
 ]
 
 
@@ -84,9 +91,16 @@ def test_registry_completeness_covers_every_metric_id():
         assert entry.surfaces
         assert isinstance(entry.implemented, bool)
 
+    from alpha_lake.interpretation.fundamentals_glossary import FUNDAMENTAL_GLOSSARY
+
+    for metric_id in FUNDAMENTAL_GLOSSARY:
+        assert metric_id in _ALL_METRIC_IDS, (
+            f"glossary entry {metric_id} not tracked in _ALL_METRIC_IDS"
+        )
+
 
 def test_materialized_metrics_are_flagged_implemented():
-    for metric_id in _MATERIALIZED_METRIC_IDS + _READ_TIME_METRIC_IDS:
+    for metric_id in _MATERIALIZED_METRIC_IDS:
         entry = get_glossary_entry(metric_id)
         assert entry is not None
         assert entry.implemented is True, f"{metric_id} should be implemented=True"
@@ -235,13 +249,16 @@ def test_peer_percentile_returns_gray_raw_value_with_insufficient_peers():
     assert tone == "gray"
 
 
-def test_peer_percentile_returns_raw_value_with_sufficient_peers_but_not_implemented():
+def test_peer_percentile_returns_raw_value_with_sufficient_peers():
     profile = get_threshold_profile("profitability_peer_percentile_v1")
     assert profile is not None
 
-    state, tone, _ = resolve_fundamental_state(profile, 40.0, has_peer_baseline=True, peer_count=10)
+    state, tone, label = resolve_fundamental_state(
+        profile, 40.0, has_peer_baseline=True, peer_count=10
+    )
     assert state == "raw_value"
     assert tone == "gray"
+    assert label == "raw value"
 
 
 def test_peer_percentile_none_returns_unavailable():
@@ -288,6 +305,43 @@ def test_get_metric_threshold_profile_id_returns_expected():
         == "leverage_v1"
     )
     assert get_metric_threshold_profile_id("nonexistent.metric") == ""
+
+
+def test_estimate_revision_boundary():
+    profile = get_threshold_profile("estimate_revision_v1")
+    assert profile is not None
+    assert profile.method == "discrete"
+
+    state, tone, _ = resolve_fundamental_state(profile, -0.02)
+    assert state == "downward"
+    assert tone == "red"
+
+    state, tone, _ = resolve_fundamental_state(profile, -0.01)
+    assert state == "stable"
+
+    state, tone, _ = resolve_fundamental_state(profile, 0.0)
+    assert state == "stable"
+
+    state, tone, _ = resolve_fundamental_state(profile, 0.01)
+    assert state == "upward"
+    assert tone == "gray"
+
+
+def test_proximity_boundary():
+    profile = get_threshold_profile("proximity_v1")
+    assert profile is not None
+    assert profile.method == "discrete"
+
+    state, tone, _ = resolve_fundamental_state(profile, 0.0)
+    assert state == "imminent"
+    assert tone == "amber"
+
+    state, tone, _ = resolve_fundamental_state(profile, 3.0)
+    assert state == "near"
+
+    state, tone, _ = resolve_fundamental_state(profile, 14.0)
+    assert state == "distant"
+    assert tone == "gray"
 
 
 def test_no_recommendation_semantics_in_glossary_text():

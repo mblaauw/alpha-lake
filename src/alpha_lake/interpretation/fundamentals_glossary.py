@@ -729,7 +729,7 @@ FUNDAMENTAL_GLOSSARY: dict[str, FundamentalGlossaryEntry] = {
         "multiple_2dp",
         "relative_valuation_multiple_v1",
         ("card", "detail"),
-        True,
+        False,
         (
             "price_unavailable_as_of",
             "diluted_eps_not_materialized",
@@ -751,7 +751,7 @@ FUNDAMENTAL_GLOSSARY: dict[str, FundamentalGlossaryEntry] = {
         "multiple_2dp",
         "relative_valuation_multiple_v1",
         ("card", "detail"),
-        True,
+        False,
         (
             "price_unavailable_as_of",
             "revenue_per_share_not_materialized",
@@ -773,7 +773,7 @@ FUNDAMENTAL_GLOSSARY: dict[str, FundamentalGlossaryEntry] = {
         "multiple_2dp",
         "relative_valuation_multiple_v1",
         ("card", "detail"),
-        True,
+        False,
         (
             "price_unavailable_as_of",
             "fcf_per_share_not_materialized",
@@ -881,7 +881,7 @@ def resolve_fundamental_state(
     if profile.method == "peer_percentile":
         if not has_peer_baseline or peer_count < profile.min_peer_count:
             return "raw_value", TONE_GRAY, "raw value (peer data insufficient)"
-        return "raw_value", TONE_GRAY, "raw value (peer data insufficient)"
+        return "raw_value", TONE_GRAY, "raw value"
 
     for band in profile.bands:
         if _band_matches(band, value):

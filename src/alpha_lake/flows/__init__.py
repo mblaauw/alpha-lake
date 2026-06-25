@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import duckdb
+import polars as pl
 
 from alpha_lake.canonical import DATASETS, write_bars, write_dataset
 from alpha_lake.cli_ui import warn
@@ -803,5 +804,75 @@ def compute_indicators(
 
     if on_step:
         on_step(n, n, f"done — {total} indicator rows")
+
+    return total
+
+
+def compute_fundamentals(
+    con: duckdb.DuckDBPyConnection,
+    as_of: datetime,
+    security_ids: list[str] | None = None,
+    on_step: StepCallback | None = None,
+) -> int:
+    """Compute fundamental period metrics and estimate/event metrics from canonical tables.
+
+    Reads ``fundamentals``, ``analyst_estimates``, and ``earnings_calendar``,
+    runs the compute functions, and writes the results to ``fundamental_metrics``.
+
+    When *security_ids* is None (default), processes every symbol with data.
+    """
+    from alpha_lake.derived.fundamental_metrics import (
+        compute_estimate_metrics,
+        compute_fundamental_period_metrics,
+    )
+
+    if security_ids is None:
+        rows = con.execute(
+            "SELECT DISTINCT security_id FROM fundamentals"
+            " WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+        ).fetchall()
+        security_ids = [str(r[0]) for r in rows if r[0]]
+
+    if not security_ids:
+        return 0
+
+    all_metric_rows = pl.DataFrame()
+
+    n = len(security_ids)
+    for i, sid in enumerate(security_ids):
+        if on_step:
+            on_step(i, n, sid)
+
+        # ── Fundamental period metrics ──────────────────────────────────
+        facts_df = con.execute(
+            "SELECT * FROM fundamentals WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ",
+            [sid, as_of],
+        ).pl()
+        period_metrics = compute_fundamental_period_metrics(facts_df, as_of)
+        if not period_metrics.is_empty():
+            all_metric_rows = pl.concat([all_metric_rows, period_metrics])
+
+        # ── Estimate metrics ────────────────────────────────────────────
+        est_df = con.execute(
+            "SELECT * FROM analyst_estimates"
+            " WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ",
+            [sid, as_of],
+        ).pl()
+        earn_df = con.execute(
+            "SELECT * FROM earnings_calendar"
+            " WHERE security_id = ? AND available_at <= ?::TIMESTAMPTZ",
+            [sid, as_of],
+        ).pl()
+        estimate_metrics = compute_estimate_metrics(est_df, earn_df, as_of)
+        if not estimate_metrics.is_empty():
+            all_metric_rows = pl.concat([all_metric_rows, estimate_metrics])
+
+    if all_metric_rows.is_empty():
+        return 0
+
+    total = write_dataset(con, "fundamental_metrics", all_metric_rows)
+
+    if on_step:
+        on_step(n, n, f"done — {total} fundamental metric rows")
 
     return total

@@ -701,13 +701,11 @@
   function fmtInd(v, t) { if (v == null) return '—'; if (t === 'bool') return v ? 'yes' : 'no'; if (t === 'pct') return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%'; if (t === 'price') return fmtMoney(v); if (t === 'big') return fmtBig(v); if (t === 'num1') return Number(v).toFixed(1); if (t === 'num2') return Number(v).toFixed(2); if (t === 'num3') return Number(v).toFixed(3); return Number(v).toFixed(1); }
 
   /* ════ FUNDAMENTALS ════ */
-  var FUND_CATS = [['Overview', 'Overview'], ['Valuation', 'Valuation'], ['Profitability', 'Profitability'], ['Growth', 'Growth'], ['Financial Health', 'Financial Health'], ['Cash Flow', 'Cash Flow'], ['Capital Allocation', 'Capital Allocation'], ['Scale', 'Scale'], ['Capital Efficiency', 'Capital Efficiency'], ['Estimates', 'Estimates']];
+  var FUND_CATS = [['Overview', 'Overview'], ['Valuation', 'Valuation'], ['Profitability', 'Profitability'], ['Growth', 'Growth'], ['Financial Health', 'Financial Health'], ['Cash Flow', 'Cash Flow'], ['Scale', 'Scale'], ['Estimates', 'Estimates'], ['Events', 'Events']];
   var _OVERVIEW = ['fundamentals.scale.revenue_ttm', 'fundamentals.valuation.price_to_earnings_ttm', 'fundamentals.valuation.ev_to_ebitda', 'fundamentals.cash_flow_quality.fcf_yield', 'fundamentals.growth.revenue_growth_yoy', 'fundamentals.growth.diluted_eps_growth_yoy', 'fundamentals.profitability.operating_margin_ttm', 'fundamentals.capital_efficiency.return_on_invested_capital', 'fundamentals.financial_health.net_debt_to_ebitda', 'fundamentals.financial_health.current_ratio', 'fundamentals.cash_flow_quality.fcf_conversion', 'fundamentals.capital_allocation.shares_outstanding_growth'];
   var _fundPins = getJSON('lw_fund_pins', {});
   function getFundPins(sym) { return _fundPins[sym] || []; }
   function setFundPins(sym, arr) { _fundPins[sym] = arr; setLS('lw_fund_pins', JSON.stringify(_fundPins)); }
-  var _fundGlossary = null, _fundGlossaryReq = null;
-  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (g) { _fundGlossary = g || {}; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
   var _fundCache = null;
   function renderFundamentals(c) {
     c.innerHTML =
@@ -741,7 +739,7 @@
     var sym = state.fundSymbol, cacheKey = sym + '_' + state.fundLatest;
     if (_fundCache && _fundCache[cacheKey]) { drawFundBody(body, _fundCache[cacheKey]); return; }
     body.innerHTML = '<div class="lw-loading">Loading fundamentals</div>';
-    var extra = state.fundLatest ? { latest: 'true' } : {};
+    var extra = state.fundLatest ? { latest: 'true', include: 'definitions' } : { include: 'definitions' };
     barApi('/symbol/' + encodeURIComponent(sym) + '/fundamentals', null, extra).then(function (res) {
       _fundCache = _fundCache || {}; _fundCache[cacheKey] = res; drawFundBody(body, res);
     }).catch(function () {
@@ -800,8 +798,8 @@
     var valColor = isUnavail ? 'var(--lw-ink-3)' : col;
     var stateTxt = m.label || title(m.threshold_state || 'available');
     var isP = getFundPins(state.fundSymbol).indexOf(m.metric_id) !== -1;
-    var tipDesc = '';
-    if (m.unavailable_reason) tipDesc = esc(m.unavailable_reason.replace(/_/g, ' '));
+    var tipDesc = esc(m.what_it_answers || m.description || '');
+    if (m.unavailable_reason && !tipDesc) tipDesc = esc(m.unavailable_reason.replace(/_/g, ' '));
     return '<div class="lw-ro-card" style="border-top-color:' + borderCol + '" data-tip-name="' + esc(m.name) + '" data-tip-body="' + tipDesc + '">' +
       '<div class="lw-ro-card-head"><span class="lw-ro-name">' + esc(m.name) + '</span>' +
         '<button class="ind-pin' + (isP ? ' on' : '') + '" data-sym="' + esc(state.fundSymbol) + '" data-pin="' + esc(m.metric_id) + '" title="Pin metric">' + (isP ? '★' : '☆') + '</button></div>' +

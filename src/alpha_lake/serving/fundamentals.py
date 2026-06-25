@@ -250,6 +250,8 @@ def _display_value(value: Any, unit: Any) -> str:
 
 
 def _display_decimals(unit: Any) -> int:
+    if unit == "days":
+        return 0
     return 2 if unit in {"percent", "multiple", "currency"} else 2
 
 
@@ -269,6 +271,14 @@ def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> No
 
 
 def _ensure_kernel(con: duckdb.DuckDBPyConnection) -> None:
+    try:
+        row = con.execute(
+            "SELECT 1 FROM duckdb_functions() WHERE function_name IN ('bars_asof', 'fundamental_metrics_asof') LIMIT 1"  # noqa: E501
+        ).fetchone()
+        if row:
+            return
+    except Exception:
+        pass
     from alpha_lake.kernel import register_kernel
 
     register_kernel(con)

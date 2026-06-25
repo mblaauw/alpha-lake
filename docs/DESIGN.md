@@ -142,7 +142,7 @@ The lake's market models describe **facts**; operational datasets describe pipel
 
 | Market fact entities (lake) | Operational / metadata datasets | Forbidden here (consumer-owned) |
 |---|---|---|
-| `Security`, `BarFact`, `FundamentalFact`, `InsiderTransactionFact`, `NewsArticleFact`, `SocialPostFact`, `EntityMentionFact`, `SentimentAnnotationFact`, `AttentionMetricFact`, `CorporateActionFact`, `EarningsEventFact` | `DataQualityEvent`, `DatasetVersion`, `QuarantineRow`, `ReconciliationEvent`, `IngestionOutcome` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
+| `Security`, `BarFact`, `FundamentalFact`, `FundamentalMetricFact`, `InsiderTransactionFact`, `NewsArticleFact`, `SocialPostFact`, `EntityMentionFact`, `SentimentAnnotationFact`, `AttentionMetricFact`, `CorporateActionFact`, `EarningsEventFact` | `DataQualityEvent`, `DatasetVersion`, `QuarantineRow`, `ReconciliationEvent`, `IngestionOutcome` | scores, ranks, signals, positions, fills, decisions, risk actions, journals |
 
 **Eligibility test for anything the lake exposes** (§14–15): *its definition would be byte-identical for two consumers who completely disagree about market direction.*
 
@@ -542,6 +542,8 @@ FastAPI with endpoints:
 |---|---|---|
 | `GET /v1/bars` | API key | PIT bar data with `as_of`, `snapshot_id`, lookback cap |
 | `GET /v1/bars/indicators` | API key | Bars with computed indicators (SMA, EMA, RSI, MACD, Bollinger, ATR) |
+| `GET /v1/fundamentals/metrics` | API key | PIT fundamental metrics with `as_of`, `categories`, `metric_ids`, `include`, `price_mode` |
+| `GET /v1/fundamentals/glossary` | API key | Fundamentals glossary with threshold profiles |
 | `GET /v1/health` | API key | Catalog health (snapshots, latest ID) |
 | `GET /v1/dashboard/*` | None when `dashboard_enabled=true` | Dev-only data-validation API (see §18.5) |
 
@@ -585,6 +587,8 @@ Read-only, dev-only, air-gap safe. No build step, no CDN, no npm.
 | `GET /v1/dashboard/macro/{series_id}` | `read_macro_series_asof` | FRED macro series PIT observations |
 | `GET /v1/dashboard/insider/{symbol}` | `pit_read` (insider_tx) | Insider transactions by ticker |
 | `GET /v1/dashboard/analyst/{symbol}` | `pit_read` (analyst_estimates) | Analyst estimate consensus |
+| `GET /v1/dashboard/symbol/{symbol}/fundamentals` | `read_fundamental_metrics_asof` | PIT fundamental metrics by symbol (gated, no auth) |
+| `GET /v1/dashboard/fundamentals/glossary` | `glossary_to_json` | Full fundamentals glossary |
 
 **Tabs:** Overview (dataset health) | Bars (chart + indicators + watchlist) | Datasets (lineage rows) | Securities (per-symbol aggregation) | PIT (as_of playground with snapshots)
 
@@ -624,7 +628,11 @@ Observability is lightweight and dependency-light:
 
 **Pinned reproducibility:** a consumer pins a DuckLake snapshot (`ingestion_run_id`) + `fixture_version` to reproduce an exact historical view. Compaction must preserve the logical snapshot mapping for pinned runs; snapshot retention policy is an explicit operational contract.
 
-**Fixture bundle** (`freeze-fixtures`) freezes: raw payloads · canonical rows · `available_at` values · dataset versions · security-master snapshot · corporate actions · schema/parser versions · content hashes · quarantine + reconciliation events.
+**Fixture bundle** (`freeze-fixtures`) freezes four golden replay suites:
+- **Bars** — PIT read of a single-row fixture via `read_bars_asof`.
+- **Technical indicators** — 260 bars × 2 securities → `compute_all_indicators` → 80+ indicator columns.
+- **Readouts** — same 260 bars + SPY benchmark → `compute_all_readouts` → 8 observations.
+- **Fundamentals** — 8 quarters of financial facts + analyst estimates + earnings calendar → `compute_fundamental_period_metrics` + `compute_estimate_metrics` → 30 metric rows.
 
 **Golden replay** compares **both** business output **and** bitemporal row visibility — a replay that drops knowledge time is not point-in-time faithful.
 

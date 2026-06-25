@@ -41,13 +41,13 @@ allowed_values:
   period_kind: [quarter, fiscal_year, ttm, mrq]
   category:
     - scale
-    - valuation
     - profitability
     - growth
-    - financial_health
     - cash_flow_quality
-    - capital_allocation
-    - estimates_events
+    - financial_health
+    - estimates
+    - events
+    - valuation
 
 identity:
   metric_namespace: fundamentals.<category>.<metric>

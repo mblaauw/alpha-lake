@@ -22,7 +22,9 @@ temp directory has enough free space (at least 2× the dataset working set).
 | Dataset | Estimated size/year | Ingest memory | Compact memory | Replay memory |
 |---------|--------------------|---------------|----------------|---------------|
 | lake_bars | ~50 MB | 256 MB | 512 MB | 1 GB |
+| technical_indicators | ~200 MB | 512 MB | 1 GB | 1 GB |
 | fundamentals | ~20 MB | 256 MB | 512 MB | 512 MB |
+| fundamental_metrics | ~30 MB | 256 MB | 512 MB | 512 MB |
 | corp_actions | ~5 MB | 128 MB | 256 MB | 256 MB |
 
 ### Ports
