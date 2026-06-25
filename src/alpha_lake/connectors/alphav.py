@@ -84,6 +84,19 @@ async def fetch_insider_transactions(symbol: str) -> RawFetch:
     return RawFetch(manifest=manifest, body=body)
 
 
+async def fetch_institutional_holdings(symbol: str) -> RawFetch:
+    """Fetch INSTITUTIONAL_HOLDINGS for a symbol."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params = {"apikey": cfg.api_key, "symbol": symbol, "function": "INSTITUTIONAL_HOLDINGS"}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)
+
+
 async def fetch_corp_actions(symbol: str) -> RawFetch:
     """Fetch DIVIDENDS and SPLITS for a symbol. Merges both into one RawFetch."""
     cfg = get_source("alphav")

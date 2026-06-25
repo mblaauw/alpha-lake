@@ -425,3 +425,56 @@ def insider_transactions_from_json(
         pl.col("transaction_date").cast(pl.Date),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
     )
+
+
+def institutional_holdings_from_json(
+    raw: list[dict[str, Any]],
+    security_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV INSTITUTIONAL_HOLDINGS into InstitutionalHoldingFact rows."""
+    merged = raw[0] if raw else {}
+    records = merged.get("holdings", []) if isinstance(merged.get("holdings"), list) else []
+    rows: list[dict[str, Any]] = []
+    for entry in records:
+        date_reported = _parse_date(entry.get("date_reported", ""))
+        if not date_reported:
+            continue
+        shares = _av_value(entry.get("shares"))
+        value = _av_value(entry.get("value"))
+        pct = _av_value(entry.get("percent_change"))
+        if shares is None:
+            continue
+        rows.append(
+            {
+                "security_id": security_id,
+                "effective_date": date_reported,
+                "available_at": available_at,
+                "source_id": source_id,
+                "holder_name": entry.get("holder") or "",
+                "shares": shares,
+                "value": value,
+                "date_reported": date_reported,
+                "percent_change": pct,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("date_reported").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )

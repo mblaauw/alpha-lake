@@ -506,7 +506,13 @@ def ingest_dataset(
     if dataset == "macro_series":
         _id_col = "series_id"
         _id_val = series_id or "GDP"
-    elif dataset in ("insider_tx", "insider_transactions", "analyst_estimates", "fundamentals"):
+    elif dataset in (
+        "insider_tx",
+        "insider_transactions",
+        "institutional_holdings",
+        "analyst_estimates",
+        "fundamentals",
+    ):
         _id_col = "security_id"
         _id_val = security_id or "AAPL"
     elif dataset == "economic_calendar":
@@ -763,6 +769,21 @@ def ingest_dataset(
             from alpha_lake.normalize.alphav import insider_transactions_from_json
 
             df = insider_transactions_from_json(
+                raw=records,
+                security_id=kwargs.get("symbol", security_id or "AAPL"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            raise ValueError(f"No normalize function for {src}/{dataset}")
+    elif dataset == "institutional_holdings":
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import institutional_holdings_from_json
+
+            df = institutional_holdings_from_json(
                 raw=records,
                 security_id=kwargs.get("symbol", security_id or "AAPL"),
                 source_id=src,
