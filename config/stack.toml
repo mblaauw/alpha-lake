@@ -215,6 +215,9 @@ parser_version = 1
 [source_datasets.alphav.institutional_holdings]
 enabled = true
 parser_version = 1
+[source_datasets.alphav.macro_series]
+enabled = true
+parser_version = 1
 [source_datasets.alphav.fundamentals]
 enabled = true
 parser_version = 1

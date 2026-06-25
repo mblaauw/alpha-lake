@@ -478,3 +478,49 @@ def institutional_holdings_from_json(
         pl.col("date_reported").cast(pl.Date),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
     )
+
+
+def econ_indicator_from_json(
+    raw: list[dict[str, Any]],
+    series_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV economic indicator data into macro_series rows."""
+    merged = raw[0] if raw else {}
+    records = merged.get("data", []) if isinstance(merged.get("data"), list) else []
+    rows: list[dict[str, Any]] = []
+    for entry in records:
+        val = entry.get("value", "")
+        if val in ("", ".", None):
+            continue
+        date_str = entry.get("date", "")
+        if not date_str:
+            continue
+        rows.append(
+            {
+                "series_id": series_id,
+                "effective_date": date_str,
+                "available_at": available_at,
+                "source_id": source_id,
+                "value": float(val),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )

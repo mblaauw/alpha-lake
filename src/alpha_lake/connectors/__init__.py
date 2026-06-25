@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from alpha_lake.connectors.alpaca_bars import fetch_daily_bars as _alpaca_bars
 from alpha_lake.connectors.alphav import fetch_corp_actions as _alphav_corp_actions
+from alpha_lake.connectors.alphav import fetch_econ_indicator as _alphav_econ
 from alpha_lake.connectors.alphav import fetch_fundamentals as _alphav_fundamentals
 from alpha_lake.connectors.alphav import (
     fetch_insider_transactions as _alphav_insider_tx,
@@ -73,6 +74,7 @@ def has_api_key(source_id: str) -> bool:
 
 
 register("alphav", "corp_actions", _alphav_corp_actions)
+register("alphav", "macro_series", _alphav_econ)
 register("alphav", "fundamentals", _alphav_fundamentals)
 register("alphav", "insider_transactions", _alphav_insider_tx)
 register("alphav", "institutional_holdings", _alphav_holdings)
