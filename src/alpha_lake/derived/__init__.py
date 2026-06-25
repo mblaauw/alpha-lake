@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
+from alpha_lake.derived.fundamental_metrics import compute_fundamental_period_metrics
 from alpha_lake.derived.indicators import (
     atr,
     bollinger_bands,
@@ -16,6 +17,7 @@ from alpha_lake.derived.indicators import (
 __all__ = [
     "atr",
     "bollinger_bands",
+    "compute_fundamental_period_metrics",
     "ema",
     "macd",
     "obv",
