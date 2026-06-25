@@ -574,6 +574,136 @@ def apewisdom_attention_from_json(
     )
 
 
+def earnings_calendar_from_finnhub(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    # Finnhub wraps earnings in {"earningsCalendar": [...]}
+    events: list[dict[str, Any]] = []
+    for wrapper in raw:
+        events.extend(wrapper.get("earningsCalendar") or [])
+    rows: list[dict[str, Any]] = []
+    for record in events:
+        symbol = record.get("symbol", "")
+        report_date_str = record.get("date", "")
+        if not symbol or not report_date_str:
+            continue
+        hour = (record.get("hour") or "").lower()
+        session = "regular"
+        if hour in ("bmo", "am"):
+            session = "morning"
+        elif hour in ("dmh", "amc", "pm"):
+            session = "afternoon"
+        rows.append(
+            {
+                "security_id": symbol,
+                "effective_date": report_date_str,
+                "available_at": available_at,
+                "source_id": source_id,
+                "report_date": report_date_str,
+                "session": session,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("report_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def fundamentals_from_json(
+    raw: list[dict[str, Any]],
+    security_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for record in raw:
+        year = record.get("year")
+        quarter = record.get("quarter")
+        period_end = record.get("date", "")
+        if not year or not quarter or not period_end:
+            continue
+        fiscal_period = f"FY{year}Q{quarter}"
+        effective_date = period_end
+        sd = record.get("statementData", {})
+        stmt_map = {
+            "incomeStatement": "income_statement",
+            "balanceSheet": "balance_sheet",
+            "cashFlow": "cash_flow",
+            "overview": "overview",
+        }
+        for tiingo_key, stmt_type in stmt_map.items():
+            items = sd.get(tiingo_key, [])
+            if not items:
+                continue
+            for item in items:
+                data_code = item.get("dataCode", "")
+                value = item.get("value")
+                if not data_code or value is None:
+                    continue
+                measure_kind = stmt_type
+                rows.append(
+                    {
+                        "security_id": security_id,
+                        "effective_date": effective_date,
+                        "available_at": available_at,
+                        "source_id": source_id,
+                        "source_published_at": available_at,
+                        "ingested_at": available_at,
+                        "validated_at": None,
+                        "fiscal_period": fiscal_period,
+                        "period_kind": "quarterly",
+                        "period_end": effective_date,
+                        "measurement_kind": measure_kind,
+                        "statement_type": stmt_type,
+                        "line_item": data_code,
+                        "value": float(value) if value else 0.0,
+                        "currency": "USD",
+                        "source_currency": "USD",
+                        "unit": "raw",
+                        "source_priority": None,
+                        "source_fetch_id": source_fetch_id,
+                        "raw_payload_hash": content_hash,
+                        "ingestion_run_id": ingestion_run_id,
+                        "content_hash": content_hash,
+                        "version_hash": "",
+                        "schema_version": 1,
+                        "parser_version": 1,
+                        "quality_status": "valid",
+                    }
+                )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("period_end").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
 def _epoch_to_date(epoch: int) -> str:
     return datetime.fromtimestamp(epoch, tz=UTC).strftime("%Y-%m-%d")
 

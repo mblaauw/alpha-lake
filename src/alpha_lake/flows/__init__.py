@@ -483,10 +483,9 @@ def ingest_dataset(
         if to_date:
             kwargs["end_date"] = to_date
     elif dataset in ("earnings_calendar",) and not security_id:
-        if from_date:
-            kwargs["from_date"] = from_date
-        if to_date:
-            kwargs["to_date"] = to_date
+        _now = get_clock().now()
+        kwargs["from_date"] = from_date or _now.strftime("%Y-%m-01")
+        kwargs["to_date"] = to_date or _now.strftime("%Y-%m-%d")
     elif dataset == "congress_trades":
         pass
     else:
@@ -697,10 +696,34 @@ def ingest_dataset(
             available_at=clock_now,
         )
     elif dataset == "earnings_calendar":
-        from alpha_lake.normalize import earnings_calendar_from_json
+        if src == "finnhub":
+            from alpha_lake.normalize import earnings_calendar_from_finnhub
 
-        df = earnings_calendar_from_json(
+            df = earnings_calendar_from_finnhub(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            from alpha_lake.normalize import earnings_calendar_from_json
+
+            df = earnings_calendar_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+    elif dataset == "fundamentals":
+        from alpha_lake.normalize import fundamentals_from_json
+
+        df = fundamentals_from_json(
             raw=records,
+            security_id=kwargs.get("symbol", security_id or "AAPL"),
             source_id=src,
             source_fetch_id=fetch_id,
             ingestion_run_id=run_id,

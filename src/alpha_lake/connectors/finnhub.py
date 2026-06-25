@@ -53,7 +53,7 @@ async def fetch_recommendation_trends(symbol: str) -> RawFetch:
         "symbol": symbol,
     }
     async with _build_finnhub_client(cfg) as client:
-        endpoint = "/stock/recommendation-trends"
+        endpoint = "/stock/recommendation"
         response = await fetch_with_retry(client, endpoint, params=params)
         manifest = build_manifest(
             "finnhub",

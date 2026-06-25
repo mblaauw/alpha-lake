@@ -78,7 +78,7 @@ def _parse_date_list(raw: str) -> list[str] | None:
         dates = json.loads(raw)
         if isinstance(dates, list):
             return [d for d in dates if d]
-    except json.JSONDecodeError, TypeError:
+    except (json.JSONDecodeError, TypeError):
         pass
     return None
 

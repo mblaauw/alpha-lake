@@ -20,6 +20,7 @@ from alpha_lake.connectors.finnhub import (
 from alpha_lake.connectors.finnhub import (
     fetch_recommendation_trends as _finnhub_recs,
 )
+from alpha_lake.connectors.finnhub_earnings import fetch_earnings_calendar as _finnhub_earnings
 from alpha_lake.connectors.fmp import (
     fetch_analyst_ratings as _fmp_ratings,
 )
@@ -70,6 +71,7 @@ register("eodhd", "earnings_calendar", _eodhd_earnings)
 register("eodhd", "fundamentals", _eodhd_fundamentals)
 register("eodhd", "news", _eodhd_news)
 register("eodhd", "corp_actions", _eodhd_splits)
+register("finnhub", "earnings_calendar", _finnhub_earnings)
 register("finnhub", "insider_tx", _finnhub_insider)
 register("finnhub", "news", _finnhub_news)
 register("finnhub", "sentiment", _finnhub_news)

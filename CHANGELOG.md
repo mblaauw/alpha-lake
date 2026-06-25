@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tiingo fundamentals connector** — switched from `/daily` (daily metrics) to
+  `/statements` endpoint (financial statement line items). Added
+  `fundamentals_from_json()` normalize function to transform Tiingo statements
+  data into `FundamentalFact`-shaped rows.
+- **Finnhub connector** — fixed `analyst_estimates` endpoint from broken
+  `/stock/recommendation-trends` (302/404) to `/stock/recommendation` (200).
+- **Earnings calendar** — replaced dead EODHD `/eod/earn-calendar` endpoint
+  (404) with Finnhub `/calendar/earnings` connector. Added
+  `earnings_calendar_from_finnhub()` normalize function.
+- **API keys** — SEC EDGAR currently blocked (403); use Tiingo for fundamentals.
+  EODHD earnings_calendar endpoint dead; use Finnhub.
+
 ### Added
 
 - **Fundamental metrics** — canonical fundamentals dataset from SEC EDGAR

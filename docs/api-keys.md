@@ -24,6 +24,9 @@ export the variables or use a `.env` file in the working directory.
 
 Free tier: limited calls per day. Check your plan at eodhd.com.
 
+**Active endpoints:** `/eod/*` (bars, fundamentals, news).
+**Dead endpoints:** `/eod/earn-calendar` (returns 404). Use Finnhub for earnings calendar instead.
+
 ### Tiingo
 
 1. Register at [api.tiingo.com](https://api.tiingo.com/)
@@ -93,6 +96,15 @@ Free tier: 100 requests per day.
 Free tier: 60 requests per minute. Some endpoints (e.g. real-time quotes) may be
 restricted on the free plan.
 
+**Active endpoints:**
+- `/stock/recommendation` — analyst estimates (recommendation trends)
+- `/calendar/earnings` — earnings calendar
+- `/company-news` — news articles
+- `/stock/insider-sentiment` — insider transactions
+
+**Note:** The `/stock/recommendation-trends` endpoint is deprecated (returns 302/404);
+use `/stock/recommendation` instead.
+
 ### Financial Modeling Prep (FMP)
 
 1. Register at [financialmodelingprep.com](https://financialmodelingprep.com/)
@@ -110,7 +122,10 @@ SEC EDGAR requires a User-Agent header with a contact email. No API key is neede
 1. Set `ALPHA_LAKE_SEC_CONTACT_EMAIL` in `.env` (e.g. `your-name@example.com`)
 2. The connector uses this email for the `User-Agent` header automatically
 
-Without a contact email, SEC requests may be rate-limited or blocked.
+Without a contact email, SEC requests are blocked with 403 "undeclared automated tool".
+
+**Status:** Currently blocked (returns 403) even with User-Agent. SEC may have changed
+their bot detection. Temporarily disabled; use Tiingo for fundamentals instead.
 
 ## Sources that don't need keys
 

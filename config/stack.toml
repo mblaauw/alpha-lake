@@ -203,8 +203,12 @@ max_retries = 3
 enabled = true
 parser_version = 1
 
-[source_datasets.eodhd.earnings_calendar]
+[source_datasets.finnhub.earnings_calendar]
 enabled = true
+parser_version = 1
+
+[source_datasets.eodhd.earnings_calendar]
+enabled = false
 parser_version = 1
 
 [source_datasets.tiingo]

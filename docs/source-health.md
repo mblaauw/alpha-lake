@@ -13,15 +13,15 @@ status. This file is the single source of truth for source availability.
 ## Sources
 
 | Source | Endpoint | Status | Last Audited | Notes |
-|---|---|---|---|---|
-| EODHD | `https://eodhd.com/api` | live | 2026-06-21 | Primary bars source. API key required. |
-| Tiingo | `https://api.tiingo.com` | live | 2026-06-21 | Secondary bars, fundamentals, news. |
+|---|---|---|---|---|---|
+| EODHD | `https://eodhd.com/api` | gated | 2026-06-25 | Primary bars source. `earnings_calendar` endpoint returns 404 (dead). API key required. |
+| Tiingo | `https://api.tiingo.com` | live | 2026-06-25 | Secondary bars, fundamentals (`/statements`), news. |
 | Alpaca | `https://data.alpaca.markets` | live | 2026-06-21 | Tertiary bars. Disabled by default. |
-| SEC EDGAR | `https://data.sec.gov` | live | 2026-06-21 | Fundamentals + insider filings. UA required. |
+| SEC EDGAR | `https://data.sec.gov` | dead | 2026-06-25 | Blocks automated tooling with 403. Send UA with contact email to unblock. |
 | OpenFIGI | `https://api.openfigi.com/v3` | live | 2026-06-21 | Identifier resolution. |
 | FRED | `https://api.stlouisfed.org/fred` | live | 2026-06-21 | Macro series. Keyless fallback available. |
 | FMP | `https://financialmodelingprep.com/stable` | live (paid) | 2026-06-21 | Economic calendar + analyst ratings. Requires paid plan. |
-| Finnhub | `https://finnhub.io/api/v1` | live | 2026-06-21 | News, analyst estimates, insider sentiment. |
+| Finnhub | `https://finnhub.io/api/v1` | live | 2026-06-25 | News, analyst estimates (recommendation trends -> `/stock/recommendation`), earnings calendar (`/calendar/earnings`), insider sentiment. |
 | Marketaux | `https://api.marketaux.com/v1` | live | 2026-06-21 | News + sentiment. Strict daily quota (100). |
 | StockTwits | `https://api.stocktwits.com/api/2` | live | 2026-06-21 | Keyless social sentiment tags. |
 | ApeWisdom | `https://apewisdom.io/api/v1.0` | live | 2026-06-21 | Keyless aggregated attention. |
@@ -37,8 +37,10 @@ and may produce ``quality_status = "quarantined"`` data:
   lower than the API path.
 - **FRED** — CSV keyless fallback; parsable but unstructured.
 
-## Deprecated Sources
+## Deprecated / Dead Endpoints
 
-| Source | Reason | Removed |
+| Endpoint | Reason | Replaced By |
 |---|---|---|
-| *(none currently)* | | |
+| EODHD `/eod/earn-calendar` | Returns 404 (dead) | Finnhub `/calendar/earnings` |
+| Finnhub `/stock/recommendation-trends` | Returns 302/404 (deprecated) | Finnhub `/stock/recommendation` |
+| SEC EDGAR `/api/xbrl/companyfacts` | Blocks automated tooling with 403 | Tiingo `/tiingo/fundamentals/*/statements` |
