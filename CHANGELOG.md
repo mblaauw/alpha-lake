@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+_(none yet)_
+
+### Fixed
+
+_(none yet)_
+
+## [v0.1.0-alpha.3] — 2026-06-25
+
+### Added
+
 - **Alpha Vantage integration** — new multi-dataset source across 10 endpoint categories:
   - Fundamentals: INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, OVERVIEW, SHARES_OUTSTANDING (#505–#507)
   - Corporate actions: DIVIDENDS, SPLITS (#508)
@@ -23,9 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New models: `InsiderTransactionFact`, `InstitutionalHoldingFact`, `TopMoverFact`,
     `ETPProfileFact`, `IPOEventFact`
   - See docs/adr/2026-06-25-alpha-vantage-integration.md for full architecture
-
-### Fixed
-
 - **Tiingo fundamentals connector** — switched from `/daily` (daily metrics) to
   `/statements` endpoint (financial statement line items). Added
   `fundamentals_from_json()` normalize function to transform Tiingo statements
@@ -35,8 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Earnings calendar** — replaced dead EODHD `/eod/earn-calendar` endpoint
   (404) with Finnhub `/calendar/earnings` connector. Added
   `earnings_calendar_from_finnhub()` normalize function.
-- **API keys** — SEC EDGAR currently blocked (403); use Tiingo for fundamentals.
-  EODHD earnings_calendar endpoint dead; use Finnhub.
+- **Fundamentals P0 fixes** — wall-clock fallback removal, overview ID registry,
+  threshold scale correction, TTM consecutive-quarter validation, N/M display,
+  glossary tooltips, relative valuation context profile, peer-percentile downgrade (#500/#502)
+- **Golden replay** — fixtures and replay tests for indicators, readouts, and
+  fundamental metrics (bars + compute + estimate metrics)
+
+### Fixed
+
+- **Syntax error** — `except ExcType, var:` (Python 2 style) in `_shared.py`
+  and `alphav.py` normalize, fixed to `except (ExcType, var):`
+- **SEC EDGAR** — currently blocked (403); documented as dead, Tiingo recommended
+- **EODHD** — earnings_calendar endpoint returns 404 (dead); replaced with Finnhub
 
 ### Added
 

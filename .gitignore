@@ -17,3 +17,4 @@ tests/replay/fixtures/
 .ruff_cache/
 :memory:/
 docs/gates/
+.vscode/
