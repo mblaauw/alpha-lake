@@ -39,6 +39,10 @@ async def fetch_fundamentals(symbol: str) -> RawFetch:
     ov_data = await _fetch_one("OVERVIEW")
     await asyncio.sleep(12)
     so_data = await _fetch_one("SHARES_OUTSTANDING")
+    await asyncio.sleep(12)
+    ea_data = await _fetch_one("EARNINGS")
+    await asyncio.sleep(12)
+    ee_data = await _fetch_one("EARNINGS_ESTIMATES")
 
     merged = {
         "source": "alphav",
@@ -48,6 +52,8 @@ async def fetch_fundamentals(symbol: str) -> RawFetch:
         "cashFlow": cf_data,
         "overview": ov_data,
         "sharesOutstanding": so_data,
+        "earnings": ea_data,
+        "earningsEstimates": ee_data,
     }
     body = json.dumps(merged, default=str).encode()
     manifest = build_manifest(
