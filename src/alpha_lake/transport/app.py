@@ -24,6 +24,7 @@ from alpha_lake.config import get_config, load_config
 from alpha_lake.secrets import get_store
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.serving import read_bars_adjusted, read_bars_asof
+from alpha_lake.transport._models import HealthResponse
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
@@ -102,7 +103,7 @@ def _auth(request: Request) -> str:
 app = FastAPI(title="Alpha-Lake", version="0.1.0")
 
 
-@app.get("/v1/health")
+@app.get("/v1/health", response_model=HealthResponse)
 async def health():
     return catalog_health(_get_con())
 
