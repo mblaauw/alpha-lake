@@ -367,6 +367,68 @@ def test_fundamentals_glossary_category_filter(client):
     assert len(data) == 3  # P/E, P/S, P/FCF
 
 
+def test_fundamentals_metrics_metric_ids_filter(client, _test_con):
+    con = _test_con
+    con.execute(
+        """
+        INSERT INTO fundamental_metrics VALUES (
+            'sec_test', 'fundamentals.profitability.operating_margin_ttm', '1.0.0',
+            'Profitability', 'ttm', '2026-03-31', '2026-05-15 10:00:00+00',
+            22.5, 'percent', NULL, NULL,
+            '["2026-03-31","2025-12-31","2025-09-30","2025-06-30"]',
+            '["h1","h2","h3","h4"]',
+            'operating_income_ttm / revenue_ttm * 100',
+            'valid', '1.0.0', 'run_001', 'derived', '',
+            '', '', '', 1, 1
+        )
+        """
+    )
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "metric_ids": "fundamentals.scale.revenue_ttm",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["metrics"]) == 1
+    assert data["metrics"][0]["metric_id"] == "fundamentals.scale.revenue_ttm"
+
+
+def test_fundamentals_metrics_not_meaningful_reason(client, _test_con):
+    con = _test_con
+    con.execute(
+        """
+        INSERT INTO fundamental_metrics VALUES (
+            'sec_test', 'fundamentals.financial_health.net_debt_to_ebitda_ttm', '1.0.0',
+            'Financial Health', 'ttm', '2026-03-31', '2026-05-15 10:00:00+00',
+            NULL, 'multiple', NULL, NULL,
+            '["2026-03-31","2025-12-31","2025-09-30","2025-06-30"]',
+            '["h1","h2","h3","h4"]',
+            'net_debt_mrq / ebitda_ttm',
+            'not_meaningful', '1.0.0', 'run_001', 'derived', '',
+            '', '', '', 1, 1
+        )
+        """
+    )
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    nm = [m for m in data["metrics"] if m["state"] == "not_meaningful"]
+    assert len(nm) >= 1
+    assert nm[0]["value"] is None
+
+
 def test_rate_limit(client):
     headers = _auth_header()
     last_status = 200
