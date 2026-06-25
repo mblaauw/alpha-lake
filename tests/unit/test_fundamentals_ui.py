@@ -45,7 +45,7 @@ def test_fundamentals_pins_key_is_independent():
 
 def test_fundamentals_overview_metrics_defined():
     js = _APP_JS.read_text()
-    assert "_OVERVIEW" in js
+    assert "_fundOverviewIds" in js
 
 
 def test_fundamentals_api_endpoint_called():

@@ -1105,7 +1105,7 @@ async def symbol_fundamentals(
 async def fundamentals_glossary(
     categories: str = "",
 ):
-    """Return the full fundamentals glossary.
+    """Return the full fundamentals glossary with overview listing.
 
     Query param ``?categories=Scale,Profitability`` to filter.
     """
@@ -1114,4 +1114,11 @@ async def fundamentals_glossary(
     if categories:
         wanted = {c.strip() for c in categories.split(",") if c.strip()}
         payloads = [p for p in payloads if p["category"] in wanted]
-    return JSONResponse(payloads)
+    from alpha_lake.interpretation.fundamentals_glossary import FUNDAMENTALS_OVERVIEW
+
+    return JSONResponse(
+        {
+            "overview_ids": list(FUNDAMENTALS_OVERVIEW),
+            "entries": payloads,
+        }
+    )

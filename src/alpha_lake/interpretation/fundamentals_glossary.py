@@ -76,13 +76,13 @@ FUNDAMENTAL_THRESHOLDS: dict[str, FundamentalThresholdProfile] = {
         "yield_v1",
         "1.0.0",
         "discrete",
-        "Absolute bands for yield metrics; directional interpretation varies by context.",
+        "Absolute bands for yield metrics (values in percentage points).",
         bands=(
-            FundamentalBand("low", TONE_GRAY, "low", max_value=0.02),
+            FundamentalBand("low", TONE_GRAY, "low", max_value=2.0),
             FundamentalBand(
-                "median_range", TONE_GRAY, "median range", min_value=0.02, max_value=0.05
+                "median_range", TONE_GRAY, "median range", min_value=2.0, max_value=6.0
             ),
-            FundamentalBand("high", TONE_GRAY, "high", min_value=0.05),
+            FundamentalBand("high", TONE_GRAY, "high", min_value=6.0),
         ),
     ),
     "profitability_peer_percentile_v1": FundamentalThresholdProfile(
@@ -101,35 +101,35 @@ FUNDAMENTAL_THRESHOLDS: dict[str, FundamentalThresholdProfile] = {
         "roic_absolute_v1",
         "1.0.0",
         "discrete",
-        "Return on invested capital absolute bands.",
+        "Return on invested capital absolute bands (values in percentage points).",
         bands=(
-            FundamentalBand("low", TONE_AMBER, "low", max_value=0.05),
+            FundamentalBand("low", TONE_AMBER, "low", max_value=8.0),
             FundamentalBand(
-                "median_range", TONE_GRAY, "median range", min_value=0.05, max_value=0.15
+                "median_range", TONE_GRAY, "median range", min_value=8.0, max_value=15.0
             ),
-            FundamentalBand("high", TONE_GRAY, "high", min_value=0.15),
+            FundamentalBand("high", TONE_GRAY, "high", min_value=15.0),
         ),
     ),
     "growth_yoy_v1": FundamentalThresholdProfile(
         "growth_yoy_v1",
         "1.0.0",
         "discrete",
-        "Year-over-year growth direction bands.",
+        "Year-over-year growth direction bands (values in percentage points).",
         bands=(
-            FundamentalBand("contracting", TONE_RED, "contracting", max_value=-0.01),
-            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-0.01, max_value=0.01),
-            FundamentalBand("expanding", TONE_GREEN, "expanding", min_value=0.01),
+            FundamentalBand("contracting", TONE_RED, "contracting", max_value=-1.0),
+            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-1.0, max_value=1.0),
+            FundamentalBand("expanding", TONE_GREEN, "expanding", min_value=1.0),
         ),
     ),
     "margin_change_v1": FundamentalThresholdProfile(
         "margin_change_v1",
         "1.0.0",
         "discrete",
-        "Period-over-period margin change direction.",
+        "Period-over-period margin change direction (values in percentage points).",
         bands=(
-            FundamentalBand("declining", TONE_RED, "declining", max_value=-0.01),
-            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-0.01, max_value=0.01),
-            FundamentalBand("expanding", TONE_GRAY, "expanding", min_value=0.01),
+            FundamentalBand("declining", TONE_RED, "declining", max_value=-1.0),
+            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-1.0, max_value=1.0),
+            FundamentalBand("expanding", TONE_GRAY, "expanding", min_value=1.0),
         ),
     ),
     "leverage_v1": FundamentalThresholdProfile(
@@ -201,11 +201,11 @@ FUNDAMENTAL_THRESHOLDS: dict[str, FundamentalThresholdProfile] = {
         "share_count_change_v1",
         "1.0.0",
         "discrete",
-        "Period-over-period diluted share count change.",
+        "Period-over-period diluted share count change (values in percentage points).",
         bands=(
-            FundamentalBand("diluting", TONE_AMBER, "diluting", max_value=-0.01),
-            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-0.01, max_value=0.01),
-            FundamentalBand("reducing", TONE_GRAY, "reducing", min_value=0.01),
+            FundamentalBand("diluting", TONE_AMBER, "diluting", max_value=-1.0),
+            FundamentalBand("stable", TONE_GRAY, "stable", min_value=-1.0, max_value=1.0),
+            FundamentalBand("reducing", TONE_GRAY, "reducing", min_value=1.0),
         ),
     ),
     "payout_ratio_v1": FundamentalThresholdProfile(
@@ -891,6 +891,19 @@ def resolve_fundamental_state(
 
 def get_threshold_profile(profile_id: str) -> FundamentalThresholdProfile | None:
     return FUNDAMENTAL_THRESHOLDS.get(profile_id)
+
+
+FUNDAMENTALS_OVERVIEW: tuple[str, ...] = (
+    "fundamentals.scale.revenue_ttm",
+    "fundamentals.valuation.price_to_earnings_ttm",
+    "fundamentals.profitability.operating_margin_ttm",
+    "fundamentals.profitability.net_margin_ttm",
+    "fundamentals.growth.revenue_yoy_ttm",
+    "fundamentals.growth.eps_diluted_yoy_ttm",
+    "fundamentals.cash_flow_quality.fcf_conversion_ttm",
+    "fundamentals.financial_health.current_ratio_mrq",
+    "fundamentals.financial_health.net_debt_to_ebitda_ttm",
+)
 
 
 def get_glossary_entry(metric_id: str) -> FundamentalGlossaryEntry | None:
