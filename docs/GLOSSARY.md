@@ -1,7 +1,15 @@
-# Indicator Glossary — Alpha-Lake
+# Glossary — Alpha-Lake
+
+Dashboards surface two families of metrics: **technical indicators** (derived from
+daily OHLCV bars) and **fundamental metrics** (derived from SEC-filed financial
+data and read-time valuation).
+
+---
+
+## Technical Indicators
 
 All indicators are derived from daily OHLCV bars unless otherwise noted.
-Categories match the dashboard submenu: **Trend**, **Momentum**, **Volatility**,
+Category tags match the dashboard submenu: **Trend**, **Momentum**, **Volatility**,
 **Volume**, **Structure**, **Relative Performance**, **Utility**.
 
 ---
@@ -405,4 +413,172 @@ Category: Utility
 
 ### Trading Date Count
 Number of trading days available in the lookback window for the symbol. Used to verify sufficient data for indicator computation.
-Category: Utility
+
+---
+
+## Fundamentals
+
+Fundamental metrics are derived from SEC EDGAR company filings and computed
+read-time valuations. Categories match the dashboard **Fundamentals** tab:
+**Scale**, **Profitability**, **Cash Flow Quality**, **Growth**, **Financial Health**,
+**Valuation**.
+
+Metrics with `⚠ not materialized` are registered for API exploration but are not
+yet produced by the batch compute pipeline. They will return `unavailable` with
+condition `not_materialized`.
+
+### Scale
+
+#### Revenue (TTM)
+Total revenue over the last four standalone quarters.
+`sum(last_four_standalone_quarter_revenue)`
+Category: Scale · Basis: ttm · Unit: currency
+
+#### Revenue per Share (TTM)
+Revenue per share over the last four standalone quarters.
+`revenue_ttm / diluted_shares_outstanding`
+Category: Scale · Basis: ttm · Unit: currency · ⚠ not materialized
+
+#### EBITDA (TTM)
+Earnings before interest, taxes, depreciation, and amortization over TTM.
+`sum(last_four_standalone_quarter_ebitda)`
+Category: Scale · Basis: ttm · Unit: currency
+
+#### EBITDA Margin (TTM)
+EBITDA as a percentage of revenue over TTM.
+`ebitda_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+### Profitability
+
+#### Gross Margin (TTM)
+Gross profit as a percentage of revenue over TTM.
+`gross_profit_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+#### Operating Margin (TTM)
+Operating income as a percentage of revenue over TTM.
+`operating_income_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+#### Net Margin (TTM)
+Net income as a percentage of revenue over TTM.
+`net_income_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+#### FCF Margin (TTM)
+Free cash flow as a percentage of revenue over TTM.
+`free_cash_flow_ttm / revenue_ttm × 100`
+Category: Profitability · Basis: ttm · Unit: percent
+
+#### Diluted EPS (TTM)
+Diluted earnings per share over the last four standalone quarters.
+`sum(last_four_standalone_quarter_diluted_eps)`
+Category: Profitability · Basis: ttm · Unit: currency · ⚠ not materialized
+
+### Cash Flow Quality
+
+#### CFO / Net Income (TTM)
+Operating cash flow divided by net income over TTM.
+`operating_cash_flow_ttm / net_income_ttm`
+Category: Cash Flow Quality · Basis: ttm · Unit: multiple
+
+#### FCF Conversion (TTM)
+Free cash flow divided by net income over TTM.
+`free_cash_flow_ttm / net_income_ttm`
+Category: Cash Flow Quality · Basis: ttm · Unit: multiple
+
+#### FCF per Share (TTM)
+Free cash flow per share over the last four standalone quarters.
+`free_cash_flow_ttm / diluted_shares_outstanding`
+Category: Cash Flow Quality · Basis: ttm · Unit: currency · ⚠ not materialized
+
+### Growth
+
+#### Revenue YoY (TTM)
+Year-over-year TTM revenue growth.
+`revenue_ttm / revenue_ttm_1y_ago − 1`
+Category: Growth · Basis: ttm · Unit: percent
+
+#### EPS Diluted YoY (TTM)
+Year-over-year TTM diluted EPS growth.
+`eps_ttm / eps_ttm_1y_ago − 1`
+Category: Growth · Basis: ttm · Unit: percent
+
+#### EBITDA YoY (TTM)
+Year-over-year TTM EBITDA growth.
+`ebitda_ttm / ebitda_ttm_1y_ago − 1`
+Category: Growth · Basis: ttm · Unit: percent
+
+### Financial Health
+
+#### Cash & Equivalents (MRQ)
+Cash and short-term investments as of the most recent quarter.
+Category: Financial Health · Basis: mrq · Unit: currency
+
+#### Total Debt (MRQ)
+Total debt (short-term + long-term) as of the most recent quarter.
+Category: Financial Health · Basis: mrq · Unit: currency
+
+#### Net Debt (MRQ)
+Total debt minus cash and equivalents as of the most recent quarter.
+Category: Financial Health · Basis: mrq · Unit: currency
+
+#### Net Debt / EBITDA (TTM)
+Net debt divided by TTM EBITDA. Measures leverage.
+`net_debt_mrq / ebitda_ttm`
+Category: Financial Health · Basis: ttm · Unit: multiple
+
+#### Current Ratio (MRQ)
+Current assets divided by current liabilities as of the most recent quarter.
+`current_assets / current_liabilities`
+Category: Financial Health · Basis: mrq · Unit: multiple
+
+#### Debt / Equity (MRQ)
+Total debt divided by total equity as of the most recent quarter.
+`total_debt / total_equity`
+Category: Financial Health · Basis: mrq · Unit: multiple
+
+### Valuation (read-time)
+
+The following are computed at read time by combining the latest available price
+with fundamental data. They are never stored.
+
+#### P/E (TTM)
+Latest price divided by TTM diluted EPS.
+`price / diluted_eps_ttm`
+Category: Valuation · Basis: read_time · Unit: multiple
+
+#### P/S (TTM)
+Latest price divided by TTM revenue per share.
+`price / revenue_per_share_ttm`
+Category: Valuation · Basis: read_time · Unit: multiple
+
+#### P/FCF (TTM)
+Latest price divided by TTM free cash flow per share.
+`price / fcf_per_share_ttm`
+Category: Valuation · Basis: read_time · Unit: multiple
+
+### Threshold Profiles
+
+Fundamental metrics carry a threshold profile that classifies each value into a
+state with a tone (neutral gray, green, amber, red) and label. Profiles are
+versioned TOML-derived data in `src/alpha_lake/interpretation/fundamentals_glossary.py`.
+
+| Profile | Method | Description |
+|---------|--------|-------------|
+| `context_only_v1` | context | Always contextual; no directional classification |
+| `relative_valuation_multiple_v1` | discrete | P/E, P/S, P/FCF: low (<15), median (15–30), high (≥30) |
+| `yield_v1` | discrete | Yield metrics: low (<2%), median (2–5%), high (≥5%) |
+| `profitability_peer_percentile_v1` | peer_percentile | Margins classified relative to peers (min 5 peers) |
+| `roic_absolute_v1` | discrete | ROIC: low (<5%), median (5–15%), high (≥15%) |
+| `growth_yoy_v1` | discrete | YoY growth: contracting (<−1%), stable (−1–1%), expanding (>1%) |
+| `margin_change_v1` | discrete | Margin Δ: declining, stable, expanding |
+| `leverage_v1` | discrete | Net Debt/EBITDA: low (<2×), median (2–4×), high (≥4×) |
+| `debt_to_equity_v1` | discrete | D/E: low (<0.5×), median (0.5–2×), high (≥2×) |
+| `liquidity_v1` | discrete | Current ratio: low (<1×), median (1–2×), high (≥2×) |
+| `interest_coverage_v1` | discrete | EBIT/interest: low (<2×), median (2–5×), high (≥5×) |
+| `cash_conversion_v1` | discrete | FCF/net income: low (<0.5×), median (0.5–1×), high (≥1×) |
+| `share_count_change_v1` | discrete | Share count Δ: diluting, stable, reducing |
+| `payout_ratio_v1` | discrete | Payout ratio: low (<20%), median (20–60%), high (≥60%) |
+| `estimate_revision_v1` | discrete | Analyst revision direction (not yet implemented) |

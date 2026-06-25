@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fundamental metrics** — canonical fundamentals dataset from SEC EDGAR
+  Companyfacts with Patito model, tri-temporal Parquet storage, and SCD2
+  versioning (#477 + #480)
+- **Fundamental serving reader** — `read_fundamentals_asof()` with period-metric
+  aggregation (TTM rollup, MRQ pass-through) and read-time valuation (P/E, P/S,
+  P/FCF) composing price with per-share denominators (#480)
+- **Fundamentals glossary** — `FundamentalGlossaryEntry` + `FUNDAMENTAL_GLOSSARY`
+  registry with 27 metric definitions across 6 categories, 15 threshold profiles,
+  state-resolution engine, and glossary JSON API (#481)
+- **Fundamentals REST endpoints** — `GET /v1/fundamentals/metrics` (authenticated,
+  PIT-safe) and `GET /v1/fundamentals/glossary` with optional `include` param
+  for inputs/definitions/provenance (#483)
+- **Fundamentals dashboard endpoints** — `GET /v1/dashboard/symbol/{symbol}/fundamentals`
+  and `GET /v1/dashboard/fundamentals/glossary` (dashboard-gated, no auth) (#483)
+- **Lake Watch Fundamentals tab** — category-grouped metric cards, symbol selector,
+  pin/unpin with independent `lw_fund_pins` storage, glossary tooltips, and
+  `latest=true` toggle (#485)
 - **Symbol Readouts** — neutral interpretation layer over bars and technical
   indicators. 18 readouts across 7 categories: price action, trend, momentum,
   volatility, participation, relative strength, market regime (#447)
