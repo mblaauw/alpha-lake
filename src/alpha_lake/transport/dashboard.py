@@ -41,6 +41,9 @@ from alpha_lake.derived.indicators import (
     vwap,
 )
 from alpha_lake.interpretation import READOUTS
+from alpha_lake.interpretation.fundamentals_glossary import (
+    glossary_to_json as _fund_glossary_to_json,
+)
 from alpha_lake.interpretation.profiles import load_threshold_profiles
 from alpha_lake.interpretation.readouts import (
     compute_all_readouts,
@@ -48,7 +51,13 @@ from alpha_lake.interpretation.readouts import (
 )
 from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
-from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
+from alpha_lake.serving import (
+    pit_read,
+    read_bars_adjusted,
+    read_bars_asof,
+    read_fundamental_metrics_asof,
+    read_macro_series_asof,
+)
 from alpha_lake.transport._glossary import _GLOSSARY
 from alpha_lake.transport._models import (
     BarsSummaryResponse,
@@ -65,6 +74,7 @@ from alpha_lake.transport._shared import (
     _MAX_LOOKBACK_DAYS,
     _compute_and_serialize_indicators,
     _fetch_bars,
+    _fundamental_row_to_item,
     _now,
     _parse_indicators,
     _pl_to_dicts,
@@ -1002,3 +1012,106 @@ async def indicator_glossary():
     """
     _check_enabled()
     return _GLOSSARY
+
+
+# ── Fundamentals ──────────────────────────────────────────────────────────
+
+
+@router.get("/symbol/{symbol}/fundamentals")
+async def symbol_fundamentals(
+    symbol: str,
+    as_of: datetime | None = None,
+    latest: bool = False,
+    categories: str = "",
+    metric_ids: str = "",
+    include: str = "",
+    price_mode: str = "raw",
+):
+    _check_enabled()
+    con = _get_con()
+
+    if as_of is None and not latest:
+        raise HTTPException(
+            422,
+            "as_of is required for point-in-time reads. "
+            "Use latest=true for the most recent observation.",
+        )
+
+    as_of = _now() if as_of is None else _aware(as_of)
+
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol
+
+    cat_list = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    mid_list = [m.strip() for m in metric_ids.split(",") if m.strip()] if metric_ids else None
+    include_set = {s.strip() for s in include.split(",") if s.strip()} if include else set()
+
+    try:
+        df = read_fundamental_metrics_asof(
+            con,
+            security_ids=[sec_id],
+            as_of=as_of,
+            categories=cat_list,
+            metric_ids=mid_list,
+            price_mode=price_mode,
+        )
+    except Exception:
+        return JSONResponse(
+            {
+                "symbol": symbol,
+                "as_of": as_of.isoformat(),
+                "metrics": [],
+                "metadata": {
+                    "computed_at": _now().isoformat(),
+                    "metrics_returned": 0,
+                },
+            }
+        )
+
+    if df.is_empty():
+        return JSONResponse(
+            {
+                "symbol": symbol,
+                "as_of": as_of.isoformat(),
+                "metrics": [],
+                "metadata": {
+                    "computed_at": _now().isoformat(),
+                    "metrics_returned": 0,
+                },
+            }
+        )
+
+    rows = df.rows(named=True)
+    metrics = [_fundamental_row_to_item(r, include_set) for r in rows]
+    meta: dict[str, Any] = {
+        "computed_at": _now().isoformat(),
+        "metrics_returned": len(metrics),
+    }
+    if latest:
+        meta["latest"] = True
+
+    return JSONResponse(
+        {
+            "symbol": symbol,
+            "as_of": as_of.isoformat(),
+            "metrics": metrics,
+            "metadata": meta,
+        }
+    )
+
+
+@router.get("/fundamentals/glossary")
+async def fundamentals_glossary(
+    categories: str = "",
+):
+    """Return the full fundamentals glossary.
+
+    Query param ``?categories=Scale,Profitability`` to filter.
+    """
+    _check_enabled()
+    payloads = _fund_glossary_to_json()
+    if categories:
+        wanted = {c.strip() for c in categories.split(",") if c.strip()}
+        payloads = [p for p in payloads if p["category"] in wanted]
+    return JSONResponse(payloads)
