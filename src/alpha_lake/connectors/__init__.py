@@ -4,6 +4,9 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from alpha_lake.connectors.alpaca_bars import fetch_daily_bars as _alpaca_bars
+from alpha_lake.connectors.alphav import (
+    fetch_corp_actions as _alphav_corp_actions,
+)
 from alpha_lake.connectors.alphav import fetch_fundamentals as _alphav_fundamentals
 from alpha_lake.connectors.apewisdom import fetch_attention as _apewisdom
 from alpha_lake.connectors.corp_actions_eodhd import fetch_splits as _eodhd_splits
@@ -65,6 +68,7 @@ def has_api_key(source_id: str) -> bool:
         return False
 
 
+register("alphav", "corp_actions", _alphav_corp_actions)
 register("alphav", "fundamentals", _alphav_fundamentals)
 register("alpaca", "bars_daily", _alpaca_bars)
 register("apewisdom", "attention_metrics", _apewisdom)
