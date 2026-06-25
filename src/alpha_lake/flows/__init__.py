@@ -568,6 +568,8 @@ def ingest_dataset(
     raw_data = json.loads(raw_bytes)
     if dataset == "macro_series" and isinstance(raw_data, dict):
         records = raw_data.get("observations", [raw_data])
+        if src == "alphav":
+            records = raw_data.get("data", [])
     elif dataset == "insider_tx" and isinstance(raw_data, dict):
         records = raw_data.get("data", [raw_data])
     elif dataset == "sentiment" and src == "stocktwits" and isinstance(raw_data, dict):
@@ -584,17 +586,30 @@ def ingest_dataset(
     fetch_id = raw_fetch.manifest.get("request_params_hash", f"fetch_{run_id}")
 
     if dataset == "macro_series":
-        from alpha_lake.normalize import macro_series_from_json
+        if src == "alphav":
+            from alpha_lake.normalize.alphav import econ_indicator_from_json
 
-        df = macro_series_from_json(
-            raw=records,
-            series_id=kwargs.get("series_id", series_id or "GDP"),
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
+            df = econ_indicator_from_json(
+                raw=records,
+                series_id=kwargs.get("series_id", series_id or "GDP"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
+        else:
+            from alpha_lake.normalize import macro_series_from_json
+
+            df = macro_series_from_json(
+                raw=records,
+                series_id=kwargs.get("series_id", series_id or "GDP"),
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+            )
     elif dataset == "news":
         if src == "marketaux":
             from alpha_lake.normalize import marketaux_news_from_json

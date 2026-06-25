@@ -97,6 +97,49 @@ async def fetch_institutional_holdings(symbol: str) -> RawFetch:
     return RawFetch(manifest=manifest, body=body)
 
 
+_ECON_SERIES_MAP: dict[str, dict[str, Any]] = {
+    "gdp": {"function": "REAL_GDP"},
+    "gdp_per_capita": {"function": "REAL_GDP_PER_CAPITA"},
+    "treasury_3mo": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "3month"},
+    "treasury_2yr": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "2year"},
+    "treasury_5yr": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "5year"},
+    "treasury_7yr": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "7year"},
+    "treasury_10yr": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "10year"},
+    "treasury_30yr": {"function": "TREASURY_YIELD", "interval": "daily", "maturity": "30year"},
+    "fed_rate": {"function": "FEDERAL_FUNDS_RATE"},
+    "cpi": {"function": "CPI"},
+    "inflation": {"function": "INFLATION"},
+    "retail_sales": {"function": "RETAIL_SALES"},
+    "durables": {"function": "DURABLES"},
+    "unemployment": {"function": "UNEMPLOYMENT"},
+    "nonfarm_payroll": {"function": "NONFARM_PAYROLL"},
+}
+
+
+async def fetch_econ_indicator(series_id: str, from_date: str = "", to_date: str = "") -> RawFetch:
+    """Fetch an economic indicator from Alpha Vantage.
+
+    Maps ``series_id`` to the appropriate AV function. Single API call.
+    ``from_date`` and ``to_date`` are accepted for pipeline compatibility
+    but AV free tier returns all available data regardless.
+    """
+    del from_date, to_date  # unused — AV free tier always returns full history
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    spec = _ECON_SERIES_MAP.get(series_id)
+    if spec is None:
+        raise ValueError(f"Unknown economic series: {series_id}")
+    params: dict[str, Any] = {"apikey": cfg.api_key, **spec}
+    # Remove default empty strings that AV may reject
+    params = {k: v for k, v in params.items() if v}
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+        body = r.content
+    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=body)
+
+
 async def fetch_corp_actions(symbol: str) -> RawFetch:
     """Fetch DIVIDENDS and SPLITS for a symbol. Merges both into one RawFetch."""
     cfg = get_source("alphav")
