@@ -246,6 +246,163 @@ async def fundamentals_glossary(
     return JSONResponse(payloads)
 
 
+# ── Contract ────────────────────────────────────────────────────────────────
+
+
+@app.get("/v1/contract")
+async def contract():
+    return {
+        "service": "alpha-lake",
+        "api_version": "1.0",
+        "minimum_alpha_quant_version": "0.3.0",
+        "capabilities": [
+            "pit_bars",
+            "technical_indicators",
+            "fundamental_metrics",
+            "insider_facts",
+            "earnings_events",
+            "attention_metrics",
+            "snapshot_reads",
+        ],
+    }
+
+
+# ── Universe ────────────────────────────────────────────────────────────────
+
+
+@app.get("/v1/universe")
+async def universe(
+    request: Request,
+    as_of: date | None = None,
+):
+    _auth(request)
+    con = _get_con()
+    if as_of:
+        rows = con.execute(
+            "SELECT DISTINCT symbol, security_id, name FROM security_master"
+            " WHERE (effective_start IS NULL OR effective_start <= ?)"
+            " AND (effective_end IS NULL OR effective_end >= ?)"
+            " ORDER BY symbol",
+            [as_of, as_of],
+        ).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT DISTINCT symbol, security_id, name FROM security_master ORDER BY symbol"
+        ).fetchall()
+    members = [{"symbol": r[0], "security_id": r[1], "name": r[2] or ""} for r in rows]
+    return JSONResponse({"as_of": as_of.isoformat() if as_of else None, "members": members})
+
+
+# ── Decision Panel — batch PIT snapshot ──────────────────────────────────────
+
+
+from alpha_lake.serving import read_fundamental_metrics_asof
+
+
+@app.get("/v1/decision-panel")
+async def decision_panel(
+    request: Request,
+    symbols: str,
+    as_of: datetime,
+    snapshot_id: str | None = None,
+    indicators: str = "sma:20,50,200,ema:12,26,rsi:14,atr:14,macd:12,26,9,bollinger:20",
+    metric_categories: str = "valuation,profitability,growth,financial_health,efficiency,liquidity",
+):
+    _auth(request)
+    con = _get_con()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not symbol_list:
+        raise HTTPException(422, "At least one symbol is required")
+
+    results: dict[str, object] = {}
+    for symbol in symbol_list:
+        sec_id = resolve_security(con, symbol, as_of=as_of.date())
+        if sec_id is None:
+            continue
+
+        bars = _fetch_bars(
+            con,
+            sec_id,
+            as_of,
+            end=as_of.date(),
+            snapshot_id=snapshot_id,
+            price_mode="split_adjusted",
+        )
+
+        parsed_indicators = _parse_indicators(indicators)
+        tech = (
+            _compute_and_serialize_indicators(
+                con,
+                sec_id,
+                parsed_indicators,
+                as_of,
+                end=as_of.date(),
+            )
+            if bars
+            else {}
+        )
+
+        cat_list = [c.strip() for c in metric_categories.split(",") if c.strip()]
+        fund_df = read_fundamental_metrics_asof(
+            con,
+            security_ids=[sec_id],
+            as_of=as_of,
+            categories=cat_list,
+            price_mode="split_adjusted",
+            snapshot_id=snapshot_id,
+        )
+        fund_metrics = (
+            [_fundamental_row_to_item(r, set()) for r in fund_df.rows(named=True)]
+            if not fund_df.is_empty()
+            else []
+        )
+
+        insider_rows = _fetch_dataset(
+            con,
+            "insider_tx",
+            sec_id,
+            as_of,
+            snapshot_id=snapshot_id,
+            source_precedence_dataset="insider_tx",
+        )
+        earnings_rows = _fetch_dataset(
+            con,
+            "earnings_calendar",
+            sec_id,
+            as_of,
+            start=as_of.date() - __import__("datetime").timedelta(days=90),
+            end=as_of.date(),
+            snapshot_id=snapshot_id,
+        )
+        mention_rows = _fetch_dataset(
+            con,
+            "attention_metrics",
+            sec_id,
+            as_of,
+            start=as_of.date() - __import__("datetime").timedelta(days=30),
+            end=as_of.date(),
+            snapshot_id=snapshot_id,
+        )
+
+        results[symbol] = {
+            "bars": bars,
+            "indicators": tech,
+            "fundamentals": fund_metrics,
+            "insider_transactions": insider_rows,
+            "earnings_events": earnings_rows,
+            "attention_mentions": mention_rows,
+        }
+
+    return JSONResponse(
+        {
+            "as_of": as_of.isoformat(),
+            "snapshot_id": snapshot_id,
+            "symbols": symbol_list,
+            "panels": results,
+        }
+    )
+
+
 # ── Insider Transactions ────────────────────────────────────────────────────
 
 
@@ -262,7 +419,11 @@ async def insider_transactions(
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     rows = _fetch_dataset(
-        con, "insider_tx", sec_id, as_of, snapshot_id=snapshot_id,
+        con,
+        "insider_tx",
+        sec_id,
+        as_of,
+        snapshot_id=snapshot_id,
         source_precedence_dataset="insider_tx",
     )
     if not rows:
@@ -290,8 +451,13 @@ async def earnings_calendar(
     if sec_id is None and symbol:
         raise HTTPException(404, f"Unknown symbol: {symbol}")
     rows = _fetch_dataset(
-        con, "earnings_calendar", sec_id or "", as_of,
-        start=start, end=end, snapshot_id=snapshot_id,
+        con,
+        "earnings_calendar",
+        sec_id or "",
+        as_of,
+        start=start,
+        end=end,
+        snapshot_id=snapshot_id,
     )
     return JSONResponse({"as_of": as_of.isoformat(), "earnings": rows})
 
@@ -314,8 +480,13 @@ async def attention_metrics(
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     start = as_of.date() - timedelta(days=days - 1)
     rows = _fetch_dataset(
-        con, "attention_metrics", sec_id, as_of,
-        start=start, end=as_of.date(), snapshot_id=snapshot_id,
+        con,
+        "attention_metrics",
+        sec_id,
+        as_of,
+        start=start,
+        end=as_of.date(),
+        snapshot_id=snapshot_id,
     )
     if not rows:
         raise HTTPException(404, f"No attention data for symbol: {symbol}")
@@ -338,11 +509,13 @@ async def trading_calendar(
     current = start
     while current <= end:
         open_day = is_trading_day(current)
-        days.append({
-            "date": current.isoformat(),
-            "is_open": open_day,
-            "session": "regular" if open_day else None,
-        })
+        days.append(
+            {
+                "date": current.isoformat(),
+                "is_open": open_day,
+                "session": "regular" if open_day else None,
+            }
+        )
         current += timedelta(days=1)
     return JSONResponse({"start": start.isoformat(), "end": end.isoformat(), "days": days})
 
@@ -358,8 +531,11 @@ async def dataset_health(
     _auth(request)
     con = _get_con()
     tables = [
-        "lake_bars", "fundamentals", "insider_tx",
-        "earnings_calendar", "attention_metrics",
+        "lake_bars",
+        "fundamentals",
+        "insider_tx",
+        "earnings_calendar",
+        "attention_metrics",
     ]
     return _dataset_health(con, tables, snapshot_id=snapshot_id)
 
