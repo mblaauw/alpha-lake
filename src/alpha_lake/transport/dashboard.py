@@ -50,6 +50,16 @@ from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
 from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
 from alpha_lake.transport._glossary import _GLOSSARY
+from alpha_lake.transport._models import (
+    BarsSummaryResponse,
+    DatasetDetailResponse,
+    DatasetInfo,
+    HealthResponse,
+    LeaderboardRow,
+    ReadoutsResponse,
+    SymbolInfo,
+    TransactionRow,
+)
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
@@ -97,7 +107,7 @@ def _aware(dt: datetime) -> datetime:
 # ── Health ────────────────────────────────────────────────────────────────────
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 async def health():
     _check_enabled()
     hlth = catalog_health(_get_con())
@@ -108,7 +118,7 @@ async def health():
 # ── Datasets ──────────────────────────────────────────────────────────────────
 
 
-@router.get("/datasets")
+@router.get("/datasets", response_model=list[DatasetInfo])
 async def datasets():
     _check_enabled()
     con = _get_con()
@@ -134,7 +144,7 @@ async def datasets():
     return result
 
 
-@router.get("/dataset/{name}")
+@router.get("/dataset/{name}", response_model=DatasetDetailResponse)
 async def dataset_detail(
     name: str,
     limit: int = 50,
@@ -357,7 +367,7 @@ async def bars_indicators(
 # ── Readouts ──────────────────────────────────────────────────────────────
 
 
-@router.get("/symbol/{symbol}/readouts")
+@router.get("/symbol/{symbol}/readouts", response_model=ReadoutsResponse)
 async def symbol_readouts(
     symbol: str,
     as_of: datetime | None = None,
@@ -523,7 +533,7 @@ async def symbol_readouts(
 # ── Symbols with real data (replaces hardcoded WATCHLIST) ────────────────
 
 
-@router.get("/bars/symbols")
+@router.get("/bars/symbols", response_model=list[SymbolInfo])
 async def bars_symbols():
     """Return distinct symbols that have data in the lake.
 
@@ -578,7 +588,7 @@ _BOOL_INDICATOR_COLS = frozenset(
 )
 
 
-@router.get("/bars/summary")
+@router.get("/bars/summary", response_model=BarsSummaryResponse)
 async def bars_summary(
     symbol: str,
     as_of: datetime | None = None,
@@ -812,7 +822,7 @@ def _sentiment_split(sent: pl.DataFrame, sids: list[str]) -> dict[str, dict[str,
     return split
 
 
-@router.get("/attention/leaderboard")
+@router.get("/attention/leaderboard", response_model=list[LeaderboardRow])
 async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     _check_enabled()
     if as_of is None:
@@ -948,7 +958,7 @@ async def macro_series(
 # ── Insider transactions ──────────────────────────────────────────────────
 
 
-@router.get("/insider/{symbol}")
+@router.get("/insider/{symbol}", response_model=list[TransactionRow])
 async def insider_tx(symbol: str, as_of: datetime | None = None, limit: int = 50):
     _check_enabled()
     if as_of is None:
