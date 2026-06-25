@@ -165,3 +165,64 @@ class ReadoutsResponse(BaseModel):
     as_of: str
     readouts: list[ReadoutItem]
     metadata: ReadoutMetadata
+
+
+class FundamentalMetricItem(BaseModel):
+    metric_id: str
+    name: str
+    category: str
+    period_kind: str
+    period_end: str | None = None
+    available_at: str | None = None
+    value: float | None = None
+    unit: str = ""
+    state: str = ""
+    threshold_profile_id: str = ""
+    threshold_state: str = ""
+    tone: str = ""
+    label: str = ""
+    display_value: str | None = None
+    display_decimals: int = 2
+    display_suffix: str = ""
+    quality_status: str = ""
+    unavailable_reason: str = ""
+    price_close: float | None = None
+    price_effective_date: str | None = None
+    price_available_at: str | None = None
+    price_mode: str = "raw"
+
+    # include=inputs
+    inputs: list[str] | None = None
+    basis: str | None = None
+    calculation_basis: str | None = None
+    source_period_ends: list[str] | None = None
+
+    # include=definitions
+    description: str | None = None
+    what_it_answers: str | None = None
+    formula: str | None = None
+    metric_version: str | None = None
+    threshold_profile: dict[str, Any] | None = None
+
+    # include=provenance
+    source_id: str | None = None
+    version_hash: str | None = None
+    content_hash: str | None = None
+    schema_version: int | None = None
+    parser_version: int | None = None
+    normalization_version: int | None = None
+    source_fetch_id: str | None = None
+    ingestion_run_id: str | None = None
+
+
+class FundamentalMetricsMetadata(BaseModel):
+    computed_at: str
+    metrics_returned: int = 0
+    latest: bool = False
+
+
+class FundamentalMetricsResponse(BaseModel):
+    symbol: str
+    as_of: str
+    metrics: list[FundamentalMetricItem]
+    metadata: FundamentalMetricsMetadata

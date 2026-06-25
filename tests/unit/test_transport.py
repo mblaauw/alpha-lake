@@ -47,6 +47,62 @@ def _test_con():
             "2000-01-01 00:00:00+00",
         ],
     )
+    con.execute("""
+        CREATE TABLE fundamental_metrics (
+            security_id VARCHAR NOT NULL,
+            metric_id VARCHAR NOT NULL,
+            metric_version VARCHAR NOT NULL,
+            category VARCHAR NOT NULL,
+            period_kind VARCHAR NOT NULL,
+            period_end DATE NOT NULL,
+            available_at TIMESTAMPTZ NOT NULL,
+            value DOUBLE,
+            unit VARCHAR NOT NULL,
+            currency VARCHAR,
+            source_currency VARCHAR,
+            source_period_ends VARCHAR,
+            source_version_hashes VARCHAR,
+            calculation_basis VARCHAR,
+            quality_status VARCHAR DEFAULT 'valid',
+            calculation_version VARCHAR,
+            ingestion_run_id VARCHAR,
+            source_id VARCHAR DEFAULT 'derived',
+            source_fetch_id VARCHAR DEFAULT '',
+            raw_payload_hash VARCHAR DEFAULT '',
+            content_hash VARCHAR DEFAULT '',
+            version_hash VARCHAR DEFAULT '',
+            schema_version INTEGER DEFAULT 1,
+            parser_version INTEGER DEFAULT 1
+        )
+    """)
+    con.execute(
+        """
+        INSERT INTO fundamental_metrics VALUES (
+            'sec_test', 'fundamentals.scale.revenue_ttm', '1.0.0',
+            'Scale', 'ttm', '2026-03-31', '2026-05-15 10:00:00+00',
+            100000000000.0, 'currency', 'USD', 'USD',
+            '["2026-03-31","2025-12-31","2025-09-30","2025-06-30"]',
+            '["h1","h2","h3","h4"]',
+            'sum(last_four_standalone_quarter_revenue)',
+            'valid', '1.0.0', 'run_001', 'derived', '',
+            '', '', '', 1, 1
+        )
+    """
+    )
+    con.execute(
+        """
+        INSERT INTO fundamental_metrics VALUES (
+            'sec_test', 'fundamentals.profitability.gross_margin_ttm', '1.0.0',
+            'Profitability', 'ttm', '2026-03-31', '2026-05-15 10:00:00+00',
+            40.5, 'percent', NULL, NULL,
+            '["2026-03-31","2025-12-31","2025-09-30","2025-06-30"]',
+            '["h1","h2","h3","h4"]',
+            'gross_profit_ttm / revenue_ttm * 100',
+            'valid', '1.0.0', 'run_001', 'derived', '',
+            '', '', '', 1, 1
+        )
+    """
+    )
     register_kernel(con)
     return con
 
@@ -145,6 +201,170 @@ def test_bars_indicators_lookback_exceeded(client):
         headers=_auth_header(),
     )
     assert resp.status_code == 422
+
+
+# ── Fundamentals authenticated endpoints ─────────────────────────────────
+
+
+def test_fundamentals_metrics_no_auth(client):
+    resp = client.get("/v1/fundamentals/metrics", params={"symbol": "TEST"})
+    assert resp.status_code == 401
+
+
+def test_fundamentals_metrics_missing_as_of(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={"symbol": "TEST"},
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 422
+    assert "as_of" in resp.json()["detail"].lower()
+
+
+def test_fundamentals_metrics_unknown_symbol(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={"symbol": "ZZZZZ_UNKNOWN", "as_of": "2026-06-01T12:00:00Z"},
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 404
+
+
+def test_fundamentals_metrics_success(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={"symbol": "TEST", "as_of": "2026-06-01T12:00:00Z"},
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["symbol"] == "TEST"
+    assert "metrics" in data
+    assert len(data["metrics"]) >= 2
+    metric_ids = {m["metric_id"] for m in data["metrics"]}
+    assert "fundamentals.scale.revenue_ttm" in metric_ids
+    assert "fundamentals.profitability.gross_margin_ttm" in metric_ids
+    assert data["metadata"]["metrics_returned"] >= 2
+
+
+def test_fundamentals_metrics_category_filter(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "categories": "Profitability",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    categories = {m["category"] for m in data["metrics"]}
+    assert categories == {"Profitability"}
+
+
+def test_fundamentals_metrics_include_inputs(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "include": "inputs",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for metric in data["metrics"]:
+        assert "inputs" in metric
+        assert "basis" in metric
+        assert "calculation_basis" in metric
+
+
+def test_fundamentals_metrics_include_definitions(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "include": "definitions",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for metric in data["metrics"]:
+        assert "description" in metric
+        assert "what_it_answers" in metric
+        assert "formula" in metric
+        if metric["threshold_profile_id"]:
+            assert "threshold_profile" in metric
+
+
+def test_fundamentals_metrics_include_provenance(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "include": "provenance",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for metric in data["metrics"]:
+        assert "source_id" in metric
+        assert "version_hash" in metric
+
+
+def test_fundamentals_metrics_include_all(client):
+    resp = client.get(
+        "/v1/fundamentals/metrics",
+        params={
+            "symbol": "TEST",
+            "as_of": "2026-06-01T12:00:00Z",
+            "include": "inputs,definitions,provenance",
+        },
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for metric in data["metrics"]:
+        assert "inputs" in metric
+        assert "description" in metric
+        assert "source_id" in metric
+
+
+def test_fundamentals_glossary_no_auth(client):
+    resp = client.get("/v1/fundamentals/glossary")
+    assert resp.status_code == 401
+
+
+def test_fundamentals_glossary_success(client):
+    resp = client.get(
+        "/v1/fundamentals/glossary",
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 24
+    ids = {e["metric_id"] for e in data}
+    assert "fundamentals.scale.revenue_ttm" in ids
+    assert "fundamentals.valuation.price_to_earnings_ttm" in ids
+
+
+def test_fundamentals_glossary_category_filter(client):
+    resp = client.get(
+        "/v1/fundamentals/glossary",
+        params={"categories": "Valuation"},
+        headers=_auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for entry in data:
+        assert entry["category"] == "Valuation"
+    assert len(data) == 3  # P/E, P/S, P/FCF
 
 
 def test_rate_limit(client):

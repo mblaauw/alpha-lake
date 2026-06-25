@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -72,6 +73,16 @@ def _serialize_bars_df(df: pl.DataFrame) -> dict[str, list[Any]]:
     return result
 
 
+def _parse_date_list(raw: str) -> list[str] | None:
+    try:
+        dates = json.loads(raw)
+        if isinstance(dates, list):
+            return [d for d in dates if d]
+    except json.JSONDecodeError, TypeError:
+        pass
+    return None
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -113,6 +124,98 @@ def _compute_warmup(
     mult = _RECURSIVE_MULTIPLIER.get(indicator, 1)
     window = int(args[0]) if args else 14
     return shift_trading_days(start, -(window * mult), exchange=exchange)
+
+
+def _fundamental_row_to_item(
+    row: dict[str, Any],
+    include_set: set[str],
+    *,
+    _get_glossary_entry=None,
+    _get_threshold_profile=None,
+) -> dict[str, Any]:
+    if _get_glossary_entry is None:
+        from alpha_lake.interpretation.fundamentals_glossary import get_glossary_entry
+
+        _get_glossary_entry = get_glossary_entry
+    if _get_threshold_profile is None:
+        from alpha_lake.interpretation.fundamentals_glossary import get_threshold_profile
+
+        _get_threshold_profile = get_threshold_profile
+
+    entry = _get_glossary_entry(row["metric_id"])
+    item: dict[str, Any] = {
+        "metric_id": row["metric_id"],
+        "name": entry.name if entry else row["metric_id"],
+        "category": row["category"],
+        "period_kind": row.get("period_kind", ""),
+        "period_end": row["period_end"].isoformat() if row.get("period_end") else None,
+        "available_at": row["available_at"].isoformat() if row.get("available_at") else None,
+        "value": row.get("value"),
+        "unit": row.get("unit", ""),
+        "state": row.get("state", ""),
+        "threshold_profile_id": row.get("threshold_profile_id", ""),
+        "threshold_state": row.get("threshold_state", ""),
+        "tone": row.get("tone", ""),
+        "label": row.get("label", ""),
+        "display_value": row.get("display_value"),
+        "display_decimals": row.get("display_decimals", 2),
+        "display_suffix": row.get("display_suffix", ""),
+        "quality_status": row.get("quality_status", ""),
+        "unavailable_reason": row.get("unavailable_reason", ""),
+        "price_close": row.get("price_close"),
+        "price_effective_date": row["price_effective_date"].isoformat()
+        if row.get("price_effective_date")
+        else None,
+        "price_available_at": row["price_available_at"].isoformat()
+        if row.get("price_available_at")
+        else None,
+        "price_mode": row.get("price_mode", "raw"),
+    }
+    if "inputs" in include_set and entry:
+        item["inputs"] = list(entry.inputs)
+        item["basis"] = entry.basis
+        item["calculation_basis"] = row.get("calculation_basis") or entry.formula
+        item["source_period_ends"] = (
+            _parse_date_list(row["source_period_ends"]) if row.get("source_period_ends") else None
+        )
+    if "definitions" in include_set and entry:
+        item["description"] = entry.description
+        item["what_it_answers"] = entry.what_it_answers
+        item["formula"] = entry.formula
+        item["metric_version"] = row.get("metric_version")
+        profile = _get_threshold_profile(entry.threshold_profile_id)
+        if profile:
+            item["threshold_profile"] = {
+                "profile_id": profile.profile_id,
+                "version": profile.version,
+                "method": profile.method,
+                "description": profile.description,
+                "min_peer_count": profile.min_peer_count,
+                "bands": [
+                    {
+                        "state": b.state,
+                        "tone": b.tone,
+                        "label": b.label,
+                        "min_value": b.min_value,
+                        "max_value": b.max_value,
+                    }
+                    for b in profile.bands
+                ],
+            }
+    if "provenance" in include_set:
+        for col in (
+            "source_id",
+            "version_hash",
+            "content_hash",
+            "schema_version",
+            "parser_version",
+            "normalization_version",
+            "source_fetch_id",
+            "ingestion_run_id",
+        ):
+            if col in row:
+                item[col] = row[col]
+    return item
 
 
 def _pl_to_dicts(df: pl.DataFrame) -> list[dict[str, Any]]:

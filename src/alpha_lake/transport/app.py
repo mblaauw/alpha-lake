@@ -20,14 +20,19 @@ from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
 from alpha_lake.catalog import catalog_health, connect
 from alpha_lake.config import get_config, load_config
+from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
 from alpha_lake.secrets import get_store
 from alpha_lake.security_master import resolve as resolve_security
-from alpha_lake.transport._models import HealthResponse
+from alpha_lake.serving import read_fundamental_metrics_asof
+from alpha_lake.transport._models import (
+    HealthResponse,
+)
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
     _compute_and_serialize_indicators,
     _fetch_bars,
+    _fundamental_row_to_item,
     _now,
     _parse_indicators,
     _validate_price_mode,
@@ -166,6 +171,73 @@ async def bars_indicators(
     if not result:
         raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
     return JSONResponse(result)
+
+
+# ── Fundamentals ──────────────────────────────────────────────────────────────
+
+
+@app.get("/v1/fundamentals/metrics")
+async def fundamentals_metrics(
+    request: Request,
+    symbol: str,
+    as_of: datetime | None = None,
+    categories: str | None = None,
+    metric_ids: str | None = None,
+    include: str | None = None,
+    price_mode: str = "raw",
+):
+    _auth(request)
+
+    if as_of is None:
+        raise HTTPException(422, "as_of is required for fundamental metric research reads")
+
+    _validate_price_mode(price_mode)
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+
+    cat_list = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+    mid_list = [m.strip() for m in metric_ids.split(",") if m.strip()] if metric_ids else None
+    include_set = {s.strip() for s in include.split(",") if s.strip()} if include else set()
+
+    df = read_fundamental_metrics_asof(
+        con,
+        security_ids=[sec_id],
+        as_of=as_of,
+        categories=cat_list,
+        metric_ids=mid_list,
+        price_mode=price_mode,
+    )
+
+    if df.is_empty():
+        raise HTTPException(404, f"No data for symbol: {symbol}")
+
+    rows = df.rows(named=True)
+    metrics = [_fundamental_row_to_item(r, include_set) for r in rows]
+
+    return JSONResponse(
+        {
+            "symbol": symbol,
+            "as_of": as_of.isoformat(),
+            "metrics": metrics,
+            "metadata": {
+                "computed_at": _now().isoformat(),
+                "metrics_returned": len(metrics),
+            },
+        }
+    )
+
+
+@app.get("/v1/fundamentals/glossary")
+async def fundamentals_glossary(
+    request: Request,
+    categories: str | None = None,
+):
+    _auth(request)
+    payloads = glossary_to_json()
+    if categories:
+        wanted = {c.strip() for c in categories.split(",") if c.strip()}
+        payloads = [p for p in payloads if p["category"] in wanted]
+    return JSONResponse(payloads)
 
 
 # ── Dashboard / static —─────────────────────────────────────────────────────
