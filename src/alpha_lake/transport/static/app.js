@@ -544,6 +544,8 @@
       var ur = l.upvote_ratio;
       var urStr = ur == null ? '—' : ur.toFixed(1) + '×';
       var urCol = ur == null ? 'var(--lw-ink-3)' : ur > 3 ? 'var(--lw-up)' : ur > 1 ? 'var(--lw-accent)' : 'var(--lw-ink-3)';
+      var legend = '<span style="color:var(--lw-up)">●</span> ' + pos + '% <span style="color:var(--lw-ink-3)">●</span> ' + neu + '% <span style="color:var(--lw-down)">●</span> ' + neg + '%';
+      var meanCol = l.mean_score == null ? 'var(--lw-ink-3)' : l.mean_score > 0 ? 'var(--lw-up)' : l.mean_score < 0 ? 'var(--lw-down)' : 'var(--lw-accent)';
       html += '<div class="lw-lead-item' + (open ? ' is-open' : '') + '" data-sym="' + esc(l.symbol) + '">' +
         '<div class="lw-lead-row">' +
           '<div class="lw-lead-id"><span class="lw-lead-badge">' + esc((l.symbol || '?')[0]) + '</span><div style="min-width:0"><div class="lw-lead-sym">' + esc(l.symbol) + '</div>' + (l.name ? '<div class="lw-sym-name" style="font-size:10px">' + esc(l.name) + '</div>' : '') + '</div></div>' +
