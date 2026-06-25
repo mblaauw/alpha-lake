@@ -370,3 +370,58 @@ def _corp_row(
         "parser_version": 1,
         "quality_status": "valid",
     }
+
+
+def insider_transactions_from_json(
+    raw: list[dict[str, Any]],
+    security_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV INSIDER_TRANSACTIONS into InsiderTransactionFact rows."""
+    merged = raw[0] if raw else {}
+    records = merged.get("data", []) if isinstance(merged.get("data"), list) else []
+    rows: list[dict[str, Any]] = []
+    for entry in records:
+        tx_date = _parse_date(entry.get("transaction_date", ""))
+        if not tx_date:
+            continue
+        shares = _av_value(entry.get("shares"))
+        price = _av_value(entry.get("share_price"))
+        if shares is None:
+            continue
+        tx_type_raw = (entry.get("acquisition_or_disposal") or "").lower()
+        tx_type = "buy" if tx_type_raw.startswith("acq") else "sell"
+        rows.append(
+            {
+                "security_id": security_id,
+                "effective_date": tx_date,
+                "available_at": available_at,
+                "source_id": source_id,
+                "transaction_date": tx_date,
+                "insider_name": entry.get("executive") or "",
+                "insider_title": entry.get("executive_title") or "",
+                "transaction_type": tx_type,
+                "shares": shares,
+                "price": price or 0.0,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("transaction_date").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )

@@ -8,6 +8,9 @@ from alpha_lake.connectors.alphav import (
     fetch_corp_actions as _alphav_corp_actions,
 )
 from alpha_lake.connectors.alphav import fetch_fundamentals as _alphav_fundamentals
+from alpha_lake.connectors.alphav import (
+    fetch_insider_transactions as _alphav_insider_tx,
+)
 from alpha_lake.connectors.apewisdom import fetch_attention as _apewisdom
 from alpha_lake.connectors.corp_actions_eodhd import fetch_splits as _eodhd_splits
 from alpha_lake.connectors.corp_actions_tiingo import fetch_splits as _tiingo_splits
@@ -70,6 +73,7 @@ def has_api_key(source_id: str) -> bool:
 
 register("alphav", "corp_actions", _alphav_corp_actions)
 register("alphav", "fundamentals", _alphav_fundamentals)
+register("alphav", "insider_transactions", _alphav_insider_tx)
 register("alpaca", "bars_daily", _alpaca_bars)
 register("apewisdom", "attention_metrics", _apewisdom)
 register("eodhd", "bars_daily", _eodhd_bars)

@@ -25,6 +25,7 @@ from alpha_lake.models.dataset_models import (
 )
 from alpha_lake.models.economic_calendar_fact import EconomicCalendarFact
 from alpha_lake.models.fundamental_metric_fact import FundamentalMetricFact
+from alpha_lake.models.insider_transaction_fact import InsiderTransactionFact
 from alpha_lake.models.macro_fact import MacroSeriesFact
 from alpha_lake.models.market_breadth_fact import MarketBreadthFact
 from alpha_lake.models.relative_strength_fact import RelativeStrengthFact
@@ -56,12 +57,12 @@ _FUND_KEYS = (
 _FUND_METRIC_KEYS = ("security_id", "metric_id", "period_kind", "period_end")
 _INSIDER_KEYS = (
     "security_id",
-    "filer_cik",
+    "effective_date",
     "issuer_cik",
     "transaction_code",
-    "effective_date",
     "source_id",
 )
+_INSIDER_TX_KEYS = ("security_id", "transaction_date", "insider_name", "source_id")
 _EARN_KEYS = ("security_id", "report_date", "source_id")
 _SOCIAL_KEYS = ("security_id", "effective_date", "cohort", "source_id")
 _SENT_KEYS = ("annotation_id",)
@@ -80,6 +81,9 @@ DATASETS: dict[str, Dataset] = {
     "fundamentals": Dataset("fundamentals", FundamentalFact, _FUND_KEYS),
     "fundamental_metrics": Dataset("fundamental_metrics", FundamentalMetricFact, _FUND_METRIC_KEYS),
     "insider_tx": Dataset("insider_tx", InsiderTxFact, _INSIDER_KEYS),
+    "insider_transactions": Dataset(
+        "insider_transactions", InsiderTransactionFact, _INSIDER_TX_KEYS
+    ),
     "news_articles": Dataset("news_articles", NewsArticleFact, ("article_id", "source_id")),
     "social_posts": Dataset("social_posts", SocialPostFact, ("post_id_hash", "source_id")),
     "earnings_calendar": Dataset("earnings_calendar", EarningsEventFact, _EARN_KEYS),
