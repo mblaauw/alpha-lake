@@ -24,6 +24,12 @@ temp directory has enough free space (at least 2× the dataset working set).
 | lake_bars | ~50 MB | 256 MB | 512 MB | 1 GB |
 | fundamentals | ~20 MB | 256 MB | 512 MB | 512 MB |
 | corp_actions | ~5 MB | 128 MB | 256 MB | 256 MB |
+| insider_transactions | ~10 MB | 128 MB | 256 MB | 256 MB |
+| institutional_holdings | ~5 MB | 128 MB | 256 MB | 256 MB |
+| macro_series | ~5 MB | 128 MB | 256 MB | 256 MB |
+| top_movers | ~1 MB | 128 MB | 256 MB | 256 MB |
+| etf_profiles | ~1 MB | 128 MB | 256 MB | 256 MB |
+| ipo_calendar | ~1 MB | 128 MB | 256 MB | 256 MB |
 
 ### Ports
 
@@ -42,6 +48,41 @@ temp directory has enough free space (at least 2× the dataset working set).
 | Compact | 1 GB | 2 GB |
 | Replay | 1 GB | 4 GB |
 | Serving | 256 MB | 512 MB |
+
+### Ingesting Alpha Vantage datasets
+
+Alpha Vantage free tier allows 25 calls/day, 5 calls/min. Each symbol or series
+is one call (except fundamentals which batches 7 calls per symbol).
+
+```bash
+# Fundamentals (7 calls/symbol — uses most of daily budget)
+docker compose run --rm app dataset --dataset fundamentals --source alphav --security-id AAPL
+
+# Economic indicators (1 call/series)
+docker compose run --rm app dataset --dataset macro_series --source alphav --series-id gdp
+docker compose run --rm app dataset --dataset macro_series --source alphav --series-id treasury_10yr
+
+# Commodities (1 call/series)
+docker compose run --rm app dataset --dataset macro_series --source alphav --series-id wti
+
+# Corporate actions (2 calls/symbol)
+docker compose run --rm app dataset --dataset corp_actions --source alphav --security-id AAPL
+
+# Insider transactions (1 call/symbol)
+docker compose run --rm app dataset --dataset insider_transactions --source alphav --security-id AAPL
+
+# Institutional holdings (1 call/symbol)
+docker compose run --rm app dataset --dataset institutional_holdings --source alphav --security-id AAPL
+
+# Top movers (1 call, no symbol needed)
+docker compose run --rm app dataset --dataset top_movers --source alphav
+
+# ETF profiles (1 call/symbol)
+docker compose run --rm app dataset --dataset etf_profiles --source alphav --security-id SPY
+
+# IPO calendar (1 call, no symbol needed)
+docker compose run --rm app dataset --dataset ipo_calendar --source alphav
+```
 
 ### Starting the server
 

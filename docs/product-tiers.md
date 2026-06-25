@@ -13,12 +13,22 @@ Core datasets are sellable, SLA-eligible, reproducible, and candidates for recon
 - `corp_actions`
 - `fundamentals`
 - `earnings_calendar`
-- `insider_tx`
+- `insider_tx` (aggregated)
 - `security_master`
 
 Core investment priority is fact-layer correctness: PIT fundamentals, corporate-action
 coverage, multi-source reconciliation for fundamentals and corporate actions, intraday
 bars, delisted securities, and deeper history.
+
+## Tier 2α: Secondary Core (Alpha Vantage)
+
+Datasets sourced from Alpha Vantage that extend core fact coverage. Secondary
+sources, PIT-correct, idempotent. Not SLA-eligible as sole source.
+
+- `macros_series` (AV as secondary source)
+- `corp_actions` (AV as secondary source)
+- `insider_transactions` (AV — per-executive)
+- `institutional_holdings` (AV — 13F snapshots)
 
 ## Tier 2: Convenience
 
@@ -40,6 +50,12 @@ not SLA-eligible, and disabled by default.
 - `entity_mentions`
 - `sentiment_annotations`
 - `attention_metrics`
+
+- `top_movers` (AV — daily gainers/losers)
+- `etf_profiles` (AV — ETF metadata)
+- `ipo_calendar` (AV — upcoming IPOs)
+- `commodities` (AV — commodity prices)
+- `economic_calendar` (FMP — requires paid plan)
 
 Text sources remain dormant because the current free sources are unreliable,
 licensing-sensitive, and not authoritative. The schemas and connector code stay in the

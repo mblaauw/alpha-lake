@@ -46,6 +46,24 @@ three requirements below.
 - [ ] 14-day freshness SLA check
 - [ ] Contract at v1
 
+### insider_transactions → convenience
+
+- [ ] PIT-leak test (transaction visible only after its transaction_date)
+- [ ] 3-day freshness SLA check
+- [ ] Contract at v1
+
+### institutional_holdings → convenience
+
+- [ ] Quarterly snapshots not confused with stale data
+- [ ] 30-day freshness SLA check
+- [ ] Contract at v1
+
+### top_movers → convenience
+
+- [ ] Daily snapshot correctly deduplicates
+- [ ] 1-day freshness SLA check
+- [ ] Contract at v1
+
 ## Procedure
 
 1. Open a PR titled ``promotion: <dataset> → <target-tier>``.

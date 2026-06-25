@@ -23,6 +23,7 @@ flowchart LR
     S1[Market APIs<br/>EODHD · Tiingo · Alpaca]
     S2[Filings / Insider<br/>SEC EDGAR]
     S3[Sentiment / Calendar<br/>Reddit · Marketaux · Finnhub]
+    S4[Multi-dataset<br/>Alpha Vantage]
   end
   subgraph LAKE[Alpha-Lake]
     direction TB
@@ -93,6 +94,7 @@ Copy `.env.example` to `.env` and fill in the keys you need:
 
 | Source | Environment Variable | Required |
 |--------|---------------------|----------|
+| Alpha Vantage | `ALPHA_LAKE_ALPHAV_API_KEY` | Fundamentals, corporate actions, insider, institutional, econ, commodities, movers, ETFs, IPO |
 | EODHD | `ALPHA_LAKE_EODHD_API_KEY` | Bars, fundamentals, earnings |
 | Tiingo | `ALPHA_LAKE_TIINGO_API_KEY` | Bars, fundamentals |
 | Alpaca | `ALPHA_LAKE_ALPACA_API_KEY_ID` + `ALPHA_LAKE_ALPACA_API_SECRET_KEY` | Intraday bars |
@@ -177,15 +179,25 @@ with connect() as con:
 |---------|---------------|-------------------|
 | OHLCV bars — daily | EODHD / Tiingo EOD | Alpaca |
 | OHLCV bars — intraday | Alpaca (deferred) | Tiingo IEX, EODHD |
-| Fundamentals | SEC EDGAR Companyfacts | Tiingo, EODHD |
-| Insider transactions | SEC EDGAR Forms 3/4/5 | Commercial (future) |
-| Earnings calendar | EODHD | — |
+| Fundamentals | SEC EDGAR Companyfacts | Tiingo, Alpha Vantage |
+| Insider transactions (aggregated) | SEC EDGAR | Finnhub |
+| Insider transactions (per-executive) | Alpha Vantage | — |
+| Institutional holdings (13F) | Alpha Vantage | — |
+| Earnings calendar | Finnhub | EODHD (dead) |
+| Earnings estimates | Alpha Vantage | Finnhub, FMP |
 | News articles | Tiingo News | Alpaca News, EODHD News |
 | Social posts | Reddit API | Tiingo / EODHD enrichment |
-| Corporate actions | EODHD / Tiingo splits-dividends | SEC filings (validation) |
+| Corporate actions | EODHD / Tiingo | Alpha Vantage |
 | Security master | Alpha-Lake internal | OpenFIGI, EODHD, Tiingo, SEC |
-| Macro series | FRED | — |
+| Macro series | FRED | Alpha Vantage |
+| Commodities | Alpha Vantage | — |
+| Economic indicators | Alpha Vantage | FRED |
+| Top gainers/losers | Alpha Vantage | — |
+| ETF profiles | Alpha Vantage | — |
+| IPO calendar | Alpha Vantage | — |
 | Technical indicators | Derived (computed in-lake) | — |
+| Market breadth | Derived (computed in-lake) | — |
+| Relative strength | Derived (computed in-lake) | — |
 
 ---
 

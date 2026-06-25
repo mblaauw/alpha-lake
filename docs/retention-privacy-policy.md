@@ -24,6 +24,7 @@
 
 | Source | Key Restriction |
 |--------|----------------|
+| Alpha Vantage | API key restricted. Free tier: 25 calls/day, 5 calls/min. Refer to AV terms |
 | Reddit API | No commercial use without approval. Rate-limited to 100 requests/min |
 | Tiingo News | Attribution required. Rate-limited |
 | SEC EDGAR | Public domain. Rate-limiting enforced by SEC |

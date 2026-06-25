@@ -106,6 +106,19 @@ inputs, threshold profile, and surfaces for every registered metric.
 
 Response: JSON array of metric glossary entries with embedded threshold profile.
 
+#### `GET /v1/insider-transactions/{symbol}`
+
+Return per-executive insider buy/sell transactions from Alpha Vantage.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | yes | Ticker symbol |
+| `as_of` | datetime | no | PIT knowledge-time boundary (defaults to now) |
+| `snapshot_id` | string | no | DuckLake snapshot for pinned reads |
+
+Response: JSON array of insider transaction objects with `insider_name`,
+`insider_title`, `transaction_type`, `shares`, `price`, `transaction_date`.
+
 #### `GET /v1/bars/indicators`
 
 Return PIT-correct bars with computed technical indicators.
