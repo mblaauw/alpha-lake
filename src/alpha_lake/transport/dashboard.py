@@ -50,6 +50,16 @@ from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.security_master import search as search_securities
 from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof, read_macro_series_asof
 from alpha_lake.transport._glossary import _GLOSSARY
+from alpha_lake.transport._models import (
+    BarsSummaryResponse,
+    DatasetDetailResponse,
+    DatasetInfo,
+    HealthResponse,
+    LeaderboardRow,
+    ReadoutsResponse,
+    SymbolInfo,
+    TransactionRow,
+)
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
@@ -76,10 +86,6 @@ def _get_con() -> duckdb.DuckDBPyConnection:
     global _connection
     if _connection is None:
         _connection = connect(get_config())
-    try:
-        _connection.execute("SELECT 1")
-    except Exception:
-        _connection = connect(get_config())
     return _connection
 
 
@@ -97,7 +103,7 @@ def _aware(dt: datetime) -> datetime:
 # ── Health ────────────────────────────────────────────────────────────────────
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 async def health():
     _check_enabled()
     hlth = catalog_health(_get_con())
@@ -108,7 +114,7 @@ async def health():
 # ── Datasets ──────────────────────────────────────────────────────────────────
 
 
-@router.get("/datasets")
+@router.get("/datasets", response_model=list[DatasetInfo])
 async def datasets():
     _check_enabled()
     con = _get_con()
@@ -134,7 +140,7 @@ async def datasets():
     return result
 
 
-@router.get("/dataset/{name}")
+@router.get("/dataset/{name}", response_model=DatasetDetailResponse)
 async def dataset_detail(
     name: str,
     limit: int = 50,
@@ -311,7 +317,7 @@ async def bars_indicators(
 # ── Readouts ──────────────────────────────────────────────────────────────
 
 
-@router.get("/symbol/{symbol}/readouts")
+@router.get("/symbol/{symbol}/readouts", response_model=ReadoutsResponse)
 async def symbol_readouts(
     symbol: str,
     as_of: datetime | None = None,
@@ -477,36 +483,54 @@ async def symbol_readouts(
 # ── Symbols with real data (replaces hardcoded WATCHLIST) ────────────────
 
 
-@router.get("/bars/symbols")
+@router.get("/bars/symbols", response_model=list[SymbolInfo])
 async def bars_symbols():
     """Return distinct symbols that have data in the lake.
 
-    Scans price/indicator tables FIRST (``lake_bars`` is the canonical source
-    for "symbols with bars" — the Bars tab is a price view), then the social
-    tables so attention-only names still surface. De-duplicated by security_id.
+    Uses a single UNION query across price, indicator, and social tables.
+    Falls back to individual per-table queries if any table is missing.
     """
     _check_enabled()
     con = _get_con()
+    tables = [
+        "lake_bars",
+        "technical_indicators",
+        "attention_metrics",
+        "sentiment_annotations",
+        "insider_tx",
+    ]
+
+    sids: set[str] = set()
+    try:
+        union_parts = [
+            f"SELECT DISTINCT security_id FROM {t}"
+            f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+            for t in tables
+        ]
+        rows = con.execute(" UNION ".join(union_parts)).fetchall()
+        for row in rows:
+            sid = str(row[0])
+            if sid:
+                sids.add(sid)
+    except Exception:
+        for table in tables:
+            try:
+                rows = con.execute(
+                    f"SELECT DISTINCT security_id FROM {table}"
+                    f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+                ).fetchall()
+                for row in rows:
+                    sid = str(row[0])
+                    if sid:
+                        sids.add(sid)
+            except Exception:
+                pass
+
     seen: dict[str, dict[str, str]] = {}
-    for table, id_col in [
-        ("lake_bars", "security_id"),
-        ("technical_indicators", "security_id"),
-        ("attention_metrics", "security_id"),
-        ("sentiment_annotations", "security_id"),
-        ("insider_tx", "security_id"),
-    ]:
-        try:
-            ids = con.execute(
-                f"SELECT DISTINCT {id_col} FROM {table}"
-                f" WHERE {id_col} IS NOT NULL AND {id_col} != '' LIMIT 200"
-            ).fetchall()
-            for row in ids:
-                sid = str(row[0])
-                if sid and sid not in seen:
-                    sym, name = _symbol_name_for(con, sid, _now())
-                    seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
-        except Exception:
-            pass
+    for sid in sids:
+        sym, name = _symbol_name_for(con, sid, _now())
+        seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
+
     result = list(seen.values())
     result.sort(key=lambda x: x["symbol"])
     return JSONResponse(result)
@@ -532,7 +556,7 @@ _BOOL_INDICATOR_COLS = frozenset(
 )
 
 
-@router.get("/bars/summary")
+@router.get("/bars/summary", response_model=BarsSummaryResponse)
 async def bars_summary(
     symbol: str,
     as_of: datetime | None = None,
@@ -766,22 +790,26 @@ def _sentiment_split(sent: pl.DataFrame, sids: list[str]) -> dict[str, dict[str,
     return split
 
 
-@router.get("/attention/leaderboard")
+@router.get("/attention/leaderboard", response_model=list[LeaderboardRow])
 async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
     _check_enabled()
     if as_of is None:
         as_of = _now()
+    limit = min(limit, 100)
     con = _get_con()
 
     try:
         att = con.execute(
-            "SELECT * FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ", [_aware(as_of)]
+            "SELECT security_id, effective_date, available_at, mentions, rank, cohort, upvotes"
+            " FROM attention_metrics WHERE available_at <= ?::TIMESTAMPTZ",
+            [_aware(as_of)],
         ).pl()
     except Exception:
         att = pl.DataFrame()
     try:
         sent = con.execute(
-            "SELECT * FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
+            "SELECT security_id, effective_date, available_at, sentiment_label, sentiment_score, annotation_kind"
+            " FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
             [_aware(as_of)],
         ).pl()
     except Exception:
@@ -902,7 +930,7 @@ async def macro_series(
 # ── Insider transactions ──────────────────────────────────────────────────
 
 
-@router.get("/insider/{symbol}")
+@router.get("/insider/{symbol}", response_model=list[TransactionRow])
 async def insider_tx(symbol: str, as_of: datetime | None = None, limit: int = 50):
     _check_enabled()
     if as_of is None:
@@ -932,6 +960,28 @@ async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: i
         sec_id = symbol
     try:
         df = pit_read(con, table="analyst_estimates", security_ids=[sec_id], as_of=as_of)
+    except Exception:
+        return JSONResponse([])
+    if df.is_empty():
+        return JSONResponse([])
+    df = df.sort("effective_date", descending=True).head(min(limit, 500))
+    return JSONResponse(_pl_to_dicts(df))
+
+
+# ── News articles ────────────────────────────────────────────────────────
+
+
+@router.get("/news/{symbol}")
+async def news_articles(symbol: str, as_of: datetime | None = None, limit: int = 50):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol
+    try:
+        df = pit_read(con, table="news_articles", security_ids=[sec_id], as_of=as_of)
     except Exception:
         return JSONResponse([])
     if df.is_empty():
