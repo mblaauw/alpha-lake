@@ -218,6 +218,15 @@ parser_version = 1
 [source_datasets.alphav.macro_series]
 enabled = true
 parser_version = 1
+[source_datasets.alphav.etf_profiles]
+enabled = true
+parser_version = 1
+[source_datasets.alphav.ipo_calendar]
+enabled = true
+parser_version = 1
+[source_datasets.alphav.top_movers]
+enabled = true
+parser_version = 1
 [source_datasets.alphav.fundamentals]
 enabled = true
 parser_version = 1

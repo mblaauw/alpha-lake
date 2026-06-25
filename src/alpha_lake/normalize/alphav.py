@@ -176,10 +176,21 @@ def fundamentals_from_json(
                     if val is None:
                         continue
                     _append_row(
-                        rows, security_id, period_end, available_at, source_id,
-                        fiscal_period, period_kind_label, period_end,
-                        measure_kind, stmt_type, line_item, val,
-                        source_fetch_id, content_hash, ingestion_run_id,
+                        rows,
+                        security_id,
+                        period_end,
+                        available_at,
+                        source_id,
+                        fiscal_period,
+                        period_kind_label,
+                        period_end,
+                        measure_kind,
+                        stmt_type,
+                        line_item,
+                        val,
+                        source_fetch_id,
+                        content_hash,
+                        ingestion_run_id,
                     )
 
     # ── OVERVIEW ────────────────────────────────────────────────────────
@@ -189,10 +200,21 @@ def fundamentals_from_json(
         if val is None:
             continue
         _append_row(
-            rows, security_id, available_at.date(), available_at, source_id,
-            "OVERVIEW", "snapshot", available_at.date(),
-            "overview", "overview", line_item, val,
-            source_fetch_id, content_hash, ingestion_run_id,
+            rows,
+            security_id,
+            available_at.date(),
+            available_at,
+            source_id,
+            "OVERVIEW",
+            "snapshot",
+            available_at.date(),
+            "overview",
+            "overview",
+            line_item,
+            val,
+            source_fetch_id,
+            content_hash,
+            ingestion_run_id,
         )
 
     # ── SHARES OUTSTANDING ──────────────────────────────────────────────
@@ -209,10 +231,21 @@ def fundamentals_from_json(
             fy = period_end.year
             q = (period_end.month - 1) // 3 + 1 if pk_label == "quarter" else 4
             _append_row(
-                rows, security_id, period_end, available_at, source_id,
-                f"FY{fy}Q{q}", pk_label, period_end,
-                "overview", "overview", "shares_outstanding", val,
-                source_fetch_id, content_hash, ingestion_run_id,
+                rows,
+                security_id,
+                period_end,
+                available_at,
+                source_id,
+                f"FY{fy}Q{q}",
+                pk_label,
+                period_end,
+                "overview",
+                "overview",
+                "shares_outstanding",
+                val,
+                source_fetch_id,
+                content_hash,
+                ingestion_run_id,
             )
 
     # ── EARNINGS ────────────────────────────────────────────────────────
@@ -237,10 +270,21 @@ def fundamentals_from_json(
                 if val is None:
                     continue
                 _append_row(
-                    rows, security_id, period_end, available_at, source_id,
-                    fp, pk_label, period_end,
-                    "earnings", "earnings", li, val,
-                    source_fetch_id, content_hash, ingestion_run_id,
+                    rows,
+                    security_id,
+                    period_end,
+                    available_at,
+                    source_id,
+                    fp,
+                    pk_label,
+                    period_end,
+                    "earnings",
+                    "earnings",
+                    li,
+                    val,
+                    source_fetch_id,
+                    content_hash,
+                    ingestion_run_id,
                 )
 
     # ── EARNINGS ESTIMATES ──────────────────────────────────────────────
@@ -264,10 +308,21 @@ def fundamentals_from_json(
                 if val is None:
                     continue
                 _append_row(
-                    rows, security_id, period_end, available_at, source_id,
-                    fp, pk_label, period_end,
-                    "earnings", "earnings", li, val,
-                    source_fetch_id, content_hash, ingestion_run_id,
+                    rows,
+                    security_id,
+                    period_end,
+                    available_at,
+                    source_id,
+                    fp,
+                    pk_label,
+                    period_end,
+                    "earnings",
+                    "earnings",
+                    li,
+                    val,
+                    source_fetch_id,
+                    content_hash,
+                    ingestion_run_id,
                 )
 
     if not rows:
@@ -306,9 +361,22 @@ def corp_actions_from_json(
         if amt is None:
             continue
         cur = entry.get("currency", "USD")
-        rows.append(_corp_row(security_id, ex_date, available_at, source_id,
-                              "dividend", None, None, amt, cur,
-                              source_fetch_id, content_hash, ingestion_run_id))
+        rows.append(
+            _corp_row(
+                security_id,
+                ex_date,
+                available_at,
+                source_id,
+                "dividend",
+                None,
+                None,
+                amt,
+                cur,
+                source_fetch_id,
+                content_hash,
+                ingestion_run_id,
+            )
+        )
 
     spl_data = merged.get("splits", {})
     hist_spl = spl_data.get("historical", []) or []
@@ -324,9 +392,22 @@ def corp_actions_from_json(
         denominator = _av_value(den)
         if numerator is None or denominator is None:
             continue
-        rows.append(_corp_row(security_id, ex_date, available_at, source_id,
-                              "split", numerator, denominator, None, None,
-                              source_fetch_id, content_hash, ingestion_run_id))
+        rows.append(
+            _corp_row(
+                security_id,
+                ex_date,
+                available_at,
+                source_id,
+                "split",
+                numerator,
+                denominator,
+                None,
+                None,
+                source_fetch_id,
+                content_hash,
+                ingestion_run_id,
+            )
+        )
 
     if not rows:
         return pl.DataFrame()
@@ -523,4 +604,187 @@ def econ_indicator_from_json(
     return df.with_columns(
         pl.col("effective_date").str.to_date("%Y-%m-%d"),
         pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def top_movers_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV TOP_GAINERS_LOSERS into TopMoverFact rows."""
+    merged = raw[0] if raw else {}
+    rows: list[dict[str, Any]] = []
+    for mover_type in ("top_gainers", "top_losers", "most_actively_traded"):
+        entries = merged.get(mover_type, []) if isinstance(merged.get(mover_type), list) else []
+        for e in entries:
+            ticker = e.get("ticker", "")
+            if not ticker:
+                continue
+            rows.append(
+                {
+                    "security_id": ticker,
+                    "effective_date": available_at.date(),
+                    "available_at": available_at,
+                    "source_id": source_id,
+                    "mover_type": mover_type,
+                    "price": _av_value(e.get("price")),
+                    "change_amount": _av_value(e.get("change_amount")),
+                    "change_percent": _av_value(e.get("change_percentage")),
+                    "volume": _av_value(e.get("volume")),
+                    "source_fetch_id": source_fetch_id,
+                    "raw_payload_hash": content_hash,
+                    "ingestion_run_id": ingestion_run_id,
+                    "content_hash": content_hash,
+                    "version_hash": "",
+                    "schema_version": 1,
+                    "parser_version": 1,
+                    "quality_status": "valid",
+                }
+            )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def etf_profile_from_json(
+    raw: list[dict[str, Any]],
+    security_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV ETF_PROFILE into ETPProfileFact rows."""
+    merged = raw[0] if raw else {}
+    rows: list[dict[str, Any]] = []
+    if not merged.get("symbol"):
+        return pl.DataFrame()
+    rows.append(
+        {
+            "security_id": security_id,
+            "effective_date": available_at.date(),
+            "available_at": available_at,
+            "source_id": source_id,
+            "name": merged.get("name") or merged.get("symbol", ""),
+            "asset_type": "ETF",
+            "net_assets": _av_value(merged.get("net_assets")),
+            "expense_ratio": _av_value(merged.get("expense_ratio")),
+            "dividend_yield": _av_value(merged.get("dividend_yield")),
+            "source_fetch_id": source_fetch_id,
+            "raw_payload_hash": content_hash,
+            "ingestion_run_id": ingestion_run_id,
+            "content_hash": content_hash,
+            "version_hash": "",
+            "schema_version": 1,
+            "parser_version": 1,
+            "quality_status": "valid",
+        }
+    )
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def ipo_calendar_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV IPO_CALENDAR into IPOEventFact rows."""
+    merged = raw[0] if raw else {}
+    records = merged.get("ipoCalendar", []) if isinstance(merged.get("ipoCalendar"), list) else []
+    rows: list[dict[str, Any]] = []
+    for e in records:
+        sym = e.get("symbol", "")
+        if not sym:
+            continue
+        rows.append(
+            {
+                "symbol": sym,
+                "effective_date": _parse_date(e.get("date", "")) or available_at.date(),
+                "available_at": available_at,
+                "source_id": source_id,
+                "company_name": e.get("companyName") or "",
+                "exchange": e.get("exchange") or "",
+                "offer_date": _parse_date(e.get("date", "")),
+                "status": e.get("status") or "",
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("offer_date").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def listing_status_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,  # noqa: ARG001
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,  # noqa: ARG001
+) -> pl.DataFrame:
+    """Normalize AV LISTING_STATUS into security_master-compatible rows.
+
+    Returns a Polars DataFrame with columns matching security_master schema.
+    """
+    rows: list[dict[str, Any]] = []
+    if not raw:
+        return pl.DataFrame()
+    for record in raw:
+        if isinstance(record, dict):
+            sym = record.get("symbol", "")
+            if not sym:
+                continue
+            rows.append(
+                {
+                    "symbol": sym,
+                    "name": record.get("name", ""),
+                    "exchange": record.get("exchange", ""),
+                    "asset_type": record.get("assetType", ""),
+                    "ipo_date": _parse_date(record.get("ipoDate", "")),
+                    "delisting_date": _parse_date(record.get("delistingDate", "")),
+                    "status": record.get("status", ""),
+                    "source_fetch_id": source_fetch_id,
+                    "raw_payload_hash": content_hash,
+                    "ingestion_run_id": ingestion_run_id,
+                    "content_hash": content_hash,
+                    "version_hash": "",
+                    "schema_version": 1,
+                    "parser_version": 1,
+                    "quality_status": "valid",
+                }
+            )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("ipo_date").cast(pl.Date),
+        pl.col("delisting_date").cast(pl.Date),
     )

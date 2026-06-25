@@ -14,6 +14,7 @@ status. This file is the single source of truth for source availability.
 
 | Source | Endpoint | Status | Last Audited | Notes |
 |---|---|---|---|---|---|
+| Alpha Vantage | `https://www.alphavantage.co` | live (gated) | 2026-06-25 | Multi-dataset source. Free: 25 calls/day. Covers fundamentals, econ, commodities, insiders, institutional, IPOs, ETF profiles, top movers, listings. `INDEX_DATA` premium-gated. |
 | EODHD | `https://eodhd.com/api` | gated | 2026-06-25 | Primary bars source. `earnings_calendar` endpoint returns 404 (dead). API key required. |
 | Tiingo | `https://api.tiingo.com` | live | 2026-06-25 | Secondary bars, fundamentals (`/statements`), news. |
 | Alpaca | `https://data.alpaca.markets` | live | 2026-06-21 | Tertiary bars. Disabled by default. |

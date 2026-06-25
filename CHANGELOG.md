@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Alpha Vantage integration** — new multi-dataset source across 10 endpoint categories:
+  - Fundamentals: INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, OVERVIEW, SHARES_OUTSTANDING (#505–#507)
+  - Corporate actions: DIVIDENDS, SPLITS (#508)
+  - Insider transactions: INSIDER_TRANSACTIONS (#511)
+  - Institutional holdings: INSTITUTIONAL_HOLDINGS (#512)
+  - Economic indicators: 15 series including GDP, CPI, treasury yields, unemployment (#513)
+  - Commodities: 11 series including WTI, Brent, natural gas, copper, grains (#514)
+  - Top gainers/losers: TOP_GAINERS_LOSERS (#515)
+  - ETF profiles: ETF_PROFILE (#516)
+  - IPO calendar: IPO_CALENDAR (#517)
+  - Listing status: LISTING_STATUS (#518)
+  - New models: `InsiderTransactionFact`, `InstitutionalHoldingFact`, `TopMoverFact`,
+    `ETPProfileFact`, `IPOEventFact`
+  - See docs/adr/2026-06-25-alpha-vantage-integration.md for full architecture
+
 ### Fixed
 
 - **Tiingo fundamentals connector** — switched from `/daily` (daily metrics) to

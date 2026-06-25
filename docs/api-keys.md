@@ -85,6 +85,19 @@ Note: Quiver is a paid-only service. No free tier available.
 
 Free tier: 100 requests per day.
 
+### Alpha Vantage
+
+1. Register at [alphavantage.co](https://www.alphavantage.co/support/#api-key)
+2. Verify email and receive API key
+3. Set `ALPHA_LAKE_ALPHAV_API_KEY` in `.env`
+
+Free tier: 25 calls/day, 5 calls/min. Covers 20+ endpoint categories including
+fundamentals, corporate actions, insider transactions, economic indicators,
+commodities, and market data.
+
+**Note:** Daily rate limit resets midnight US Eastern time. Use precedence
+to make AV a fallback source (Tiingo/Finnhub first) to minimize API usage.
+
 ### Finnhub
 
 1. Register at [finnhub.io](https://finnhub.io/)
