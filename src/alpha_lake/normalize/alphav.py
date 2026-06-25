@@ -281,3 +281,92 @@ def fundamentals_from_json(
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
+
+
+def corp_actions_from_json(
+    raw: list[dict[str, Any]],
+    security_id: str,
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize AV DIVIDENDS and SPLITS into CorpActionFact rows."""
+    merged = raw[0] if raw else {}
+    rows: list[dict[str, Any]] = []
+
+    div_data = merged.get("dividends", {})
+    hist_div = div_data.get("historical", []) or []
+    for entry in hist_div:
+        ex_date = _parse_date(entry.get("exDividendDate", ""))
+        if not ex_date:
+            continue
+        amt = _av_value(entry.get("dividendAmount"))
+        if amt is None:
+            continue
+        cur = entry.get("currency", "USD")
+        rows.append(_corp_row(security_id, ex_date, available_at, source_id,
+                              "dividend", None, None, amt, cur,
+                              source_fetch_id, content_hash, ingestion_run_id))
+
+    spl_data = merged.get("splits", {})
+    hist_spl = spl_data.get("historical", []) or []
+    for entry in hist_spl:
+        ex_date = _parse_date(entry.get("exDate", ""))
+        if not ex_date:
+            continue
+        ratio = str(entry.get("splitRatio", ""))
+        if ":" not in ratio:
+            continue
+        num, den = ratio.split(":", 1)
+        numerator = _av_value(num)
+        denominator = _av_value(den)
+        if numerator is None or denominator is None:
+            continue
+        rows.append(_corp_row(security_id, ex_date, available_at, source_id,
+                              "split", numerator, denominator, None, None,
+                              source_fetch_id, content_hash, ingestion_run_id))
+
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").cast(pl.Date),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def _corp_row(
+    security_id: str,
+    effective_date: date,
+    available_at: datetime,
+    source_id: str,
+    action_type: str,
+    ratio_numerator: float | None,
+    ratio_denominator: float | None,
+    dividend_amount: float | None,
+    dividend_currency: str | None,
+    source_fetch_id: str,
+    content_hash: str,
+    ingestion_run_id: str,
+) -> dict[str, Any]:
+    return {
+        "security_id": security_id,
+        "effective_date": effective_date,
+        "available_at": available_at,
+        "source_id": source_id,
+        "action_type": action_type,
+        "ratio_numerator": ratio_numerator,
+        "ratio_denominator": ratio_denominator,
+        "dividend_amount": dividend_amount,
+        "dividend_currency": dividend_currency,
+        "source_fetch_id": source_fetch_id,
+        "raw_payload_hash": content_hash,
+        "ingestion_run_id": ingestion_run_id,
+        "content_hash": content_hash,
+        "version_hash": "",
+        "schema_version": 1,
+        "parser_version": 1,
+        "quality_status": "valid",
+    }

@@ -206,6 +206,9 @@ rate_limit_per_day = 100
 max_retries = 3
 
 [source_datasets.alphav]
+[source_datasets.alphav.corp_actions]
+enabled = true
+parser_version = 1
 [source_datasets.alphav.fundamentals]
 enabled = true
 parser_version = 1

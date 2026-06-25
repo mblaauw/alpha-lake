@@ -65,3 +65,26 @@ async def fetch_fundamentals(symbol: str) -> RawFetch:
         1,
     )
     return RawFetch(manifest=manifest, body=body)
+
+
+async def fetch_corp_actions(symbol: str) -> RawFetch:
+    """Fetch DIVIDENDS and SPLITS for a symbol. Merges both into one RawFetch."""
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params: dict[str, Any] = {"apikey": cfg.api_key, "symbol": symbol}
+
+    async def _fetch_one(function: str) -> dict[str, Any]:
+        p = {**params, "function": function}
+        async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+            r = await c.get("/query", params=p)
+            r.raise_for_status()
+            return r.json()
+
+    div_data = await _fetch_one("DIVIDENDS")
+    await asyncio.sleep(12)
+    spl_data = await _fetch_one("SPLITS")
+
+    merged = {"source": "alphav", "symbol": symbol, "dividends": div_data, "splits": spl_data}
+    body = json.dumps(merged, default=str).encode()
+    manifest = build_manifest("alphav", "/query", params, body, 200, 1)
+    return RawFetch(manifest=manifest, body=body)
