@@ -84,6 +84,28 @@ Return PIT-correct OHLCV bars.
 
 Response: JSON array of bar objects. `max_lookback_days` caps the query range.
 
+#### `GET /v1/fundamentals/metrics`
+
+Return PIT fundamental metrics for a symbol.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `symbol` | string | yes | — | Ticker symbol |
+| `metric_ids` | string | no | all | Comma-separated metric IDs (e.g. `fundamentals.valuation.pe_ttm,fundamentals.profitability.gross_margin_ttm`) |
+| `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
+| `latest` | bool | no | false | Non-research convenience path — uses current price and latest data |
+| `include` | string | no | — | Comma-separated extras: `inputs`, `definitions`, `provenance` |
+
+Response: JSON object keyed by metric ID, each with value, unit, state, tone,
+label, and (if requested) input breakdown, definition, and provenance metadata.
+
+#### `GET /v1/fundamentals/glossary`
+
+Return the full fundamental metrics glossary — name, description, formula,
+inputs, threshold profile, and surfaces for every registered metric.
+
+Response: JSON array of metric glossary entries with embedded threshold profile.
+
 #### `GET /v1/bars/indicators`
 
 Return PIT-correct bars with computed technical indicators.
@@ -147,6 +169,8 @@ read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
 | `GET /v1/dashboard/analyst/{symbol}` | `as_of`, `limit` | Analyst estimate consensus (strong_buy … target_low) |
 | `GET /v1/dashboard/bars/symbols` | — | Distinct symbols with data in the lake |
 | `GET /v1/dashboard/indicators/glossary` | — | Full indicator glossary (name, description, formula) |
+| `GET /v1/dashboard/symbol/{symbol}/fundamentals` | `as_of`, `latest`, `include` | PIT fundamental metrics by symbol (gated) |
+| `GET /v1/dashboard/fundamentals/glossary` | — | Full fundamentals glossary (metric_id, name, formula, profile) |
 | `GET /v1/dashboard/symbol/{symbol}/readouts` | `as_of`, `latest`, `categories`, `readout_ids` | 18 symbol readouts across 7 categories |
 | `GET /v1/dashboard/health` | — | Catalog health + synthetic_mode flag |
 
