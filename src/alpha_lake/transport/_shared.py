@@ -3,13 +3,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
-import polars as pl  # type: ignore[unresolved-import]
-
 import duckdb  # type: ignore[unresolved-import]
+import polars as pl  # type: ignore[unresolved-import]
 
 from alpha_lake.calendar_ import shift_trading_days
 from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
-from alpha_lake.security_master import resolve as resolve_security
 from alpha_lake.serving import read_bars_adjusted, read_bars_asof
 
 _INDICATOR_MAP: dict[str, Any] = {

@@ -808,7 +808,8 @@ async def attention_leaderboard(limit: int = 20, as_of: datetime | None = None):
         att = pl.DataFrame()
     try:
         sent = con.execute(
-            "SELECT security_id, effective_date, available_at, sentiment_label, sentiment_score, annotation_kind"
+            "SELECT security_id, effective_date, available_at, sentiment_label, "
+            "sentiment_score, annotation_kind"
             " FROM sentiment_annotations WHERE available_at <= ?::TIMESTAMPTZ",
             [_aware(as_of)],
         ).pl()

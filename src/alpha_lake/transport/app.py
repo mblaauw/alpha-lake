@@ -12,7 +12,6 @@ import hmac
 from datetime import date, datetime
 from pathlib import Path
 from time import monotonic
-from typing import Any
 
 import duckdb
 from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-import]
@@ -103,7 +102,10 @@ app = FastAPI(title="Alpha-Lake", version="0.1.0")
 
 @app.get("/v1/health", response_model=HealthResponse)
 async def health():
-    return catalog_health(_get_con())
+    try:
+        return catalog_health(_get_con())
+    except Exception as exc:
+        return {"snapshots": 0, "latest_snapshot_id": None, "status": "error", "detail": str(exc)}
 
 
 @app.get("/v1/bars")
@@ -127,11 +129,12 @@ async def bars(
     _validate_price_mode(price_mode)
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    return JSONResponse(
-        _fetch_bars(
-            con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
-        )
+    result = _fetch_bars(
+        con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
     )
+    if not result:
+        raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
+    return JSONResponse(result)
 
 
 @app.get("/v1/bars/indicators")
@@ -160,6 +163,8 @@ async def bars_indicators(
             raise HTTPException(422, f"Unknown indicator: {name}")
 
     result = _compute_and_serialize_indicators(con, sec_id, parsed, as_of, start=start, end=end)
+    if not result:
+        raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
     return JSONResponse(result)
 
 
@@ -198,6 +203,14 @@ async def manifest():
     if not mf.exists():
         raise HTTPException(404)
     return FileResponse(mf, media_type="application/manifest+json")
+
+
+@app.get("/service-worker.js")
+async def service_worker():
+    sw = _STATIC / "service-worker.js"
+    if not sw.exists():
+        raise HTTPException(404)
+    return FileResponse(sw, media_type="application/javascript")
 
 
 # ── Dashboard API router —───────────────────────────────────────────────────
