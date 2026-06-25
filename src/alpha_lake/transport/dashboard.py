@@ -76,10 +76,6 @@ def _get_con() -> duckdb.DuckDBPyConnection:
     global _connection
     if _connection is None:
         _connection = connect(get_config())
-    try:
-        _connection.execute("SELECT 1")
-    except Exception:
-        _connection = connect(get_config())
     return _connection
 
 
