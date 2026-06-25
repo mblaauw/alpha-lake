@@ -527,32 +527,50 @@ async def symbol_readouts(
 async def bars_symbols():
     """Return distinct symbols that have data in the lake.
 
-    Scans price/indicator tables FIRST (``lake_bars`` is the canonical source
-    for "symbols with bars" — the Bars tab is a price view), then the social
-    tables so attention-only names still surface. De-duplicated by security_id.
+    Uses a single UNION query across price, indicator, and social tables.
+    Falls back to individual per-table queries if any table is missing.
     """
     _check_enabled()
     con = _get_con()
+    tables = [
+        "lake_bars",
+        "technical_indicators",
+        "attention_metrics",
+        "sentiment_annotations",
+        "insider_tx",
+    ]
+
+    sids: set[str] = set()
+    try:
+        union_parts = [
+            f"SELECT DISTINCT security_id FROM {t}"
+            f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+            for t in tables
+        ]
+        rows = con.execute(" UNION ".join(union_parts)).fetchall()
+        for row in rows:
+            sid = str(row[0])
+            if sid:
+                sids.add(sid)
+    except Exception:
+        for table in tables:
+            try:
+                rows = con.execute(
+                    f"SELECT DISTINCT security_id FROM {table}"
+                    f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
+                ).fetchall()
+                for row in rows:
+                    sid = str(row[0])
+                    if sid:
+                        sids.add(sid)
+            except Exception:
+                pass
+
     seen: dict[str, dict[str, str]] = {}
-    for table, id_col in [
-        ("lake_bars", "security_id"),
-        ("technical_indicators", "security_id"),
-        ("attention_metrics", "security_id"),
-        ("sentiment_annotations", "security_id"),
-        ("insider_tx", "security_id"),
-    ]:
-        try:
-            ids = con.execute(
-                f"SELECT DISTINCT {id_col} FROM {table}"
-                f" WHERE {id_col} IS NOT NULL AND {id_col} != '' LIMIT 200"
-            ).fetchall()
-            for row in ids:
-                sid = str(row[0])
-                if sid and sid not in seen:
-                    sym, name = _symbol_name_for(con, sid, _now())
-                    seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
-        except Exception:
-            pass
+    for sid in sids:
+        sym, name = _symbol_name_for(con, sid, _now())
+        seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
+
     result = list(seen.values())
     result.sort(key=lambda x: x["symbol"])
     return JSONResponse(result)
