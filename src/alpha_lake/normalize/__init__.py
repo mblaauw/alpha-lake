@@ -382,6 +382,55 @@ def analyst_estimates_from_json(
     )
 
 
+def earnings_calendar_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    rows = []
+    for record in raw:
+        code = record.get("code", "")
+        if not code:
+            continue
+        report_date_str = record.get("date", "")
+        if not report_date_str:
+            continue
+        sid = code.split(".")[0] if "." in code else code
+        time_raw = record.get("time", "")
+        session = "regular"
+        if "market" in time_raw.lower():
+            session = "morning" if "before" in time_raw.lower() else "afternoon"
+        rows.append(
+            {
+                "security_id": sid,
+                "effective_date": report_date_str,
+                "available_at": available_at,
+                "source_id": source_id,
+                "report_date": report_date_str,
+                "session": session,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("report_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
 def insider_tx_from_json(
     raw: list[dict[str, Any]],
     security_id: str,
