@@ -50,20 +50,37 @@ _AV_LINE_ITEM_MAP: dict[str, str] = {
     "changeInInventory": "change_in_inventory",
 }
 
+_OVERVIEW_FIELDS: dict[str, str] = {
+    "MarketCapitalization": "market_capitalization",
+    "EnterpriseValue": "enterprise_value",
+    "PERatio": "pe_ratio",
+    "EPS": "eps",
+    "DividendYield": "dividend_yield",
+    "BookValue": "book_value",
+    "PriceToBookRatio": "pb_ratio",
+    "Beta": "beta",
+    "ProfitMargin": "profit_margin",
+    "RevenueTTM": "revenue_ttm",
+    "QuarterlyEarningsGrowthYOY": "earnings_growth_yoy",
+    "QuarterlyRevenueGrowthYOY": "revenue_growth_yoy",
+    "ReturnOnEquityTTM": "roe",
+    "ReturnOnAssetsTTM": "roa",
+}
+
 
 def _av_value(val: Any) -> float | None:
     if val is None or val == "None" or val == "":
         return None
     try:
         return float(val)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return None
 
 
 def _parse_date(s: str) -> date | None:
     try:
         return date.fromisoformat(s[:10]) if s else None
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return None
 
 
@@ -139,6 +156,87 @@ def fundamentals_from_json(
                             "quality_status": "valid",
                         }
                     )
+
+    # ── OVERVIEW ────────────────────────────────────────────────────────
+    overview = merged.get("overview", {})
+    for av_key, line_item in _OVERVIEW_FIELDS.items():
+        val = _av_value(overview.get(av_key))
+        if val is None:
+            continue
+        rows.append(
+            {
+                "security_id": security_id,
+                "effective_date": available_at.date(),
+                "available_at": available_at,
+                "source_id": source_id,
+                "source_published_at": available_at,
+                "ingested_at": available_at,
+                "validated_at": None,
+                "fiscal_period": "OVERVIEW",
+                "period_kind": "snapshot",
+                "period_end": available_at.date(),
+                "measurement_kind": "overview",
+                "statement_type": "overview",
+                "line_item": line_item,
+                "value": val,
+                "currency": "USD",
+                "source_currency": "USD",
+                "unit": "raw",
+                "source_priority": None,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+
+    # ── SHARES OUTSTANDING ──────────────────────────────────────────────
+    so = merged.get("sharesOutstanding", {})
+    for pk_label, pk_key in [("quarter", "quarterly"), ("fiscal_year", "annual")]:
+        reports = so.get(pk_key, []) if isinstance(so.get(pk_key), list) else []
+        for report in reports:
+            period_end = _parse_date(report.get("fiscalDateEnding", ""))
+            if not period_end:
+                continue
+            val = _av_value(report.get("sharesOutstanding"))
+            if val is None:
+                continue
+            fy = period_end.year
+            q = (period_end.month - 1) // 3 + 1 if pk_label == "quarter" else 4
+            rows.append(
+                {
+                    "security_id": security_id,
+                    "effective_date": period_end,
+                    "available_at": available_at,
+                    "source_id": source_id,
+                    "source_published_at": available_at,
+                    "ingested_at": available_at,
+                    "validated_at": None,
+                    "fiscal_period": f"FY{fy}Q{q}",
+                    "period_kind": pk_label,
+                    "period_end": period_end,
+                    "measurement_kind": "overview",
+                    "statement_type": "overview",
+                    "line_item": "shares_outstanding",
+                    "value": val,
+                    "currency": "USD",
+                    "source_currency": "USD",
+                    "unit": "raw",
+                    "source_priority": None,
+                    "source_fetch_id": source_fetch_id,
+                    "raw_payload_hash": content_hash,
+                    "ingestion_run_id": ingestion_run_id,
+                    "content_hash": content_hash,
+                    "version_hash": "",
+                    "schema_version": 1,
+                    "parser_version": 1,
+                    "quality_status": "valid",
+                }
+            )
 
     if not rows:
         return pl.DataFrame()

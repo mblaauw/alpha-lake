@@ -13,11 +13,11 @@ _AV_BASE = "https://www.alphavantage.co"
 
 
 async def fetch_fundamentals(symbol: str) -> RawFetch:
-    """Fetch INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW for a symbol.
+    """Fetch INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, OVERVIEW, SHARES_OUTSTANDING.
 
-    Free tier: 25 calls/day, 5 calls/min. Each symbol = 3 calls.
+    Free tier: 25 calls/day, 5 calls/min. Each symbol = 5 calls.
     Calls are sequenced with a 12-second gap to stay within rate limits.
-    Returns the merged JSON with all three reports in the ``body``.
+    Returns merged JSON with all five sections in the ``body``.
     """
     cfg = get_source("alphav")
     check_budget(cfg)
@@ -35,6 +35,10 @@ async def fetch_fundamentals(symbol: str) -> RawFetch:
     bs_data = await _fetch_one("BALANCE_SHEET")
     await asyncio.sleep(12)
     cf_data = await _fetch_one("CASH_FLOW")
+    await asyncio.sleep(12)
+    ov_data = await _fetch_one("OVERVIEW")
+    await asyncio.sleep(12)
+    so_data = await _fetch_one("SHARES_OUTSTANDING")
 
     merged = {
         "source": "alphav",
@@ -42,6 +46,8 @@ async def fetch_fundamentals(symbol: str) -> RawFetch:
         "incomeStatement": is_data,
         "balanceSheet": bs_data,
         "cashFlow": cf_data,
+        "overview": ov_data,
+        "sharesOutstanding": so_data,
     }
     body = json.dumps(merged, default=str).encode()
     manifest = build_manifest(
