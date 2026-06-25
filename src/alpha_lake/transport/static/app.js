@@ -11,7 +11,8 @@
     symbol: '', barsSort: 'attention', dsSort: 'attention',
     drill: null, drillRow: null,
     roSymbol: '', roSort: 'category', roSymbols: null,
-    indSort: 'category', indSymbol: '', indSymbols: null, expanded: null, asofOpen: false
+    indSort: 'category', indSymbol: '', indSymbols: null, expanded: null, asofOpen: false,
+    fundSort: 'category', fundSymbol: '', fundSymbols: null, fundLatest: true
   };
 
   /* ── small utils ── */
@@ -162,7 +163,7 @@
     if (name !== 'overview') { state.drill = null; state.drillRow = null; }
     $$('.lw-nav-tab').forEach(function (t) { t.classList.toggle('is-active', t.dataset.tab === name); });
     var c = $('#lw-content'); c.innerHTML = '<div class="lw-loading">Loading</div>';
-    ({ overview: renderOverview, bars: renderBars, readouts: renderReadouts, sentiment: renderSentiment, indicators: renderIndicators, pit: renderPit }[name] || renderOverview)(c);
+    ({ overview: renderOverview, bars: renderBars, readouts: renderReadouts, sentiment: renderSentiment, indicators: renderIndicators, fundamentals: renderFundamentals, pit: renderPit }[name] || renderOverview)(c);
   }
 
   /* ════ OVERVIEW ════ */
@@ -698,6 +699,118 @@
       '<div class="lw-ro-foot"><span class="lw-ro-state" style="color:var(--lw-ink-3)"><span class="d" style="background:' + col + '"></span>' + esc(d.cat) + '</span></div></div>';
   }
   function fmtInd(v, t) { if (v == null) return '—'; if (t === 'bool') return v ? 'yes' : 'no'; if (t === 'pct') return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%'; if (t === 'price') return fmtMoney(v); if (t === 'big') return fmtBig(v); if (t === 'num1') return Number(v).toFixed(1); if (t === 'num2') return Number(v).toFixed(2); if (t === 'num3') return Number(v).toFixed(3); return Number(v).toFixed(1); }
+
+  /* ════ FUNDAMENTALS ════ */
+  var FUND_CATS = [['Overview', 'Overview'], ['Valuation', 'Valuation'], ['Profitability', 'Profitability'], ['Growth', 'Growth'], ['Financial Health', 'Financial Health'], ['Cash Flow', 'Cash Flow'], ['Capital Allocation', 'Capital Allocation'], ['Scale', 'Scale'], ['Capital Efficiency', 'Capital Efficiency'], ['Estimates', 'Estimates']];
+  var _OVERVIEW = ['fundamentals.scale.revenue_ttm', 'fundamentals.valuation.price_to_earnings_ttm', 'fundamentals.valuation.ev_to_ebitda', 'fundamentals.cash_flow_quality.fcf_yield', 'fundamentals.growth.revenue_growth_yoy', 'fundamentals.growth.diluted_eps_growth_yoy', 'fundamentals.profitability.operating_margin_ttm', 'fundamentals.capital_efficiency.return_on_invested_capital', 'fundamentals.financial_health.net_debt_to_ebitda', 'fundamentals.financial_health.current_ratio', 'fundamentals.cash_flow_quality.fcf_conversion', 'fundamentals.capital_allocation.shares_outstanding_growth'];
+  var _fundPins = getJSON('lw_fund_pins', {});
+  function getFundPins(sym) { return _fundPins[sym] || []; }
+  function setFundPins(sym, arr) { _fundPins[sym] = arr; setLS('lw_fund_pins', JSON.stringify(_fundPins)); }
+  var _fundGlossary = null, _fundGlossaryReq = null;
+  function fetchFundGlossary() { if (_fundGlossary) return Promise.resolve(_fundGlossary); if (!_fundGlossaryReq) _fundGlossaryReq = api('/fundamentals/glossary').then(function (g) { _fundGlossary = g || {}; return _fundGlossary; }).catch(function () { _fundGlossary = {}; return _fundGlossary; }); return _fundGlossaryReq; }
+  var _fundCache = null;
+  function renderFundamentals(c) {
+    c.innerHTML =
+      '<div class="lw-sec-head"><div class="lw-sec-title">Fundamentals</div>' +
+        '<div style="display:flex;align-items:center;gap:10px"><label class="lw-mono" style="font-size:10px;color:var(--lw-ink-3);display:flex;align-items:center;gap:5px;cursor:pointer">' +
+          '<input type="checkbox" id="lw-fund-latest"' + (state.fundLatest ? ' checked' : '') + '> Latest</label>' +
+        '<div class="lw-sort"><span class="lw-sort-lbl">Order</span><span id="lw-fund-sort"></span></div></div></div>' +
+      '<div class="lw-ro-syms" id="lw-fund-syms"><span class="lw-empty-mono">loading symbols…</span></div>' +
+      '<div id="lw-fund-body"></div>';
+    sortButtons('lw-fund-sort', [['category', 'By category'], ['name', 'Name']], state.fundSort, function (v) { state.fundSort = v; loadFundBody(); });
+    $('#lw-fund-latest').addEventListener('change', function (e) { state.fundLatest = e.target.checked; loadFundBody(); });
+    var doSyms = function (list) {
+      state.fundSymbols = list;
+      if (!list.length) { $('#lw-fund-syms').innerHTML = '<span class="lw-empty-mono">no symbols in lake</span>'; $('#lw-fund-body').innerHTML = '<div class="lw-empty">Ingest bars and fundamentals to compute metrics.</div>'; return; }
+      if (!state.fundSymbol || !list.some(function (x) { return (x.symbol || x.security_id) === state.fundSymbol; })) state.fundSymbol = list[0].symbol || list[0].security_id;
+      drawFundSyms(list); loadFundBody();
+    };
+    if (state.fundSymbols) doSyms(state.fundSymbols);
+    else api('/bars/symbols').then(function (l) { doSyms(l || []); }).catch(function () { $('#lw-fund-syms').innerHTML = '<span class="lw-empty-mono">could not load symbols</span>'; });
+  }
+  function drawFundSyms(list) {
+    var box = $('#lw-fund-syms'); box.innerHTML = '';
+    list.forEach(function (it) {
+      var sym = it.symbol || it.security_id;
+      var b = document.createElement('button'); b.className = 'lw-ro-sym' + (sym === state.fundSymbol ? ' is-active' : ''); b.innerHTML = esc(sym);
+      b.addEventListener('click', function () { state.fundSymbol = sym; drawFundSyms(list); loadFundBody(); }); box.appendChild(b);
+    });
+  }
+  function loadFundBody() {
+    var body = $('#lw-fund-body'); if (!body) return;
+    var sym = state.fundSymbol, cacheKey = sym + '_' + state.fundLatest;
+    if (_fundCache && _fundCache[cacheKey]) { drawFundBody(body, _fundCache[cacheKey]); return; }
+    body.innerHTML = '<div class="lw-loading">Loading fundamentals</div>';
+    var extra = state.fundLatest ? { latest: 'true' } : {};
+    barApi('/symbol/' + encodeURIComponent(sym) + '/fundamentals', null, extra).then(function (res) {
+      _fundCache = _fundCache || {}; _fundCache[cacheKey] = res; drawFundBody(body, res);
+    }).catch(function () {
+      body.innerHTML = '<div class="lw-empty"><div class="lw-empty-mono">No fundamentals for ' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);margin-top:6px">Needs canonical fundamentals data in the lake.</div></div>';
+    });
+  }
+  function drawFundBody(body, res) {
+    var metrics = (res && res.metrics) || [];
+    var meta = (res && res.metadata) || {};
+    var sb = state.fundSymbols ? state.fundSymbols.filter(function (x) { return (x.symbol || x.security_id) === state.fundSymbol; })[0] : null;
+    var name = sb ? (sb.name || '') : '';
+    var isLatest = meta.latest;
+    var head = '<div class="lw-ro-symhead"><span class="t">' + esc(state.fundSymbol) + '</span><span class="n">' + esc(name) + '</span>' +
+      (isLatest ? '<span class="lw-stale-badge" style="background:var(--lw-accent);font-size:8px">LATEST</span>' : '') +
+      '<span class="m">' + metrics.length + ' metrics · as of ' + (state.asOf ? esc(String(res.as_of || state.asOf).slice(0, 10)) : String(res.as_of || '').slice(0,10) || 'now') + '</span></div>';
+    if (!metrics.length) { body.innerHTML = head + '<div class="lw-empty"><div class="lw-empty-mono">No fundamental metrics available</div></div>'; return; }
+    var html = head;
+    var pin = getFundPins(state.fundSymbol);
+    var byPin = function (arr) { return arr.slice().sort(function (a, b) { return (pin.indexOf(a.metric_id) > -1) - (pin.indexOf(b.metric_id) > -1); }); };
+    if (state.fundSort === 'name') {
+      var sorted = metrics.slice().sort(function (a, b) { return (a.name || a.metric_id) < (b.name || b.metric_id) ? -1 : 1; });
+      html += fundGroup('All · A-Z', byPin(sorted));
+    } else {
+      var overviewItems = metrics.filter(function (m) { return _OVERVIEW.indexOf(m.metric_id) !== -1; });
+      if (overviewItems.length) html += fundGroup('Overview', byPin(overviewItems));
+      FUND_CATS.forEach(function (cat) {
+        if (cat[0] === 'Overview') return;
+        var items = metrics.filter(function (m) { return m.category === cat[0]; });
+        if (items.length) html += fundGroup(cat[1], byPin(items));
+      });
+      var known = FUND_CATS.map(function (x) { return x[0]; });
+      var extra = {};
+      metrics.forEach(function (m) { var c = m.category; if (known.indexOf(c) < 0) (extra[c] = extra[c] || []).push(m); });
+      Object.keys(extra).forEach(function (c) { html += fundGroup(title(c), byPin(extra[c])); });
+    }
+    body.innerHTML = html;
+    bindTips(body);
+    $$('.ind-pin', body).forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation(); hideTip();
+        var sym = btn.getAttribute('data-sym'), mid = btn.getAttribute('data-pin');
+        var arr = getFundPins(sym); var i = arr.indexOf(mid); if (i < 0) arr.push(mid); else arr.splice(i, 1); setFundPins(sym, arr); loadFundBody();
+      });
+    });
+  }
+  function fundGroup(label, items) {
+    var html = '<div class="lw-ro-group"><div class="lw-ro-grouphead"><span class="c">' + esc(label) + '</span><span class="rule"></span><span class="ct">' + items.length + '</span></div><div class="lw-ro-grid">';
+    items.forEach(function (m) { html += fundCard(m); });
+    return html + '</div></div>';
+  }
+  function fundCard(m) {
+    var isUnavail = m.quality_status === 'unavailable' || m.quality_status === 'not_meaningful' || m.value == null;
+    var col = isUnavail ? 'var(--lw-ink-4)' : m.tone === 'green' ? 'var(--lw-up)' : m.tone === 'red' ? 'var(--lw-down)' : m.tone === 'amber' ? 'var(--lw-accent)' : 'var(--lw-snap)';
+    var borderCol = isUnavail ? 'var(--lw-rule-2)' : col;
+    var valTxt = m.display_value || (m.value != null ? String(m.value) : '—');
+    var valColor = isUnavail ? 'var(--lw-ink-3)' : col;
+    var stateTxt = m.label || title(m.threshold_state || 'available');
+    var isP = getFundPins(state.fundSymbol).indexOf(m.metric_id) !== -1;
+    var tipDesc = '';
+    if (m.unavailable_reason) tipDesc = esc(m.unavailable_reason.replace(/_/g, ' '));
+    return '<div class="lw-ro-card" style="border-top-color:' + borderCol + '" data-tip-name="' + esc(m.name) + '" data-tip-body="' + tipDesc + '">' +
+      '<div class="lw-ro-card-head"><span class="lw-ro-name">' + esc(m.name) + '</span>' +
+        '<button class="ind-pin' + (isP ? ' on' : '') + '" data-sym="' + esc(state.fundSymbol) + '" data-pin="' + esc(m.metric_id) + '" title="Pin metric">' + (isP ? '★' : '☆') + '</button></div>' +
+      '<div class="lw-ro-val" style="color:' + valColor + '">' + esc(valTxt) + '</div>' +
+      '<div class="lw-ro-foot"><span class="lw-ro-state" style="color:' + col + '"><span class="d" style="background:' + col + '"></span>' + esc(stateTxt) + '</span>' +
+        (m.period_kind ? '<span class="lw-ro-sub">' + esc(m.period_kind.toUpperCase()) + '</span>' : '') +
+        (m.quality_status !== 'valid' && m.quality_status !== 'available' ? '<span class="lw-ro-flag" style="color:var(--lw-down);background:var(--lw-down-soft)">' + esc(m.quality_status.replace(/_/g, ' ')) + '</span>' : '') +
+      '</div></div>';
+  }
 
   /* ════ PIT ════ */
   function renderPit(c) {
