@@ -986,6 +986,28 @@ async def analyst_estimates(symbol: str, as_of: datetime | None = None, limit: i
     return JSONResponse(_pl_to_dicts(df))
 
 
+# ── News articles ────────────────────────────────────────────────────────
+
+
+@router.get("/news/{symbol}")
+async def news_articles(symbol: str, as_of: datetime | None = None, limit: int = 50):
+    _check_enabled()
+    if as_of is None:
+        as_of = _now()
+    con = _get_con()
+    sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        sec_id = symbol
+    try:
+        df = pit_read(con, table="news_articles", security_ids=[sec_id], as_of=as_of)
+    except Exception:
+        return JSONResponse([])
+    if df.is_empty():
+        return JSONResponse([])
+    df = df.sort("effective_date", descending=True).head(min(limit, 500))
+    return JSONResponse(_pl_to_dicts(df))
+
+
 # ── Indicators glossary ──────────────────────────────────────────────────
 
 
