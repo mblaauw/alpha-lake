@@ -106,6 +106,70 @@ inputs, threshold profile, and surfaces for every registered metric.
 
 Response: JSON array of metric glossary entries with embedded threshold profile.
 
+#### `GET /v1/symbol/{symbol}/readouts`
+
+Return PIT-correct neutral symbol readouts for a single symbol.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `symbol` | string | yes | — | Ticker symbol |
+| `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
+| `latest` | bool | no | false | Non-research convenience path |
+| `categories` | string | no | all | Comma-separated category filter |
+| `readout_ids` | string | no | all | Comma-separated readout ID filter |
+| `snapshot_id` | string | no | — | DuckLake snapshot for pinned reads |
+
+Response: `{symbol, as_of, readouts: [{definition, observation}], metadata}`.
+Same response shape as the dashboard readout endpoint.
+
+#### `POST /v1/readouts/batch`
+
+Batch readouts for multiple symbols.
+
+| Body field | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbols` | string[] | yes | List of ticker symbols |
+| `as_of` | datetime | no | PIT knowledge-time boundary |
+| `latest` | bool | no | Non-research convenience path |
+| `categories` | string | no | Comma-separated category filter |
+| `readout_ids` | string | no | Comma-separated readout ID filter |
+| `snapshot_id` | string | no | DuckLake snapshot |
+
+Response: `{as_of, snapshot_id, items: {symbol: {...}}, errors: {symbol: str}}`.
+
+#### `GET /v1/symbol/{symbol}/facts-bundle`
+
+Aggregated neutral facts for a single symbol in a single response.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `symbol` | string | yes | — | Ticker symbol |
+| `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
+| `latest` | bool | no | false | Non-research convenience path |
+| `categories` | string | no | all | Comma-separated category filter |
+| `readout_ids` | string | no | all | Comma-separated readout ID filter |
+| `metric_ids` | string | no | all | Comma-separated fundamental metric IDs |
+| `snapshot_id` | string | no | — | DuckLake snapshot |
+
+Response sections: `price`, `readouts`, `fundamentals`, `insider_tx`,
+`earnings_events`, `attention_metrics` (experimental).
+Plus `freshness`, `provenance`, and `metadata` with `missing_sections`
+and `experimental_sections`.
+
+#### `POST /v1/facts-bundle/batch`
+
+Batch facts bundle for multiple symbols.
+
+| Body field | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbols` | string[] | yes | List of ticker symbols |
+| `as_of` | datetime | no | PIT knowledge-time boundary |
+| `latest` | bool | no | Non-research convenience path |
+| `categories` | string | no | Comma-separated category filter |
+| `readout_ids` | string | no | Comma-separated readout ID filter |
+| `metric_ids` | string | no | Comma-separated fundamental metric IDs |
+| `snapshot_id` | string | no | DuckLake snapshot |
+
 #### `GET /v1/insider-transactions/{symbol}`
 
 Return per-executive insider buy/sell transactions from Alpha Vantage.

@@ -9,7 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-_(none yet)_
+- **Facts Bundle API** — new authenticated endpoints for aggregated neutral facts:
+  - `GET /v1/symbol/{symbol}/readouts` — single-symbol readouts
+  - `POST /v1/readouts/batch` — batch readouts
+  - `GET /v1/symbol/{symbol}/facts-bundle` — aggregated price, readouts, fundamentals,
+    insider, earnings, attention (experimental)
+  - `POST /v1/facts-bundle/batch` — batch facts bundle
+  - Decision-panel: `include=readouts,insider_transactions_detail` parameter
+  - Shared readout service extracted to `serving/readouts.py`
+  - See ADR-0031 for full architecture
 
 ### Fixed
 
