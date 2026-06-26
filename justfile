@@ -2,6 +2,10 @@
 
 set shell := ["bash", "-c"]
 
+# Build the app image
+build:
+    docker compose build app
+
 # Start the reference stack
 up *flags:
     docker compose up -d postgres rustfs {{ flags }}

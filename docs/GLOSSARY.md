@@ -42,7 +42,7 @@ Difference between fast and slow EMAs. Measures trend direction and strength.
 Category: Trend · Source: close · Periods: 12, 26, 9
 
 ### MACD Signal (MACD EMA)
-EMA of the MACD line. A bullish crossover occurs when MACD crosses above its signal line.
+EMA of the MACD line. A positive crossover occurs when MACD crosses above its signal line.
 `MACD_ema = EMA(MACD_line, 9)`
 Category: Trend · Source: close · Period: 9
 
@@ -57,7 +57,7 @@ Like MACD but expressed as a percentage of the slow EMA. Useful for comparing ac
 Category: Trend · Source: close · Periods: 12, 26, 9
 
 ### PPO Signal
-EMA of the PPO line. A bullish crossover occurs when PPO crosses above its signal line.
+EMA of the PPO line. A positive crossover occurs when PPO crosses above its signal line.
 `PPO_signal = EMA(PPO, 9)`
 Category: Trend · Source: close · Period: 9
 

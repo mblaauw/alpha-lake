@@ -1,4 +1,4 @@
-dataset: bars
+dataset: lake_bars
 version: 1
 description: Daily OHLCV bars — raw unadjusted open, high, low, close, volume
 

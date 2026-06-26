@@ -32,7 +32,7 @@ _(none yet)_
   - Listing status: LISTING_STATUS (#518)
   - New models: `InsiderTransactionFact`, `InstitutionalHoldingFact`, `TopMoverFact`,
     `ETPProfileFact`, `IPOEventFact`
-  - See docs/adr/2026-06-25-alpha-vantage-integration.md for full architecture
+  - See docs/adr/0030-alpha-vantage-integration.md for full architecture
 - **Tiingo fundamentals connector** — switched from `/daily` (daily metrics) to
   `/statements` endpoint (financial statement line items). Added
   `fundamentals_from_json()` normalize function to transform Tiingo statements
