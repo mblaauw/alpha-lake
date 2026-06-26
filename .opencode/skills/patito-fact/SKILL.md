@@ -16,6 +16,22 @@ source_fetch_id, raw_payload_hash, ingestion_run_id
 content_hash, version_hash, quality_status
 ```
 
+## Model Files
+
+All fact models live in `src/alpha_lake/models/`. Current models:
+
+- `BarFact` — daily OHLCV bars (`bar_fact.py`)
+- `FundamentalFact` — financial statement line items (`dataset_models.py`)
+- `FundamentalMetricFact` — derived period/estimate metrics (`fundamental_metric_fact.py`)
+- `CorpActionFact` — splits and dividends (`corp_action_fact.py`)
+- `InsiderTxFact` — aggregated insider sentiment (`dataset_models.py`)
+- `InsiderTransactionFact` — per-executive insider trades (`insider_transaction_fact.py`)
+- `InstitutionalHoldingFact` — 13F institutional holdings (`institutional_holding_fact.py`)
+- `TopMoverFact` — daily gainers/losers (`top_mover_fact.py`)
+- `ETPProfileFact` — ETF metadata (`etp_profile_fact.py`)
+- `IPOEventFact` — upcoming IPOs (`ipo_event_fact.py`)
+- `AnalystEstimateFact`, `CongressTradeFact`, `SocialPostFact`, `EarningsEventFact`, etc.
+
 ## BarFact Example
 
 ```python
