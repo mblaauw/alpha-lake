@@ -8,6 +8,24 @@ from typing import Any
 import polars as pl
 
 
+def _meta(
+    source_fetch_id: str,
+    content_hash: str,
+    ingestion_run_id: str,
+) -> dict[str, Any]:
+    """Common lineage metadata fields for every canonical row."""
+    return {
+        "source_fetch_id": source_fetch_id,
+        "raw_payload_hash": content_hash,
+        "ingestion_run_id": ingestion_run_id,
+        "content_hash": content_hash,
+        "version_hash": "",
+        "schema_version": 1,
+        "parser_version": 1,
+        "quality_status": "valid",
+    }
+
+
 def macro_series_from_json(
     raw: list[dict[str, Any]],
     series_id: str,
@@ -29,14 +47,7 @@ def macro_series_from_json(
                 "available_at": available_at,
                 "source_id": source_id,
                 "value": float(val),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
 
@@ -70,14 +81,7 @@ def economic_calendar_from_json(
                 "available_at": available_at,
                 "source_id": source_id,
                 "country": record.get("country", "US"),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
 
@@ -116,14 +120,7 @@ def bars_from_json(
                 "low": float(record.get("low", 0)),
                 "close": float(record.get("close", 0)),
                 "volume": int(record.get("volume", 0)),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
 
@@ -166,14 +163,7 @@ def news_from_json(
                 "text_hash": _text_hash(title, record.get("summary", "")),
                 "published_at": _epoch_to_dt(epoch),
                 "source_name": record.get("source", ""),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     df = pl.DataFrame(rows)
@@ -217,14 +207,7 @@ def sentiment_from_news(
                 ),
                 "source_dataset_version": None,
                 "security_id": record.get("related", ""),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     df = pl.DataFrame(rows)
@@ -262,14 +245,7 @@ def marketaux_news_from_json(
                 "text_hash": _text_hash(record.get("title", ""), record.get("description", "")),
                 "published_at": _parse_iso_dt(pub) if pub else available_at,
                 "source_name": record.get("source", ""),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:
@@ -317,14 +293,7 @@ def marketaux_sentiment_from_json(
                     "input_text_hash": input_hash,
                     "source_dataset_version": None,
                     "security_id": symbol,
-                    "source_fetch_id": source_fetch_id,
-                    "raw_payload_hash": content_hash,
-                    "ingestion_run_id": ingestion_run_id,
-                    "content_hash": content_hash,
-                    "version_hash": "",
-                    "schema_version": 1,
-                    "parser_version": 1,
-                    "quality_status": "valid",
+                    **_meta(source_fetch_id, content_hash, ingestion_run_id),
                 }
             )
     if not rows:
@@ -364,14 +333,7 @@ def analyst_estimates_from_json(
                 "target_mean": record.get("targetMean"),
                 "target_high": record.get("targetHigh"),
                 "target_low": record.get("targetLow"),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     df = pl.DataFrame(rows)
@@ -412,14 +374,7 @@ def earnings_calendar_from_json(
                 "source_id": source_id,
                 "report_date": report_date_str,
                 "session": session,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:
@@ -459,14 +414,7 @@ def insider_tx_from_json(
                 "shares": max(float(record.get("change", 0)), 0),
                 "price": 0.0,
                 "value": 0.0,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     df = pl.DataFrame(rows)
@@ -510,14 +458,7 @@ def stocktwits_sentiment_from_json(
                 "input_text_hash": _text_hash(body),
                 "source_dataset_version": None,
                 "security_id": symbol,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:
@@ -554,14 +495,8 @@ def apewisdom_attention_from_json(
                 "rank": record.get("rank"),
                 "rank_24h_ago": record.get("rank_24h_ago"),
                 "name": record.get("name") or None,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
                 "parser_version": 2,
-                "quality_status": "valid",
             }
         )
     if not rows:
@@ -607,14 +542,7 @@ def earnings_calendar_from_finnhub(
                 "source_id": source_id,
                 "report_date": report_date_str,
                 "session": session,
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:
@@ -682,14 +610,7 @@ def fundamentals_from_json(
                         "source_currency": "USD",
                         "unit": "raw",
                         "source_priority": None,
-                        "source_fetch_id": source_fetch_id,
-                        "raw_payload_hash": content_hash,
-                        "ingestion_run_id": ingestion_run_id,
-                        "content_hash": content_hash,
-                        "version_hash": "",
-                        "schema_version": 1,
-                        "parser_version": 1,
-                        "quality_status": "valid",
+                        **_meta(source_fetch_id, content_hash, ingestion_run_id),
                     }
                 )
     if not rows:
@@ -747,14 +668,7 @@ def congress_trades_from_json(
                 "source_id": source_id,
                 "direction": str(record.get("type", record.get("direction", ""))).lower(),
                 "amount_range": str(record.get("amount", record.get("amount_range", ""))),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:
@@ -810,14 +724,7 @@ def social_posts_from_json(
                 "engagement_json": json.dumps(
                     {"ups": post.get("ups", 0), "comments": post.get("num_comments", 0)}
                 ),
-                "source_fetch_id": source_fetch_id,
-                "raw_payload_hash": content_hash,
-                "ingestion_run_id": ingestion_run_id,
-                "content_hash": content_hash,
-                "version_hash": "",
-                "schema_version": 1,
-                "parser_version": 1,
-                "quality_status": "valid",
+                **_meta(source_fetch_id, content_hash, ingestion_run_id),
             }
         )
     if not rows:

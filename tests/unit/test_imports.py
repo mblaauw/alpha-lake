@@ -16,11 +16,11 @@ def test_config_imports():
     assert load_config is not None
 
 
-def test_obs_imports():
-    from alpha_lake.obs import setup_otel
+def test_obs_module_removed():
+    import importlib
 
-    assert setup_otel is not None
-    assert setup_otel() is None  # no-op without env var
+    spec = importlib.util.find_spec("alpha_lake.obs")
+    assert spec is None, "obs.py was removed — ADR-0027 replaced OTel with structured logging"
 
 
 def test_source_registry():

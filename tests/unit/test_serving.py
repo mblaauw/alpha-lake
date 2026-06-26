@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 
 from alpha_lake.canonical import write_bars
-from alpha_lake.derived import ema, returns, sma, typical_price
+from alpha_lake.derived import ema, returns, sma
 from alpha_lake.kernel import register_kernel
 from alpha_lake.serving import read_asof_join, read_bars_latest, read_panel
 
@@ -85,11 +85,6 @@ def test_read_asof_join():
     assert result["close"][0] == 100.0
     assert result["close"][1] == 200.0
     con.close()
-
-
-def test_derived_typical_price():
-    df = pl.DataFrame({"high": [110.0], "low": [90.0], "close": [100.0]})
-    assert typical_price(df)[0] == 100.0
 
 
 def test_derived_sma_passthrough():

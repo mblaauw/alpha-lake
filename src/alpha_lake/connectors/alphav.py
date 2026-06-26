@@ -12,89 +12,52 @@ from alpha_lake.source_registry import get_source
 _AV_BASE = "https://www.alphavantage.co"
 
 
-async def fetch_fundamentals(symbol: str) -> RawFetch:
-    """Fetch INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, OVERVIEW, SHARES_OUTSTANDING.
-
-    Free tier: 25 calls/day, 5 calls/min. Each symbol = 5 calls.
-    Calls are sequenced with a 12-second gap to stay within rate limits.
-    Returns merged JSON with all five sections in the ``body``.
-    """
+async def _alphav_fetch(params: dict[str, Any]) -> RawFetch:
+    """Execute a single AV API call and return the RawFetch."""
     cfg = get_source("alphav")
     check_budget(cfg)
-    params: dict[str, Any] = {"apikey": cfg.api_key, "symbol": symbol}
+    params["apikey"] = cfg.api_key
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+    manifest = build_manifest("alphav", "/query", params, r.content, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=r.content)
+
+
+async def fetch_fundamentals(symbol: str) -> RawFetch:
+    """Fetch INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, OVERVIEW, SHARES_OUTSTANDING,
+    EARNINGS, EARNINGS_ESTIMATES sequentially with 12-second rate-limit gaps."""
 
     async def _fetch_one(function: str) -> dict[str, Any]:
-        p = {**params, "function": function}
-        async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-            r = await c.get("/query", params=p)
-            r.raise_for_status()
-            return r.json()
+        rf = await _alphav_fetch({"function": function, "symbol": symbol})
+        return json.loads(rf.body)
 
-    is_data = await _fetch_one("INCOME_STATEMENT")
-    await asyncio.sleep(12)
-    bs_data = await _fetch_one("BALANCE_SHEET")
-    await asyncio.sleep(12)
-    cf_data = await _fetch_one("CASH_FLOW")
-    await asyncio.sleep(12)
-    ov_data = await _fetch_one("OVERVIEW")
-    await asyncio.sleep(12)
-    so_data = await _fetch_one("SHARES_OUTSTANDING")
-    await asyncio.sleep(12)
-    ea_data = await _fetch_one("EARNINGS")
-    await asyncio.sleep(12)
-    ee_data = await _fetch_one("EARNINGS_ESTIMATES")
+    sections = [
+        "INCOME_STATEMENT",
+        "BALANCE_SHEET",
+        "CASH_FLOW",
+        "OVERVIEW",
+        "SHARES_OUTSTANDING",
+        "EARNINGS",
+        "EARNINGS_ESTIMATES",
+    ]
+    results: dict[str, dict[str, Any]] = {}
+    for i, fn in enumerate(sections):
+        results[fn.lower().replace("-", "_")] = await _fetch_one(fn)
+        if i < len(sections) - 1:
+            await asyncio.sleep(12)
 
-    merged = {
-        "source": "alphav",
-        "symbol": symbol,
-        "incomeStatement": is_data,
-        "balanceSheet": bs_data,
-        "cashFlow": cf_data,
-        "overview": ov_data,
-        "sharesOutstanding": so_data,
-        "earnings": ea_data,
-        "earningsEstimates": ee_data,
-    }
+    merged = {"source": "alphav", "symbol": symbol, **results}
     body = json.dumps(merged, default=str).encode()
-    manifest = build_manifest(
-        "alphav",
-        "/query",
-        params,
-        body,
-        200,
-        1,
-    )
-    return RawFetch(manifest=manifest, body=body)
+    return RawFetch(manifest=build_manifest("alphav", "/query", {}, body, 200, 1), body=body)
 
 
 async def fetch_insider_transactions(symbol: str) -> RawFetch:
-    """Fetch INSIDER_TRANSACTIONS for a symbol."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params: dict[str, Any] = {
-        "apikey": cfg.api_key,
-        "symbol": symbol,
-        "function": "INSIDER_TRANSACTIONS",
-    }
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "INSIDER_TRANSACTIONS", "symbol": symbol})
 
 
 async def fetch_institutional_holdings(symbol: str) -> RawFetch:
-    """Fetch INSTITUTIONAL_HOLDINGS for a symbol."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params = {"apikey": cfg.api_key, "symbol": symbol, "function": "INSTITUTIONAL_HOLDINGS"}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "INSTITUTIONAL_HOLDINGS", "symbol": symbol})
 
 
 _ECON_SERIES_MAP: dict[str, dict[str, Any]] = {
@@ -113,7 +76,6 @@ _ECON_SERIES_MAP: dict[str, dict[str, Any]] = {
     "durables": {"function": "DURABLES"},
     "unemployment": {"function": "UNEMPLOYMENT"},
     "nonfarm_payroll": {"function": "NONFARM_PAYROLL"},
-    # Commodities
     "wti": {"function": "WTI"},
     "brent": {"function": "BRENT"},
     "natural_gas": {"function": "NATURAL_GAS"},
@@ -129,99 +91,45 @@ _ECON_SERIES_MAP: dict[str, dict[str, Any]] = {
 
 
 async def fetch_econ_indicator(series_id: str, from_date: str = "", to_date: str = "") -> RawFetch:
-    """Fetch an economic indicator from Alpha Vantage.
-
-    Maps ``series_id`` to the appropriate AV function. Single API call.
-    ``from_date`` and ``to_date`` are accepted for pipeline compatibility
-    but AV free tier returns all available data regardless.
-    """
-    del from_date, to_date  # unused — AV free tier always returns full history
-    cfg = get_source("alphav")
-    check_budget(cfg)
+    """Fetch an economic indicator from AV. ``from_date``/``to_date`` unused (free tier)."""
+    del from_date, to_date
     spec = _ECON_SERIES_MAP.get(series_id)
     if spec is None:
         raise ValueError(f"Unknown economic series: {series_id}")
-    params: dict[str, Any] = {"apikey": cfg.api_key, **spec}
-    # Remove default empty strings that AV may reject
-    params = {k: v for k, v in params.items() if v}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    params = {k: v for k, v in spec.items() if v}
+    return await _alphav_fetch(params)
 
 
 async def fetch_corp_actions(symbol: str) -> RawFetch:
-    """Fetch DIVIDENDS and SPLITS for a symbol. Merges both into one RawFetch."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params: dict[str, Any] = {"apikey": cfg.api_key, "symbol": symbol}
-
-    async def _fetch_one(function: str) -> dict[str, Any]:
-        p = {**params, "function": function}
-        async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-            r = await c.get("/query", params=p)
-            r.raise_for_status()
-            return r.json()
-
-    div_data = await _fetch_one("DIVIDENDS")
+    """Fetch DIVIDENDS and SPLITS. Merges both into one RawFetch."""
+    div_rf = await _alphav_fetch({"function": "DIVIDENDS", "symbol": symbol})
     await asyncio.sleep(12)
-    spl_data = await _fetch_one("SPLITS")
-
-    merged = {"source": "alphav", "symbol": symbol, "dividends": div_data, "splits": spl_data}
-    body = json.dumps(merged, default=str).encode()
-    manifest = build_manifest("alphav", "/query", params, body, 200, 1)
-    return RawFetch(manifest=manifest, body=body)
+    spl_rf = await _alphav_fetch({"function": "SPLITS", "symbol": symbol})
+    merged = {
+        "source": "alphav",
+        "symbol": symbol,
+        "dividends": json.loads(div_rf.body),
+        "splits": json.loads(spl_rf.body),
+    }
+    return RawFetch(
+        manifest=build_manifest(
+            "alphav", "/query", {}, json.dumps(merged, default=str).encode(), 200, 1
+        ),
+        body=json.dumps(merged, default=str).encode(),
+    )
 
 
 async def fetch_top_movers() -> RawFetch:
-    """Fetch TOP_GAINERS_LOSERS. Single call, no symbol needed."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params = {"apikey": cfg.api_key, "function": "TOP_GAINERS_LOSERS"}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "TOP_GAINERS_LOSERS"})
 
 
 async def fetch_etf_profile(symbol: str) -> RawFetch:
-    """Fetch ETF_PROFILE for a symbol."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params = {"apikey": cfg.api_key, "symbol": symbol, "function": "ETF_PROFILE"}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "ETF_PROFILE", "symbol": symbol})
 
 
 async def fetch_ipo_calendar() -> RawFetch:
-    """Fetch IPO_CALENDAR. Single call, no symbol needed."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params = {"apikey": cfg.api_key, "function": "IPO_CALENDAR"}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "IPO_CALENDAR"})
 
 
 async def fetch_listing_status() -> RawFetch:
-    """Fetch LISTING_STATUS. Returns active/delisted US stocks & ETFs."""
-    cfg = get_source("alphav")
-    check_budget(cfg)
-    params = {"apikey": cfg.api_key, "function": "LISTING_STATUS"}
-    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
-        r = await c.get("/query", params=params)
-        r.raise_for_status()
-        body = r.content
-    manifest = build_manifest("alphav", "/query", params, body, r.status_code, 1)
-    return RawFetch(manifest=manifest, body=body)
+    return await _alphav_fetch({"function": "LISTING_STATUS"})

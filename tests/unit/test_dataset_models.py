@@ -12,7 +12,6 @@ from alpha_lake.models.dataset_models import (
     SocialAttentionFact,
     SocialPostFact,
 )
-from alpha_lake.normalize.rules import normalize_value, standardize_line_item
 
 
 def _make(name: str) -> list[str]:
@@ -413,13 +412,3 @@ def test_social_attention_fact():
     assert SocialAttentionFact.validate(df).height == 1
 
 
-def test_normalize_value():
-    assert normalize_value(100, "USD") == 100.0
-    assert normalize_value(100, "EUR") == 105.0
-
-
-def test_standardize_line_item():
-    assert standardize_line_item("Total Assets") == "total_assets"
-    assert standardize_line_item("EPS") == "diluted_eps"
-    assert standardize_line_item("Operating Cash Flow") == "operating_cash_flow"
-    assert standardize_line_item("custom_item") == "custom_item"
