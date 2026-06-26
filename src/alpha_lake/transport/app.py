@@ -297,8 +297,6 @@ async def universe(
 # ── Decision Panel — batch PIT snapshot ──────────────────────────────────────
 
 
-
-
 @app.get("/v1/decision-panel")
 async def decision_panel(
     request: Request,
@@ -307,6 +305,7 @@ async def decision_panel(
     snapshot_id: str | None = None,
     indicators: str = "sma:20,50,200,ema:12,26,rsi:14,atr:14,macd:12,26,9,bollinger:20",
     metric_categories: str = "valuation,profitability,growth,financial_health,efficiency,liquidity",
+    include: str = "",
 ):
     _auth(request)
     con = _get_con()
@@ -314,11 +313,14 @@ async def decision_panel(
     if not symbol_list:
         raise HTTPException(422, "At least one symbol is required")
 
+    include_set = {s.strip() for s in include.split(",") if s.strip()}
     results: dict[str, object] = {}
     for symbol in symbol_list:
         sec_id = resolve_security(con, symbol, as_of=as_of.date())
         if sec_id is None:
             continue
+
+        panel: dict[str, object] = {}
 
         bars = _fetch_bars(
             con,
@@ -328,9 +330,10 @@ async def decision_panel(
             snapshot_id=snapshot_id,
             price_mode="split_adjusted",
         )
+        panel["bars"] = bars
 
         parsed_indicators = _parse_indicators(indicators)
-        tech = (
+        panel["indicators"] = (
             _compute_and_serialize_indicators(
                 con,
                 sec_id,
@@ -351,13 +354,13 @@ async def decision_panel(
             price_mode="split_adjusted",
             snapshot_id=snapshot_id,
         )
-        fund_metrics = (
+        panel["fundamentals"] = (
             [_fundamental_row_to_item(r, set()) for r in fund_df.rows(named=True)]
             if not fund_df.is_empty()
             else []
         )
 
-        insider_rows = _fetch_dataset(
+        panel["insider_transactions"] = _fetch_dataset(
             con,
             "insider_tx",
             sec_id,
@@ -365,39 +368,52 @@ async def decision_panel(
             snapshot_id=snapshot_id,
             source_precedence_dataset="insider_tx",
         )
-        earnings_rows = _fetch_dataset(
+        panel["earnings_events"] = _fetch_dataset(
             con,
             "earnings_calendar",
             sec_id,
             as_of,
-            start=as_of.date() - __import__("datetime").timedelta(days=90),
+            start=as_of.date() - timedelta(days=90),
             end=as_of.date(),
             snapshot_id=snapshot_id,
         )
-        mention_rows = _fetch_dataset(
+        panel["attention_mentions"] = _fetch_dataset(
             con,
             "attention_metrics",
             sec_id,
             as_of,
-            start=as_of.date() - __import__("datetime").timedelta(days=30),
+            start=as_of.date() - timedelta(days=30),
             end=as_of.date(),
             snapshot_id=snapshot_id,
         )
 
-        results[symbol] = {
-            "bars": bars,
-            "indicators": tech,
-            "fundamentals": fund_metrics,
-            "insider_transactions": insider_rows,
-            "earnings_events": earnings_rows,
-            "attention_mentions": mention_rows,
-        }
+        # Optional sections gated by include parameter
+        if "readouts" in include_set:
+            from alpha_lake.serving.readouts import compute_readouts
+
+            panel["readouts"] = compute_readouts(
+                con,
+                symbol,
+                as_of,
+                snapshot_id=snapshot_id,
+            )
+        if "insider_transactions_detail" in include_set:
+            panel["insider_transactions_detail"] = _fetch_dataset(
+                con,
+                "insider_transactions",
+                sec_id,
+                as_of,
+                snapshot_id=snapshot_id,
+            )
+
+        results[symbol] = panel
 
     return JSONResponse(
         {
             "as_of": as_of.isoformat(),
             "snapshot_id": snapshot_id,
             "symbols": symbol_list,
+            "capabilities": ["readouts", "insider_transactions_detail"],
             "panels": results,
         }
     )
