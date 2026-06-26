@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Decision-panel: `include=readouts,insider_transactions_detail` parameter
   - Shared readout service extracted to `serving/readouts.py`
   - See ADR-0031 for full architecture
+- **STOOQ historical bootstrap** — `just bootstrap-bars` backfills 3 years of
+  daily OHLCV bars from a pre-extracted STOOQ Parquet file. Sanity checks
+  against existing lake data before import. Idempotent (+8,454 initial rows).
+  See `src/alpha_lake/flows/bootstrap.py`.
 
 ### Fixed
 
