@@ -512,6 +512,8 @@ def ingest_dataset(
         "institutional_holdings",
         "analyst_estimates",
         "fundamentals",
+        "corp_actions",
+        "etf_profiles",
     ):
         _id_col = "security_id"
         _id_val = security_id or "AAPL"
@@ -522,8 +524,8 @@ def ingest_dataset(
         _id_col = "security_id"
         _id_val = security_id or ""
 
-    # News and sentiment don't have a security_id column — check by source + date
-    if dataset in ("news", "sentiment"):
+    # Social posts, news, and sentiment check by source + date (no security_id)
+    if dataset in ("social_posts", "news", "sentiment"):
         covered = _dataset_has_coverage(
             con,
             _table,
@@ -537,6 +539,30 @@ def ingest_dataset(
 
     # Attention metrics: allow per-cohort ingestion (cohort != default → always fetch)
     if dataset == "attention_metrics" and cohort == "all-stocks":
+        covered = _dataset_has_coverage(
+            con,
+            _table,
+            "source_id",
+            src,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if covered:
+            return 0
+
+    # Top movers and IPO calendar are daily snapshots — check if today's data exists
+    if dataset in ("top_movers", "ipo_calendar"):
+        covered = _dataset_has_coverage(
+            con,
+            _table,
+            "source_id",
+            src,
+        )
+        if covered:
+            return 0
+
+    # Congress trades and economic calendar: check by source + date when no id available
+    if dataset in ("congress_trades", "economic_calendar") and not _id_val:
         covered = _dataset_has_coverage(
             con,
             _table,
