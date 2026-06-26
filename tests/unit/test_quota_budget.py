@@ -108,7 +108,6 @@ def test_budget_no_limits():
     cfg = SourceConfig(base_url="https://nolimits.example.com", rate_limit_per_sec=100.0)
     for _ in range(5):
         check_budget(cfg)  # should not raise
-    assert True
 
 
 # --- Phase 0.2 — Keyless / degraded fallback ---
