@@ -381,6 +381,7 @@
       if (s.summary) drawBarCard(el, s.it, s.summary);
       else { el.outerHTML = emptyCard(s.it.symbol, s.it.name); }
     });
+    bindTips(grid);
   }
   function drawBarCard(el, it, s) {
     var sym = it.symbol || it.security_id, up = (s.change_pct || 0) >= 0;
@@ -416,7 +417,19 @@
     }).catch(function () { var box = $('#sig-' + cssId(sym), el); if (box) box.innerHTML = '<span class="lw-empty-mono" style="font-size:10px;padding:0">readouts unavailable</span>'; });
   }
   function cssId(s) { return String(s).replace(/[^A-Za-z0-9_-]/g, '_'); }
-  function metric(l, v, col, sub) { return '<div class="lw-metric"><span class="l">' + esc(l) + '</span><span class="v" style="color:' + (col || 'var(--lw-ink)') + '">' + esc(v) + '</span><span class="s">' + esc(sub || '') + '</span></div>'; }
+  var _METRIC_TIPS = {
+    'Last close': 'Most recent trading-day closing price.',
+    'RSI 14': '14-period relative strength index. Measures speed and magnitude of recent price changes. Overbought > 70, oversold < 30.',
+    'vs SMA50': 'Percentage distance of current price from the 50-period simple moving average.',
+    'Rel vol': 'Todays volume relative to the 20-day average volume. Values above 1.3x indicate elevated activity.',
+  };
+  function metric(l, v, col, sub) {
+    var tip = _METRIC_TIPS[l] || '';
+    return '<div class="lw-metric" data-tip-name="' + esc(l) + '" data-tip-body="' + esc(tip) + '">' +
+      '<span class="l">' + esc(l) + '</span>' +
+      '<span class="v" style="color:' + (col || 'var(--lw-ink)') + '">' + esc(v) + '</span>' +
+      '<span class="s">' + esc(sub || '') + '</span></div>';
+  }
   function barsEmpty() { return '<div class="lw-sym-card is-empty"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--lw-ink-4)" stroke-width="1.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2)">No symbols in lake</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:240px">Ingest OHLCV bars or social data, or search a symbol above to backfill from EODHD / Tiingo / Alpaca.</div></div>'; }
   function emptyCard(sym, name) { return '<div class="lw-sym-card is-empty"><span class="lw-badge">' + esc((sym || '?')[0]) + '</span><div class="lw-mono" style="font-size:13px;font-weight:700;color:var(--lw-ink-2)">' + esc(sym) + '</div><div style="font-size:12px;color:var(--lw-ink-4);max-width:220px">No data in lake for this symbol yet.</div></div>'; }
 

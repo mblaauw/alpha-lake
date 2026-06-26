@@ -538,6 +538,8 @@ async def bars_symbols():
 
     seen: dict[str, dict[str, str]] = {}
     for sid in sids:
+        if sid.startswith("sec_") or "test" in sid.lower() or "parity" in sid.lower():
+            continue
         sym, name = _symbol_name_for(con, sid, _now())
         seen[sid] = {"security_id": sid, "symbol": sym or sid, "name": name or ""}
 
