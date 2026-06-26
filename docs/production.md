@@ -10,7 +10,7 @@
 
 ```bash
 # 1. Clone & configure
-git clone <repo> alpha-lake
+git clone https://github.com/mblaauw/alpha-lake.git alpha-lake
 cd alpha-lake
 cp .env.example .env
 # Edit .env with your API keys

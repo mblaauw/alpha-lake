@@ -25,7 +25,7 @@ bars, delisted securities, and deeper history.
 Datasets sourced from Alpha Vantage that extend core fact coverage. Secondary
 sources, PIT-correct, idempotent. Not SLA-eligible as sole source.
 
-- `macros_series` (AV as secondary source)
+- `macro_series` (AV as secondary source)
 - `corp_actions` (AV as secondary source)
 - `insider_transactions` (AV — per-executive)
 - `institutional_holdings` (AV — 13F snapshots)

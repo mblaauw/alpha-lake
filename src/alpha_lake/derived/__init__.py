@@ -28,14 +28,8 @@ __all__ = [
     "rsi",
     "sma",
     "vwap",
-    "typical_price",
     "returns",
 ]
-
-
-def typical_price(df: pl.DataFrame) -> pl.Series:
-    """(high + low + close) / 3"""
-    return (df["high"] + df["low"] + df["close"]) / 3
 
 
 def returns(df: pl.DataFrame, period: int = 1) -> pl.Series:

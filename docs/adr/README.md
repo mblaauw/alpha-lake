@@ -35,3 +35,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0025 | Dataset support tiers and experimental text sources | Accepted |
 | 0026 | Idempotent ingestion — skip existing data before API calls | Accepted |
 | 0027 | Structured JSON logging replaces OpenTelemetry as default observability | Accepted |
+| 0030 | Alpha Vantage multi-dataset source integration | Accepted |

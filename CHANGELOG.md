@@ -229,3 +229,8 @@ _(none yet)_
 - Deep sweep: 3 critical bugs, 4 config inconsistencies (#374)
 - Health checks use host-override env vars
 - DuckDB-Polars interop (removed `to_arrow()` calls)
+
+[Unreleased]: https://github.com/mblaauw/alpha-lake/compare/v0.1.0-alpha.3...HEAD
+[v0.1.0-alpha.3]: https://github.com/mblaauw/alpha-lake/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
+[v0.1.0-alpha.2]: https://github.com/mblaauw/alpha-lake/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
+[v0.1.0-alpha.1]: https://github.com/mblaauw/alpha-lake/releases/tag/v0.1.0-alpha.1

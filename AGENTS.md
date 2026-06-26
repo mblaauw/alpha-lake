@@ -166,7 +166,7 @@ in any batch ingestion work. See ADR-0030 for architecture details.
 
 ## Relevant Files
 
-- `src/alpha_lake/derived/indicators.py` — 57+ indicator functions (SMA, EMA, RSI, MACD, Bollinger, ATR, OBV, VWAP, ADX, Aroon, CCI, stochastic, Keltner, Donchian, WMA, KAMA, beta, alpha, etc.)
+- `src/alpha_lake/derived/indicators.py` — 70+ indicator functions (SMA, EMA, RSI, MACD, Bollinger, ATR, OBV, VWAP, ADX, Aroon, CCI, stochastic, Keltner, Donchian, WMA, KAMA, beta, alpha, etc.)
 - `src/alpha_lake/derived/compute.py` — `compute_all_indicators()` single-pass batch compute; wires all indicators into a TechnicalIndicatorFact DataFrame
 - `src/alpha_lake/derived/__init__.py` — re-exports core indicator functions
 - `src/alpha_lake/models/technical_fact.py` — `TechnicalIndicatorFact` Patito model (80+ indicator columns)

@@ -199,7 +199,7 @@ source_dataset_registry:
 | OHLCV bars — intraday | Alpaca (deferred) | Tiingo IEX, EODHD |
 | Fundamentals | SEC EDGAR Companyfacts | Tiingo, EODHD |
 | Insider transactions | SEC EDGAR Forms 3/4/5 | commercial (future) |
-| Earnings calendar | EODHD | — |
+| Earnings calendar | Finnhub | EODHD (dead) |
 | news_articles | Tiingo News | Alpaca News, EODHD News |
 | social_posts | Reddit API | Tiingo/EODHD enrichment |
 | entity_mentions | inferred from source text (NLP) | SEC EDGAR (CIK to ticker mapping) |
@@ -781,7 +781,7 @@ Each phase ships only when the golden replay hash is stable and boundary tests a
 
 | Concern | Choice |
 |---|---|
-| Language / packaging | Python ≥3.12 · uv (lockfile + offline wheelhouse); development currently targets 3.14 |
+| Language / packaging | Python ≥3.12 · uv (lockfile + offline wheelhouse); production runs on 3.13 |
 | Reference runtime | Docker Compose / Podman Compose, driven by `just` |
 | Lakehouse | DuckLake 1.0 (Parquet + SQL catalog) |
 | Catalog DB | PostgreSQL reference path; SQLite embedded harness only |
