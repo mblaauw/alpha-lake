@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -718,3 +719,112 @@ def _text_hash(*parts: str) -> str:
 
 def _parse_iso_dt(iso: str) -> datetime:
     return datetime.fromisoformat(iso.replace("Z", ""))
+
+
+def congress_trades_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+) -> pl.DataFrame:
+    """Normalize Quiver congress trades into CongressTradeFact rows."""
+    rows: list[dict[str, Any]] = []
+    for record in raw:
+        tx_id = record.get("transaction_id") or record.get("id", "")
+        ticker = record.get("ticker") or record.get("symbol", "")
+        if not tx_id or not ticker:
+            continue
+        tx_date = record.get("transaction_date", "")
+        rows.append(
+            {
+                "transaction_id": tx_id,
+                "politician_id": record.get("politician") or record.get("politician_id", ""),
+                "security_id": ticker,
+                "effective_date": tx_date[:10] if tx_date else available_at.strftime("%Y-%m-%d"),
+                "available_at": available_at,
+                "source_id": source_id,
+                "direction": str(record.get("type", record.get("direction", ""))).lower(),
+                "amount_range": str(record.get("amount", record.get("amount_range", ""))),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+    )
+
+
+def social_posts_from_json(
+    raw: list[dict[str, Any]],
+    source_id: str,
+    source_fetch_id: str,
+    ingestion_run_id: str,
+    content_hash: str,
+    available_at: datetime,
+    platform: str = "reddit",
+) -> pl.DataFrame:
+    """Normalize Reddit API posts into SocialPostFact rows.
+
+    ``raw`` is a list containing one dict (the Reddit API response) with
+    ``data.children`` containing the actual post objects.
+    """
+    import hashlib
+
+    merged = raw[0] if raw else {}
+    d = merged.get("data", {})
+    children = d.get("children", []) if isinstance(d, dict) else []
+    rows: list[dict[str, Any]] = []
+    for child in children:
+        post = child.get("data", {}) if isinstance(child, dict) else {}
+        post_id = post.get("id", "")
+        if not post_id:
+            continue
+        title = post.get("title", "")
+        selftext = post.get("selftext", "")
+        text_hash = hashlib.sha256((title + selftext).encode()).hexdigest()
+        created_utc = post.get("created_utc", 0)
+        published = datetime.fromtimestamp(created_utc, tz=UTC) if created_utc else available_at
+        rows.append(
+            {
+                "post_id_hash": hashlib.sha256(post_id.encode()).hexdigest(),
+                "effective_date": published.strftime("%Y-%m-%d"),
+                "available_at": available_at,
+                "source_id": source_id,
+                "platform": platform,
+                "venue": post.get("subreddit", ""),
+                "parent_id_hash": None,
+                "text_hash": text_hash,
+                "published_at": published,
+                "engagement_json": json.dumps(
+                    {"ups": post.get("ups", 0), "comments": post.get("num_comments", 0)}
+                ),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
+    if not rows:
+        return pl.DataFrame()
+    df = pl.DataFrame(rows)
+    return df.with_columns(
+        pl.col("effective_date").str.to_date("%Y-%m-%d"),
+        pl.col("available_at").cast(pl.Datetime(time_zone="UTC")),
+        pl.col("published_at").cast(pl.Datetime(time_zone="UTC")),
+    )

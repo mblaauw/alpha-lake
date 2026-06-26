@@ -44,7 +44,7 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 100
 indent-width = 4
 
@@ -55,7 +55,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG"]
 "**/_glossary.py" = ["E501"]
 
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.13"
 root = ["src"]
 
 [tool.ty.src]
@@ -117,6 +117,7 @@ layers = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
 markers = [
     "live: mark test as a live API integration test (skipped unless --run-live is passed)",
 ]

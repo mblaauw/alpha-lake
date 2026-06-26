@@ -76,5 +76,6 @@ vendor:
 # Lint and type-check
 lint:
     uv run ruff check src/ tests/
+    uv run ruff format --check src/ tests/
     uv run ty check --output-format full
     uv run lint-imports

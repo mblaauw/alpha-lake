@@ -486,7 +486,7 @@ def ingest_dataset(
         _now = get_clock().now()
         kwargs["from_date"] = from_date or _now.strftime("%Y-%m-01")
         kwargs["to_date"] = to_date or _now.strftime("%Y-%m-%d")
-    elif dataset in ("congress_trades", "top_movers", "ipo_calendar", "listing_status"):
+    elif dataset in ("congress_trades", "top_movers", "ipo_calendar"):
         pass
     else:
         kwargs["symbol"] = security_id or "AAPL"
@@ -875,6 +875,32 @@ def ingest_dataset(
                 ingestion_run_id=run_id,
                 content_hash=content_hash,
                 available_at=clock_now,
+            )
+        else:
+            raise ValueError(f"No normalize function for {src}/{dataset}")
+    elif dataset == "congress_trades":
+        from alpha_lake.normalize import congress_trades_from_json
+
+        df = congress_trades_from_json(
+            raw=records,
+            source_id=src,
+            source_fetch_id=fetch_id,
+            ingestion_run_id=run_id,
+            content_hash=content_hash,
+            available_at=clock_now,
+        )
+    elif dataset == "social_posts":
+        if src == "reddit":
+            from alpha_lake.normalize import social_posts_from_json
+
+            df = social_posts_from_json(
+                raw=records,
+                source_id=src,
+                source_fetch_id=fetch_id,
+                ingestion_run_id=run_id,
+                content_hash=content_hash,
+                available_at=clock_now,
+                platform="reddit",
             )
         else:
             raise ValueError(f"No normalize function for {src}/{dataset}")

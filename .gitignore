@@ -18,3 +18,8 @@ tests/replay/fixtures/
 :memory:/
 docs/gates/
 .vscode/
+.stack/
+vendor/images/
+vendor/images.tar.gz
+*.sqlite
+*.sqlite3
