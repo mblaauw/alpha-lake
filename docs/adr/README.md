@@ -36,3 +36,4 @@ Each ADR follows the [Michael Nygard template](https://github.com/joelparkerhend
 | 0026 | Idempotent ingestion — skip existing data before API calls | Accepted |
 | 0027 | Structured JSON logging replaces OpenTelemetry as default observability | Accepted |
 | 0030 | Alpha Vantage multi-dataset source integration | Accepted |
+| 0031 | Neutral Facts Bundle API — aggregated readouts + facts for consumers | Accepted |

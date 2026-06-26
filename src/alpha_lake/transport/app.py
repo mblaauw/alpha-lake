@@ -31,6 +31,7 @@ from alpha_lake.transport._models import (
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
+    _aware,
     _compute_and_serialize_indicators,
     _dataset_health,
     _fetch_bars,
@@ -296,9 +297,6 @@ async def universe(
 # ── Decision Panel — batch PIT snapshot ──────────────────────────────────────
 
 
-from alpha_lake.serving import read_fundamental_metrics_asof
-
-
 @app.get("/v1/decision-panel")
 async def decision_panel(
     request: Request,
@@ -307,6 +305,7 @@ async def decision_panel(
     snapshot_id: str | None = None,
     indicators: str = "sma:20,50,200,ema:12,26,rsi:14,atr:14,macd:12,26,9,bollinger:20",
     metric_categories: str = "valuation,profitability,growth,financial_health,efficiency,liquidity",
+    include: str = "",
 ):
     _auth(request)
     con = _get_con()
@@ -314,11 +313,14 @@ async def decision_panel(
     if not symbol_list:
         raise HTTPException(422, "At least one symbol is required")
 
+    include_set = {s.strip() for s in include.split(",") if s.strip()}
     results: dict[str, object] = {}
     for symbol in symbol_list:
         sec_id = resolve_security(con, symbol, as_of=as_of.date())
         if sec_id is None:
             continue
+
+        panel: dict[str, object] = {}
 
         bars = _fetch_bars(
             con,
@@ -328,9 +330,10 @@ async def decision_panel(
             snapshot_id=snapshot_id,
             price_mode="split_adjusted",
         )
+        panel["bars"] = bars
 
         parsed_indicators = _parse_indicators(indicators)
-        tech = (
+        panel["indicators"] = (
             _compute_and_serialize_indicators(
                 con,
                 sec_id,
@@ -351,13 +354,13 @@ async def decision_panel(
             price_mode="split_adjusted",
             snapshot_id=snapshot_id,
         )
-        fund_metrics = (
+        panel["fundamentals"] = (
             [_fundamental_row_to_item(r, set()) for r in fund_df.rows(named=True)]
             if not fund_df.is_empty()
             else []
         )
 
-        insider_rows = _fetch_dataset(
+        panel["insider_transactions"] = _fetch_dataset(
             con,
             "insider_tx",
             sec_id,
@@ -365,39 +368,52 @@ async def decision_panel(
             snapshot_id=snapshot_id,
             source_precedence_dataset="insider_tx",
         )
-        earnings_rows = _fetch_dataset(
+        panel["earnings_events"] = _fetch_dataset(
             con,
             "earnings_calendar",
             sec_id,
             as_of,
-            start=as_of.date() - __import__("datetime").timedelta(days=90),
+            start=as_of.date() - timedelta(days=90),
             end=as_of.date(),
             snapshot_id=snapshot_id,
         )
-        mention_rows = _fetch_dataset(
+        panel["attention_mentions"] = _fetch_dataset(
             con,
             "attention_metrics",
             sec_id,
             as_of,
-            start=as_of.date() - __import__("datetime").timedelta(days=30),
+            start=as_of.date() - timedelta(days=30),
             end=as_of.date(),
             snapshot_id=snapshot_id,
         )
 
-        results[symbol] = {
-            "bars": bars,
-            "indicators": tech,
-            "fundamentals": fund_metrics,
-            "insider_transactions": insider_rows,
-            "earnings_events": earnings_rows,
-            "attention_mentions": mention_rows,
-        }
+        # Optional sections gated by include parameter
+        if "readouts" in include_set:
+            from alpha_lake.serving.readouts import compute_readouts
+
+            panel["readouts"] = compute_readouts(
+                con,
+                symbol,
+                as_of,
+                snapshot_id=snapshot_id,
+            )
+        if "insider_transactions_detail" in include_set:
+            panel["insider_transactions_detail"] = _fetch_dataset(
+                con,
+                "insider_transactions",
+                sec_id,
+                as_of,
+                snapshot_id=snapshot_id,
+            )
+
+        results[symbol] = panel
 
     return JSONResponse(
         {
             "as_of": as_of.isoformat(),
             "snapshot_id": snapshot_id,
             "symbols": symbol_list,
+            "capabilities": ["readouts", "insider_transactions_detail"],
             "panels": results,
         }
     )
@@ -583,6 +599,402 @@ async def service_worker():
     if not sw.exists():
         raise HTTPException(404)
     return FileResponse(sw, media_type="application/javascript")
+
+
+# ── Symbol Readouts (authenticated) ───────────────────────────────────────────
+
+
+from pydantic import BaseModel  # noqa: E402
+
+
+class BatchReadoutRequest(BaseModel):
+    symbols: list[str]
+    as_of: datetime | None = None
+    latest: bool = False
+    categories: str = ""
+    readout_ids: str = ""
+    snapshot_id: str | None = None
+
+
+class FactsBundleRequest(BaseModel):
+    symbols: list[str]
+    as_of: datetime | None = None
+    latest: bool = False
+    categories: str = ""
+    readout_ids: str = ""
+    metric_ids: str = ""
+    snapshot_id: str | None = None
+
+
+@app.get("/v1/symbol/{symbol}/readouts")
+async def authenticated_symbol_readouts(
+    request: Request,
+    symbol: str,
+    as_of: datetime | None = None,
+    latest: bool = False,
+    categories: str = "",
+    readout_ids: str = "",
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    if as_of is None and not latest:
+        raise HTTPException(
+            422, "as_of is required for research reads. Use latest=true for convenience."
+        )
+    as_of = _now() if as_of is None else _aware(as_of)
+    con = _get_con()
+    from alpha_lake.serving.readouts import compute_readouts
+
+    return JSONResponse(
+        compute_readouts(
+            con,
+            symbol,
+            as_of,
+            snapshot_id=snapshot_id,
+            categories=categories,
+            readout_ids=readout_ids,
+        )
+    )
+
+
+@app.post("/v1/readouts/batch")
+async def batch_readouts(request: Request, body: BatchReadoutRequest):
+    _auth(request)
+    if not body.symbols:
+        raise HTTPException(422, "At least one symbol is required")
+    as_of = _now() if body.as_of is None else _aware(body.as_of)
+    con = _get_con()
+    from alpha_lake.serving.readouts import compute_readouts
+
+    items: dict[str, object] = {}
+    errors: dict[str, str] = {}
+    for sym in body.symbols:
+        try:
+            items[sym] = compute_readouts(
+                con,
+                sym,
+                as_of,
+                snapshot_id=body.snapshot_id,
+                categories=body.categories,
+                readout_ids=body.readout_ids,
+            )
+        except Exception as e:
+            errors[sym] = str(e)
+
+    return JSONResponse(
+        {
+            "as_of": as_of.isoformat(),
+            "snapshot_id": body.snapshot_id,
+            "items": items,
+            "errors": errors,
+        }
+    )
+
+
+@app.get("/v1/symbol/{symbol}/facts-bundle")
+async def symbol_facts_bundle(
+    request: Request,
+    symbol: str,
+    as_of: datetime | None = None,
+    latest: bool = False,
+    categories: str = "",
+    readout_ids: str = "",
+    metric_ids: str = "",
+    snapshot_id: str | None = None,
+):
+    _auth(request)
+    if as_of is None and not latest:
+        raise HTTPException(422, "as_of is required. Use latest=true for convenience.")
+    as_of = _now() if as_of is None else _aware(as_of)
+    con = _get_con()
+
+    from alpha_lake.serving.readouts import compute_readouts
+
+    sections: dict[str, object] = {}
+    missing: list[str] = []
+    experimental: list[str] = []
+
+    # Price summary
+    try:
+        from alpha_lake.serving import read_fundamental_metrics_asof
+        from alpha_lake.transport._shared import _fetch_bars
+
+        sec_id = resolve_security(con, symbol, as_of=as_of.date())
+        if sec_id is not None:
+            bars = _fetch_bars(con, sec_id, as_of, end=as_of.date(), snapshot_id=snapshot_id)
+            if bars:
+                sections["price"] = {
+                    "last": bars[-1].get("close"),
+                    "change": bars[-1].get("change"),
+                    "change_pct": bars[-1].get("change_pct"),
+                    "volume": bars[-1].get("volume"),
+                    "dollar_volume": bars[-1].get("dollar_volume"),
+                    "high": max(b.get("high", 0) for b in bars if b.get("high")),
+                    "low": min(b.get("low", 0) for b in bars if b.get("low")),
+                    "open": bars[-1].get("open"),
+                    "latest_date": bars[-1].get("date"),
+                    "source_id": bars[-1].get("source_id"),
+                }
+    except Exception:
+        missing.append("price")
+
+    # Readouts
+    try:
+        sections["readouts"] = compute_readouts(
+            con,
+            symbol,
+            as_of,
+            snapshot_id=snapshot_id,
+            categories=categories,
+            readout_ids=readout_ids,
+        )
+    except Exception:
+        missing.append("readouts")
+
+    # Fundamentals
+    try:
+        sec_id = resolve_security(con, symbol, as_of=as_of.date())
+        if sec_id is not None:
+            from alpha_lake.serving import read_fundamental_metrics_asof
+            from alpha_lake.transport._shared import _fundamental_row_to_item
+
+            cat_list = (
+                [c.strip() for c in categories.split(",") if c.strip()] if categories else None
+            )
+            mid_list = (
+                [m.strip() for m in metric_ids.split(",") if m.strip()] if metric_ids else None
+            )
+            df = read_fundamental_metrics_asof(
+                con,
+                security_ids=[sec_id],
+                as_of=as_of,
+                categories=cat_list,
+                metric_ids=mid_list,
+                snapshot_id=snapshot_id,
+            )
+            if not df.is_empty():
+                sections["fundamentals"] = {
+                    "metrics": [_fundamental_row_to_item(r, set()) for r in df.rows(named=True)],
+                    "metric_count": len(df),
+                }
+    except Exception:
+        missing.append("fundamentals")
+
+    # Insider transactions
+    try:
+        from alpha_lake.transport._shared import _fetch_dataset
+
+        if sec_id is not None:
+            insider_rows = _fetch_dataset(
+                con,
+                "insider_tx",
+                sec_id,
+                as_of,
+                snapshot_id=snapshot_id,
+                source_precedence_dataset="insider_tx",
+            )
+            if insider_rows:
+                sections["insider_tx"] = insider_rows
+    except Exception:
+        missing.append("insider_tx")
+
+    # Earnings events
+    try:
+        if sec_id is not None:
+            import datetime as _dt
+
+            earnings_rows = _fetch_dataset(
+                con,
+                "earnings_calendar",
+                sec_id,
+                as_of,
+                start=as_of.date() - _dt.timedelta(days=90),
+                end=as_of.date(),
+                snapshot_id=snapshot_id,
+            )
+            if earnings_rows:
+                sections["earnings_events"] = earnings_rows
+    except Exception:
+        missing.append("earnings_events")
+
+    # Attention metrics (experimental)
+    try:
+        if sec_id is not None:
+            import datetime as _dt
+
+            mention_rows = _fetch_dataset(
+                con,
+                "attention_metrics",
+                sec_id,
+                as_of,
+                start=as_of.date() - _dt.timedelta(days=30),
+                end=as_of.date(),
+                snapshot_id=snapshot_id,
+            )
+            if mention_rows:
+                sections["attention_metrics"] = mention_rows
+                experimental.append("attention_metrics")
+    except Exception:
+        pass
+
+    freshness: dict[str, str] = {}
+    for section_key, section_data in sections.items():
+        if isinstance(section_data, dict):
+            for f in ("as_of", "latest_date", "computed_at"):
+                if f in section_data:
+                    freshness[section_key] = str(section_data[f])
+                    break
+
+    return JSONResponse(
+        {
+            "symbol": symbol,
+            "as_of": as_of.isoformat(),
+            "snapshot_id": snapshot_id,
+            "sections": sections,
+            "freshness": freshness,
+            "provenance": {
+                "api_version": "v1",
+                "contract_version": "1.0.0",
+            },
+            "metadata": {
+                "computed_at": _now().isoformat(),
+                "missing_sections": missing,
+                "experimental_sections": experimental,
+            },
+        }
+    )
+
+
+@app.post("/v1/facts-bundle/batch")
+async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
+    _auth(request)
+    if not body.symbols:
+        raise HTTPException(422, "At least one symbol is required")
+    as_of = _now() if body.as_of is None else _aware(body.as_of)
+    con = _get_con()
+
+    items: dict[str, object] = {}
+    errors: dict[str, str] = {}
+    for sym in body.symbols:
+        try:
+            from alpha_lake.serving.readouts import compute_readouts
+            from alpha_lake.transport._shared import _fetch_bars
+
+            sections: dict[str, object] = {}
+            missing: list[str] = []
+            experimental: list[str] = []
+
+            sec_id = resolve_security(con, sym, as_of=as_of.date())
+            if sec_id is not None:
+                bars = _fetch_bars(
+                    con, sec_id, as_of, end=as_of.date(), snapshot_id=body.snapshot_id
+                )
+                if bars:
+                    sections["price"] = {
+                        "last": bars[-1].get("close"),
+                        "change": bars[-1].get("change"),
+                        "change_pct": bars[-1].get("change_pct"),
+                        "volume": bars[-1].get("volume"),
+                        "dollar_volume": bars[-1].get("dollar_volume"),
+                        "high": max(b.get("high", 0) for b in bars if b.get("high")),
+                        "low": min(b.get("low", 0) for b in bars if b.get("low")),
+                        "open": bars[-1].get("open"),
+                        "latest_date": bars[-1].get("date"),
+                        "source_id": bars[-1].get("source_id"),
+                    }
+
+            try:
+                sections["readouts"] = compute_readouts(
+                    con,
+                    sym,
+                    as_of,
+                    snapshot_id=body.snapshot_id,
+                    categories=body.categories,
+                    readout_ids=body.readout_ids,
+                )
+            except Exception:
+                missing.append("readouts")
+
+            if sec_id is not None:
+                try:
+                    from alpha_lake.serving import read_fundamental_metrics_asof
+                    from alpha_lake.transport._shared import _fundamental_row_to_item
+
+                    cat_list = (
+                        [c.strip() for c in body.categories.split(",") if c.strip()]
+                        if body.categories
+                        else None
+                    )
+                    mid_list = (
+                        [m.strip() for m in body.metric_ids.split(",") if m.strip()]
+                        if body.metric_ids
+                        else None
+                    )
+                    df = read_fundamental_metrics_asof(
+                        con,
+                        security_ids=[sec_id],
+                        as_of=as_of,
+                        categories=cat_list,
+                        metric_ids=mid_list,
+                        snapshot_id=body.snapshot_id,
+                    )
+                    if not df.is_empty():
+                        sections["fundamentals"] = {
+                            "metrics": [
+                                _fundamental_row_to_item(r, set()) for r in df.rows(named=True)
+                            ],
+                            "metric_count": len(df),
+                        }
+                except Exception:
+                    missing.append("fundamentals")
+
+                try:
+                    import datetime as _dt
+
+                    from alpha_lake.transport._shared import _fetch_dataset
+
+                    insider_rows = _fetch_dataset(
+                        con,
+                        "insider_tx",
+                        sec_id,
+                        as_of,
+                        snapshot_id=body.snapshot_id,
+                        source_precedence_dataset="insider_tx",
+                    )
+                    if insider_rows:
+                        sections["insider_tx"] = insider_rows
+                    earnings_rows = _fetch_dataset(
+                        con,
+                        "earnings_calendar",
+                        sec_id,
+                        as_of,
+                        start=as_of.date() - _dt.timedelta(days=90),
+                        end=as_of.date(),
+                        snapshot_id=body.snapshot_id,
+                    )
+                    if earnings_rows:
+                        sections["earnings_events"] = earnings_rows
+                except Exception:
+                    pass
+
+            items[sym] = {
+                "symbol": sym,
+                "sections": sections,
+                "freshness": {},
+                "missing_sections": missing,
+                "experimental_sections": experimental,
+            }
+        except Exception as e:
+            errors[sym] = str(e)
+
+    return JSONResponse(
+        {
+            "as_of": as_of.isoformat(),
+            "snapshot_id": body.snapshot_id,
+            "items": items,
+            "errors": errors,
+        }
+    )
 
 
 # ── Dashboard API router ────────────────────────────────────────────────────

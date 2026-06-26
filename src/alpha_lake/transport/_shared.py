@@ -47,6 +47,7 @@ _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 def _validate_price_mode(price_mode: str) -> None:
     if price_mode not in _VALID_PRICE_MODES:
         from fastapi import HTTPException
+
         raise HTTPException(
             422,
             f"Unknown price_mode '{price_mode}'. Valid: {sorted(_VALID_PRICE_MODES)}",
@@ -81,6 +82,11 @@ def _parse_date_list(raw: str) -> list[str] | None:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _aware(dt: datetime) -> datetime:
+    """Normalize a datetime to tz-aware UTC for TIMESTAMPTZ comparisons."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
@@ -121,9 +127,11 @@ def _fundamental_row_to_item(
 ) -> dict[str, Any]:
     if _get_glossary_entry is None:
         from alpha_lake.interpretation.fundamentals_glossary import get_glossary_entry
+
         _get_glossary_entry = get_glossary_entry
     if _get_threshold_profile is None:
         from alpha_lake.interpretation.fundamentals_glossary import get_threshold_profile
+
         _get_threshold_profile = get_threshold_profile
 
     entry = _get_glossary_entry(row["metric_id"])
