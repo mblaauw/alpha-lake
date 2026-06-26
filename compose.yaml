@@ -52,6 +52,7 @@ services:
       RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin}"
     volumes:
       - ./config:/config:ro
+      - ./data:/data:ro
     depends_on:
       postgres:
         condition: service_healthy

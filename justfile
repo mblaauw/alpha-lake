@@ -6,6 +6,10 @@ set shell := ["bash", "-c"]
 build:
     docker compose build app
 
+# Bootstrap historical bars from STOOQ Parquet
+bootstrap-bars:
+    docker compose run --rm app bootstrap-bars
+
 # Start the reference stack
 up *flags:
     docker compose up -d postgres rustfs {{ flags }}

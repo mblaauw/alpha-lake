@@ -449,6 +449,22 @@ def freeze_fixtures():
     ok("Fixtures frozen.")
 
 
+@app.command(name="bootstrap-bars", rich_help_panel="System")
+def cli_bootstrap_bars():
+    """Backfill historical daily bars from the STOOQ bootstrap Parquet."""
+    _require_infra(get_config())
+    con = connect(get_config())
+    from alpha_lake.flows.bootstrap import bootstrap_bars
+
+    with spinner("Bootstrapping historical bars…"):
+        count = bootstrap_bars(con)
+    if count:
+        ok(f"Bootstrapped [bold]{count}[/] historical bar rows.")
+    else:
+        info("No new historical bars to bootstrap.")
+    con.close()
+
+
 def main():
     app()
 

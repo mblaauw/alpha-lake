@@ -21,5 +21,6 @@ docs/gates/
 .stack/
 vendor/images/
 vendor/images.tar.gz
+data/bootstrap/
 *.sqlite
 *.sqlite3
