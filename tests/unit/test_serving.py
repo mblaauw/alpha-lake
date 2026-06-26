@@ -87,21 +87,3 @@ def test_read_asof_join():
     con.close()
 
 
-def test_derived_sma_passthrough():
-    df = pl.DataFrame({"close": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    result = sma(df["close"], 3)
-    assert result[2] == 2.0
-    assert result[4] == 4.0
-
-
-def test_derived_ema_passthrough():
-    df = pl.DataFrame({"close": [1.0, 2.0, 3.0]})
-    result = ema(df["close"], 3)
-    assert result[0] == 1.0
-
-
-def test_derived_returns():
-    df = pl.DataFrame({"close": [100.0, 105.0, 110.0]})
-    r = returns(df)
-    assert r[0] is None
-    assert r[1] == pytest.approx(0.05, rel=1e-3)

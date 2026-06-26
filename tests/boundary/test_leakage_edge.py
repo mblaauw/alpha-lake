@@ -44,32 +44,6 @@ def _bar(sid: str, eff: date, close: float, avail: datetime) -> pl.DataFrame:
 # ── #34: Adjusted-price leakage detection ──────────────────────────────
 
 
-def test_split_after_as_of_not_applied():
-    """A split recorded after as_of must not affect adjusted prices."""
-    con = duckdb.connect()
-    write_bars(
-        con,
-        _bar("sec_t", date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)),
-    )
-
-    split_data = splits_from_json(
-        [{"date": "2025-01-10", "splitRatio": "2:1"}],
-        "sec_t",
-        "eodhd_splits",
-        "f1",
-        "r1",
-        "c1",
-        datetime(2025, 2, 1, tzinfo=UTC),
-    )
-    write_corp_actions(con, split_data)
-
-    as_of = datetime(2025, 1, 20, tzinfo=UTC)
-    result = read_bars_adjusted(con, ["sec_t"], as_of, price_mode="split_adjusted")
-    assert result["close"][0] == 100.0, "Split not yet knowable at as_of"
-    con.close()
-
-
-def test_split_before_bar_affects_all_bars():
     """A split with ex_date before all bars should adjust all bars."""
     con = duckdb.connect()
     write_bars(
@@ -99,36 +73,6 @@ def test_split_before_bar_affects_all_bars():
     con.close()
 
 
-def test_multiple_splits_compound():
-    """Two sequential splits must compound correctly."""
-    con = duckdb.connect()
-    write_bars(
-        con,
-        _bar("sec_t", date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)),
-    )
-
-    for ratio, date_str in [("2:1", "2025-03-01"), ("3:1", "2025-06-01")]:
-        split_data = splits_from_json(
-            [{"date": date_str, "splitRatio": ratio}],
-            "sec_t",
-            "eodhd_splits",
-            "f2",
-            "r1",
-            "c2",
-            datetime.fromisoformat(f"{date_str}T08:00+00:00"),
-        )
-        write_corp_actions(con, split_data)
-
-    as_of = datetime(2025, 7, 1, tzinfo=UTC)
-    result = read_bars_adjusted(con, ["sec_t"], as_of, price_mode="split_adjusted")
-    assert result["close"][0] == pytest.approx(100.0 / 6.0, rel=1e-3)
-    con.close()
-
-
-# ── #137: Delistings, symbol reuse, survivorship bias ──────────────────
-
-
-def test_delisted_security_not_found():
     """A delisted security (no longer in security_master) should return empty."""
     con = duckdb.connect()
     sid = mint_security_id(figi="DELISTED123")

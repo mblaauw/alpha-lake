@@ -5,7 +5,7 @@ from pathlib import Path
 
 import polars as pl
 
-from alpha_lake.replay import load_golden_hash, load_golden_output
+from alpha_lake.replay import load_golden_hash
 
 _FIXTURE_DIR = Path(__file__).parent / "replay" / "fixtures"
 
@@ -16,10 +16,6 @@ def golden_dir() -> Path:
 
 def golden_hash() -> str:
     return load_golden_hash(_FIXTURE_DIR)
-
-
-def golden_output() -> pl.DataFrame:
-    return load_golden_output(_FIXTURE_DIR)
 
 
 def sample_bars_df() -> pl.DataFrame:

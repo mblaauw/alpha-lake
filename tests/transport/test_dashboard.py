@@ -51,7 +51,7 @@ def _stack_available() -> bool:
         )
         services = result.stdout.strip().split("\n")
         return "postgres" in services
-    except subprocess.SubprocessError, FileNotFoundError, OSError:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
 
 
@@ -112,9 +112,12 @@ def test_dashboard_fundamentals_glossary_returns_entries(_enable_dashboard):
     resp = client.get("/v1/dashboard/fundamentals/glossary")
     assert resp.status_code == 200
     data = resp.json()
-    assert isinstance(data, list)
-    assert len(data) == len(FUNDAMENTAL_GLOSSARY)
-    ids = {e["metric_id"] for e in data}
+    assert isinstance(data, dict)
+    assert "overview_ids" in data
+    assert "entries" in data
+    entries = data["entries"]
+    assert len(entries) == len(FUNDAMENTAL_GLOSSARY)
+    ids = {e["metric_id"] for e in entries}
     assert "fundamentals.scale.revenue_ttm" in ids
     assert "fundamentals.valuation.price_to_earnings_ttm" in ids
 
@@ -123,7 +126,7 @@ def test_dashboard_fundamentals_glossary_category_filter(_enable_dashboard):
     resp = client.get("/v1/dashboard/fundamentals/glossary?categories=Valuation")
     assert resp.status_code == 200
     data = resp.json()
-    assert isinstance(data, list)
-    for entry in data:
+    entries = data.get("entries", [])
+    for entry in entries:
         assert entry["category"] == "Valuation"
-    assert len(data) == 3
+    assert len(entries) == 3
