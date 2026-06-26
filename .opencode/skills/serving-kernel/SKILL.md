@@ -20,6 +20,12 @@ transport/             — FastAPI REST, Python library, CLI harness
 
 - Kernel SQL is **PIT/precedence resolution logic only**. Lookback caps, auth, rate limiting live in transport.
 - Each dataset contract produces one `.sql` file named `<dataset>_pit.sql` (or `<dataset>_pit_<variant>.sql`).
+- Currently defined macros:
+  - `bars_pit` / `bars_asof` — bar data PIT resolution
+  - `bars_pit_adjusted` / `bars_adjusted_asof` — split-adjusted bar PIT
+  - `bars_pit_join` / `bars_asof_join` — ASOF join across securities
+  - `bars_pit_spine` / `bars_asof_spine` — calendar-spined panel reads
+  - `fundamental_metrics_pit` / `fundamental_metrics_asof` — fundamentals PIT
 - Macros are loaded per-connection by `register_kernel(con)`, called inside `catalog.connect()` — every transport gets them automatically.
 - SQL files are cached at import time (`_SQL_FILES` in `kernel/__init__.py`) so `register_kernel` avoids disk reads.
 

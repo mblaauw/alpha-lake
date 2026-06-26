@@ -26,11 +26,13 @@ Answer yes before editing:
 Run before commit:
 
 ```bash
-rg -n "\b(signal|bullish|bearish|buy|sell|golden_cross)\b" src docs contracts
-rg -n "\b(rank|score)\b" src/alpha_lake/canonical src/alpha_lake/models
-rg -n "as_of\s*=\s*None|latest\s*=\s*True|def .*latest" src/alpha_lake
+# Forbidden tokens — AGENTS.md is the source of truth
+rg -i -n 'signal|bullish|bearish|\brank\b|\bscore\b|\bbuy\b|\bsell\b|golden_cross|hype|candidate|portfolio_weight|stop_loss|trade_decision' src/alpha_lake/derived
+# Wall-clock in canonical/replay paths
 rg -n "datetime\.now\(|datetime\.utcnow\(|time\.time\(" src/alpha_lake/canonical src/alpha_lake/replay src/alpha_lake/flows
+# Randomness in deterministic paths
 rg -n "uuid4\(|random\.|secrets\.token" src/alpha_lake/security_master src/alpha_lake/canonical
+# security_id determinism
 rg -n "AAPL-|MSFT-|symbol.*security_id|security_id.*symbol" src/alpha_lake docs
 just lint
 ```

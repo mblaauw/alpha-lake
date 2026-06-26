@@ -17,7 +17,7 @@ validates, and serves **point-in-time-correct** market facts. It owns facts; it 
 
 Stack: Python 3.13+ · uv · DuckLake 1.0 extension (Parquet + SQL catalog) · Postgres catalog · RustFS (S3) ·
 httpx connectors · Polars + Patito (model = schema = validator) · DuckDB engine · Typer CLI · Docker Compose ·
-FastAPI / Uvicorn server · Lake Watch dashboard · Dagster (optional).
+FastAPI / Uvicorn server · Lake Watch dashboard.
 
 Secrets via `SecretStore` ABC (`EnvSecretStore` / `StaticSecretStore`); see `@src/alpha_lake/secrets.py`.
 
@@ -53,12 +53,14 @@ Use these; do not invent commands and do not install Postgres / RustFS / DuckDB 
 ```
 just up | down | reset | logs        # reference stack lifecycle
 just bootstrap | ingest | health     # operate the lake
+just build                           # rebuild app image after code/config changes
 just serve                           # start FastAPI server + dashboard on :8000
 just test *[path]                    # unit + integration (embedded)
 just test-integration *[path]        # live API tests (--run-live)
 just replay *[path]                  # golden replay (tests/replay/)
 just freeze-fixtures                 # freeze golden replay fixtures
-just lint                            # ruff + ty + import-linter
+just compute-indicators              # compute technical indicators for all symbols
+just lint                            # ruff + ruff format --check + ty + import-linter
 just vendor                          # offline wheelhouse + images (online step)
 ```
 
@@ -146,7 +148,7 @@ steps, and always gate behind property tests + cross-check with the `alpha-lake-
 - Patito-derived DDL generation (`_generate_ddl()` schema ↔ database sync) and the `Dataset`/`DATASETS` registry,
 - serving-kernel SQL macro precedence resolution (`_kernel_source_priority`, `COALESCE(priority, 999)` pattern),
 - REST transport lookback cap, auth, and rate-limiting invariants,
-- the batch compute engine (`compute_all_indicators` in `derived/compute.py`) — single-pass computation reusing intermediates across 80+ indicators,
+- the batch compute engine (`compute_all_indicators` in `derived/compute.py`) — single-pass computation reusing intermediates across 70+ indicators,
 - the `TechnicalIndicatorFact` model and its `DATASETS` registry entry — adding new indicator columns requires model + compute + glossary sync,
 - the glossary subsystem (`_glossary.py` data + glossary API endpoint + frontend tooltip lookup) — adding a new indicator requires entries in all three layers,
 

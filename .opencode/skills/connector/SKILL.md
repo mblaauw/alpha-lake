@@ -34,6 +34,28 @@ async def fetch_resource(entity: str, cfg: SourceDatasetConfig) -> RawFetch:
     return RawFetch(manifest=manifest, body=raw_bytes)
 ```
 
+## Multi-Function Connector Pattern (Alpha Vantage)
+
+When a single source provides many dataset types, use a shared `_fetch` helper:
+
+```python
+async def _alphav_fetch(params: dict[str, Any]) -> RawFetch:
+    cfg = get_source("alphav")
+    check_budget(cfg)
+    params["apikey"] = cfg.api_key
+    async with httpx.AsyncClient(base_url=_AV_BASE, timeout=30.0) as c:
+        r = await c.get("/query", params=params)
+        r.raise_for_status()
+    manifest = build_manifest("alphav", "/query", params, r.content, r.status_code, 1)
+    return RawFetch(manifest=manifest, body=r.content)
+
+# Each dataset endpoint becomes a one-liner:
+async def fetch_top_movers() -> RawFetch:
+    return await _alphav_fetch({"function": "TOP_GAINERS_LOSERS"})
+```
+
+See `src/alpha_lake/connectors/alphav.py` for the real implementation (9 fetch functions).
+
 ## Required Metadata
 
 ```text

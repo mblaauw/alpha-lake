@@ -47,21 +47,57 @@ warmup_start = shift_trading_days(start, -(window * multiplier), exchange="XNYS"
 
 ## Endpoints
 
-| Path | Auth | Params |
-|------|------|--------|
-| `GET /v1/bars` | Required | symbol, start, end, as_of, snapshot_id |
-| `GET /v1/bars/indicators` | Required | symbol, indicators, start, end, as_of |
-| `GET /v1/health` | None | — |
-| `GET /v1/dashboard/datasets` | None (gated) | — |
-| `GET /v1/dashboard/dataset/{name}` | None (gated) | limit, as_of |
-| `GET /v1/dashboard/securities` | None (gated) | q, limit, as_of |
-| `GET /v1/dashboard/security/{symbol}` | None (gated) | as_of |
-| `GET /v1/dashboard/snapshots` | None (gated) | — |
-| `GET /v1/dashboard/bars` | None (gated) | symbol, start, end, as_of, snapshot_id |
-| `GET /v1/dashboard/bars/indicators` | None (gated) | symbol, indicators, start, end, as_of |
+### Authenticated (`_auth()` required)
 
-Dashboard endpoints are defined in `transport/dashboard.py` (separate `APIRouter`) and are
-gated behind the `[transport] dashboard_enabled` config flag. When disabled they return 404.
+| Path | Params |
+|------|--------|
+| `GET /v1/bars` | symbol, start, end, as_of, snapshot_id, price_mode |
+| `GET /v1/bars/indicators` | symbol, indicators, start, end, as_of, price_mode, snapshot_id |
+| `GET /v1/fundamentals/metrics` | symbol, as_of, snapshot_id, categories, metric_ids, include, price_mode |
+| `GET /v1/fundamentals/glossary` | categories |
+| `GET /v1/insider-transactions/{symbol}` | as_of, snapshot_id |
+| `GET /v1/earnings-calendar` | from_date, to_date |
+| `GET /v1/attention-metrics/{symbol}` | as_of, limit |
+| `GET /v1/decision-panel` | symbols, as_of, snapshot_id |
+| `GET /v1/dataset-health` | — |
+| `GET /v1/contract` | dataset |
+| `GET /v1/universe` | q, asset_type |
+| `GET /v1/trading-calendar` | year |
+| `GET /v1/health` | — (no auth) |
+
+### Dashboard (`dashboard_enabled` gated, no auth)
+
+All dashboard routes are in `transport/dashboard.py` with a separate `APIRouter`. Gated behind `[transport] dashboard_enabled`.
+
+| Path | Params |
+|------|--------|
+| `GET /v1/dashboard/health` | — |
+| `GET /v1/dashboard/datasets` | — |
+| `GET /v1/dashboard/dataset/{name}` | limit, as_of |
+| `GET /v1/dashboard/securities` | q, limit, as_of |
+| `GET /v1/dashboard/security/{symbol}` | as_of |
+| `GET /v1/dashboard/snapshots` | — |
+| `GET /v1/dashboard/bars` | symbol, start, end, as_of, snapshot_id, price_mode |
+| `GET /v1/dashboard/bars/symbols` | — |
+| `GET /v1/dashboard/bars/summary` | symbol, as_of, price_mode |
+| `GET /v1/dashboard/bars/indicators` | symbol, indicators, start, end, as_of |
+| `GET /v1/dashboard/indicators/glossary` | — |
+| `GET /v1/dashboard/attention/leaderboard` | limit, as_of |
+| `GET /v1/dashboard/insider/{symbol}` | as_of, limit |
+| `GET /v1/dashboard/analyst/{symbol}` | as_of, limit |
+| `GET /v1/dashboard/macro/{series_id}` | as_of, start, end |
+| `GET /v1/dashboard/news/{symbol}` | as_of, limit |
+| `GET /v1/dashboard/symbol/{symbol}/fundamentals` | as_of, latest, include |
+| `GET /v1/dashboard/fundamentals/glossary` | categories |
+| `GET /v1/dashboard/symbol/{symbol}/readouts` | as_of, latest, categories, readout_ids |
+
+### Static (no auth)
+
+| Path | File |
+|------|------|
+| `GET /` | `static/index.html` |
+| `GET /manifest.webmanifest` | `static/manifest.webmanifest` |
+| `GET /service-worker.js` | `static/service-worker.js` |
 
 ## Forbidden
 

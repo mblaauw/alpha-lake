@@ -11,13 +11,16 @@ Use the project command surface. Do not invent host-side service commands.
 
 | Task | Command |
 |---|---|
-| Lint + type check | `just lint` |
+| Lint + type check + format check | `just lint` |
 | Unit/integration tests | `just test` |
 | Replay tests | `just replay` |
+| Freeze golden fixtures | `just freeze-fixtures` |
+| Compute indicators | `just compute-indicators` |
 | Start stack | `just up` |
 | Stop stack | `just down` |
 | Reset stack | `just reset` |
 | Logs | `just logs` |
+| Rebuild app image after code/config changes | `just build` |
 | Add runtime dep | `uv add <pkg>` |
 | Add dev dep | `uv add --dev <pkg>` |
 | Lock deps | `uv lock` |
