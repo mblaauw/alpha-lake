@@ -258,6 +258,17 @@ def _v(val: Any) -> Any:
     return val
 
 
+def _parse_fields(fields_str: str | None) -> set[str] | None:
+    """Parse comma-separated field selection into a set of column names.
+
+    Returns ``None`` when no selection is given (return all columns).
+    """
+    if not fields_str:
+        return None
+    parsed = {s.strip() for s in fields_str.split(",") if s.strip()}
+    return parsed if parsed else None
+
+
 def _strip_audit_cols(
     items: list[dict[str, Any]], include_set: set[str] | None
 ) -> list[dict[str, Any]]:
@@ -286,6 +297,7 @@ def _fetch_bars(
     snapshot_id: str | None = None,
     price_mode: str = "raw",
     include_set: set[str] | None = None,
+    fields: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
     if start:
@@ -297,6 +309,10 @@ def _fetch_bars(
     if price_mode != "raw":
         kwargs["price_mode"] = price_mode
     df = read_bars_adjusted(con, **kwargs) if price_mode != "raw" else read_bars_asof(con, **kwargs)
+    if fields is not None and not df.is_empty():
+        available = [c for c in fields if c in df.columns]
+        if available:
+            df = df.select(available)
     return _strip_audit_cols(_pl_to_dicts(df), include_set)
 
 
@@ -311,6 +327,7 @@ def _fetch_dataset(
     snapshot_id: str | None = None,
     source_precedence_dataset: str | None = None,
     include_set: set[str] | None = None,
+    fields: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {
         "table": table,
@@ -326,6 +343,10 @@ def _fetch_dataset(
     if source_precedence_dataset:
         kwargs["source_precedence_dataset"] = source_precedence_dataset
     df = pit_read(con, **kwargs)
+    if fields is not None and not df.is_empty():
+        available = [c for c in fields if c in df.columns]
+        if available:
+            df = df.select(available)
     return _strip_audit_cols(_pl_to_dicts(df), include_set)
 
 
@@ -369,6 +390,7 @@ def _compute_and_serialize_indicators(
     start: date | None = None,
     end: date | None = None,
     include_set: set[str] | None = None,
+    fields: set[str] | None = None,
 ) -> dict[str, list[Any]]:
     parsed = [(n, list(a) if a else list(_DEFAULT_ARGS.get(n, []))) for n, a in parsed]
     warmup_start = start
@@ -388,6 +410,13 @@ def _compute_and_serialize_indicators(
         return {}
 
     bars_df = bars_df.sort("effective_date")
+
+    # Pre-filter DataFrame columns when fields are requested
+    if fields is not None:
+        bar_fields = {c for c in bars_df.columns if c in fields}
+        if bar_fields:
+            bars_df = bars_df.select(list(bar_fields))
+
     result = _serialize_bars_df(bars_df)
 
     for name, args in parsed:
@@ -409,4 +438,9 @@ def _compute_and_serialize_indicators(
         for key in list(result.keys()):
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
-    return _strip_audit_cols_dict(result, include_set)
+    result = _strip_audit_cols_dict(result, include_set)
+
+    if fields is not None:
+        result = {k: v for k, v in result.items() if k in fields}
+
+    return result

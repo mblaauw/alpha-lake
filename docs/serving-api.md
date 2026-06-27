@@ -80,10 +80,11 @@ Return PIT-correct OHLCV bars.
 | `price_mode` | string | no | `raw` | `raw` or `split_adjusted` |
 | `snapshot_id` | string | no | — | DuckLake snapshot for pinned reads |
 | `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
+| `fields` | string | no | all | Comma-separated column names to return (e.g. `date,open,high,low,close,volume`) |
 
 \* Research reads require `as_of`. The `latest` query parameter provides an explicit non-research convenience path.
 
-Response: JSON array of bar objects. Audit columns (`source_id`, `version_hash`, `content_hash`, `schema_version`, `parser_version`, `normalization_version`, `source_fetch_id`, `ingestion_run_id`, `raw_payload_hash`) are excluded by default; pass `?include=provenance` to include them. `max_lookback_days` caps the query range.
+Response: JSON array of bar objects. Audit columns (`source_id`, `version_hash`, `content_hash`, `schema_version`, `parser_version`, `normalization_version`, `source_fetch_id`, `ingestion_run_id`, `raw_payload_hash`) are excluded by default; pass `?include=provenance` to include them. Use `?fields=open,high,low,close,volume` to select specific columns. `max_lookback_days` caps the query range.
 
 #### `GET /v1/fundamentals/metrics`
 
@@ -226,6 +227,7 @@ Return PIT-correct bars with computed technical indicators.
 | `end` | date | no | — | End effective date (inclusive) |
 | `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
 | `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
+| `fields` | string | no | all | Comma-separated column/indicator names to return (e.g. `date,close,rsi,atr`) |
 Recursive indicators (RSI, EMA, ATR) receive automatic warm-up via `calendar_.shift_trading_days()` before the requested range; warm-up rows are trimmed from the response. Audit columns are excluded by default.
 
 #### `GET /v1/health`

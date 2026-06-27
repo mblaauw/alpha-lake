@@ -39,6 +39,7 @@ from alpha_lake.transport._shared import (
     _fetch_dataset,
     _fundamental_row_to_item,
     _now,
+    _parse_fields,
     _parse_indicators,
     _validate_price_mode,
 )
@@ -147,6 +148,7 @@ async def bars(
     snapshot_id: str | None = None,
     price_mode: str = "raw",
     include: str | None = None,
+    fields: str | None = None,
 ):
     _auth(request)
 
@@ -170,6 +172,7 @@ async def bars(
         snapshot_id=snapshot_id,
         price_mode=price_mode,
         include_set=_parse_include(include),
+        fields=_parse_fields(fields),
     )
     if not result:
         raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
@@ -185,6 +188,7 @@ async def bars_indicators(
     end: date | None = None,
     as_of: datetime | None = None,
     include: str | None = None,
+    fields: str | None = None,
 ):
     _auth(request)
 
@@ -212,6 +216,7 @@ async def bars_indicators(
         start=start,
         end=end,
         include_set=_parse_include(include),
+        fields=_parse_fields(fields),
     )
     if not result:
         raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
@@ -480,6 +485,7 @@ async def insider_transactions(
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
     include: str | None = None,
+    fields: str | None = None,
 ):
     _auth(request)
     if as_of is None:
@@ -496,6 +502,7 @@ async def insider_transactions(
         snapshot_id=snapshot_id,
         source_precedence_dataset="insider_tx",
         include_set=_parse_include(include),
+        fields=_parse_fields(fields),
     )
     if not rows:
         raise HTTPException(404, f"No insider data for symbol: {symbol}")
