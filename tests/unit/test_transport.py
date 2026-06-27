@@ -112,8 +112,9 @@ def client(_test_con):
     from fastapi.testclient import TestClient
 
     from alpha_lake.transport import app as transport_app
+    from alpha_lake.transport._shared import _set_test_connection
 
-    transport_app._connection = _test_con
+    _set_test_connection(_test_con)
     return TestClient(transport_app.app)
 
 
