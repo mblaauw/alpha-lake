@@ -319,7 +319,9 @@ async def decision_panel(
     symbols: str,
     as_of: datetime,
     snapshot_id: str | None = None,
-    indicators: str = "sma:20;sma:50;sma:200;ema:12;ema:26;rsi:14;atr:14;macd:12,26,9;bollinger:20,2",
+    indicators: str = (
+        "sma:20;sma:50;sma:200;ema:12;ema:26;rsi:14;atr:14;macd:12,26,9;bollinger:20,2"
+    ),
     metric_categories: str = "valuation,profitability,growth,financial_health,efficiency,liquidity",
     include: str = "",
 ):

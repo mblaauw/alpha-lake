@@ -108,10 +108,7 @@ def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
       - semicolon-separated:  "sma:20,50;ema:12,26;rsi:14"
       - comma-separated:      "sma:20,50,200,ema:12,26,rsi:14"
     """
-    if ";" in spec:
-        parts = spec.split(";")
-    else:
-        parts = spec.split(",")
+    parts = spec.split(";") if ";" in spec else spec.split(",")
     result: list[tuple[str, list[int | float]]] = []
     current_name: str | None = None
     current_args: list[int | float] = []
