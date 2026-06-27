@@ -350,6 +350,41 @@ def _fetch_dataset(
     return _strip_audit_cols(_pl_to_dicts(df), include_set)
 
 
+def _fetch_multi(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    sec_ids: list[str],
+    as_of: datetime,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    snapshot_id: str | None = None,
+    source_precedence_dataset: str | None = None,
+    include_set: set[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Batch-fetch a dataset for multiple security_ids, grouped by sec_id."""
+    kwargs: dict[str, Any] = {
+        "table": table,
+        "security_ids": sec_ids,
+        "as_of": as_of,
+    }
+    if start:
+        kwargs["start_date"] = start
+    if end:
+        kwargs["end_date"] = end
+    if snapshot_id:
+        kwargs["snapshot_id"] = snapshot_id
+    if source_precedence_dataset:
+        kwargs["source_precedence_dataset"] = source_precedence_dataset
+    df = pit_read(con, **kwargs)
+    items = _strip_audit_cols(_pl_to_dicts(df), include_set)
+    result: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        sid = item.get("security_id", "")
+        result.setdefault(sid, []).append(item)
+    return result
+
+
 def _dataset_health(
     con: duckdb.DuckDBPyConnection,
     tables: list[str],
@@ -378,6 +413,54 @@ def _dataset_health(
     result: dict[str, object] = {"datasets": datasets}
     if snapshot_id:
         result["snapshot_id"] = snapshot_id
+    return result
+
+
+def _compute_indicators_from_df(
+    bars_df: pl.DataFrame,
+    parsed: list[tuple[str, list[int | float]]],
+    *,
+    start: date | None = None,
+    include_set: set[str] | None = None,
+    fields: set[str] | None = None,
+) -> dict[str, list[Any]]:
+    """Compute indicators from a pre-fetched bars DataFrame (one security)."""
+    if bars_df.height == 0:
+        return {}
+
+    bars_df = bars_df.sort("effective_date")
+
+    if fields is not None:
+        bar_fields = {c for c in bars_df.columns if c in fields}
+        if bar_fields:
+            bars_df = bars_df.select(list(bar_fields))
+
+    result = _serialize_bars_df(bars_df)
+
+    for name, args in parsed:
+        fn = _INDICATOR_MAP[name]
+        if name == "atr":
+            series = fn(bars_df["high"], bars_df["low"], bars_df["close"], *args)
+            result[name] = [float(x) if x is not None else None for x in series]
+        elif name in ("bollinger", "macd"):
+            bands = fn(bars_df["close"], *args)
+            if isinstance(bands, dict):
+                for k, v in bands.items():
+                    result[f"{name}_{k}"] = [float(x) if x is not None else None for x in v]
+        else:
+            series = fn(bars_df["close"], *args)
+            result[name] = [float(x) if x is not None else None for x in series]
+
+    if start and bars_df["effective_date"].min() is not None and start is not None:
+        mask = [str(d) >= start.isoformat() for d in bars_df["effective_date"].to_list()]
+        for key in list(result.keys()):
+            result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
+
+    result = _strip_audit_cols_dict(result, include_set)
+
+    if fields is not None:
+        result = {k: v for k, v in result.items() if k in fields}
+
     return result
 
 
