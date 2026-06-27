@@ -186,8 +186,9 @@ Return per-executive insider buy/sell transactions from Alpha Vantage.
 | `snapshot_id` | string | no | DuckLake snapshot for pinned reads |
 | `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
 
-Response: JSON array of insider transaction objects with `insider_name`,
-`insider_title`, `transaction_type`, `shares`, `price`, `transaction_date`.
+Response: `{symbol, as_of, transactions: [...], metadata: {computed_at, rows_returned}}`.
+Each transaction includes `insider_name`, `insider_title`, `transaction_type`,
+`shares`, `price`, `transaction_date`. Audit columns excluded by default.
 
 #### `GET /v1/symbols`
 
@@ -236,7 +237,15 @@ Dataset freshness and catalog health. No auth required (health check).
 
 ### Rate Limiting
 
-In-pod token bucket per API key (v1). Configurable requests per second and burst size. Shared store (e.g. Redis) deferred to v2.
+In-pod token bucket per API key (v1). Configurable requests per second and burst size (default: 10 req/s, burst 20). Shared store (e.g. Redis) deferred to v2.
+
+### Connection Management
+
+Connections are pooled in-process with a 5-minute TTL. After 5 minutes of inactivity the connection is recycled, picking up any configuration changes. If the catalog (Postgres/S3) is temporarily unavailable, the API falls back to a raw DuckDB connection for degraded operation.
+
+### Response Caching
+
+Expensive indicator computations are cached in-memory with a 30-second TTL (max 256 entries). Repeated same-parameter calls within the window skip recomputation. The cache is per-worker and transparent to clients.
 
 ### Error Responses
 
