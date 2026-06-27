@@ -133,6 +133,10 @@ async def health():
         return {"snapshots": 0, "latest_snapshot_id": None, "status": "error", "detail": str(exc)}
 
 
+def _parse_include(include: str | None) -> set[str]:
+    return {s.strip() for s in include.split(",") if s.strip()} if include else set()
+
+
 @app.get("/v1/bars")
 async def bars(
     request: Request,
@@ -142,6 +146,7 @@ async def bars(
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
     price_mode: str = "raw",
+    include: str | None = None,
 ):
     _auth(request)
 
@@ -155,7 +160,14 @@ async def bars(
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     result = _fetch_bars(
-        con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
+        con,
+        sec_id,
+        as_of,
+        start=start,
+        end=end,
+        snapshot_id=snapshot_id,
+        price_mode=price_mode,
+        include_set=_parse_include(include),
     )
     if not result:
         raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
@@ -170,6 +182,7 @@ async def bars_indicators(
     start: date | None = None,
     end: date | None = None,
     as_of: datetime | None = None,
+    include: str | None = None,
 ):
     _auth(request)
 
@@ -187,7 +200,15 @@ async def bars_indicators(
         if name not in _INDICATOR_MAP:
             raise HTTPException(422, f"Unknown indicator: {name}")
 
-    result = _compute_and_serialize_indicators(con, sec_id, parsed, as_of, start=start, end=end)
+    result = _compute_and_serialize_indicators(
+        con,
+        sec_id,
+        parsed,
+        as_of,
+        start=start,
+        end=end,
+        include_set=_parse_include(include),
+    )
     if not result:
         raise HTTPException(404, f"Unknown symbol or no bars available: {symbol}")
     return JSONResponse(result)
@@ -347,6 +368,7 @@ async def decision_panel(
             end=as_of.date(),
             snapshot_id=snapshot_id,
             price_mode="split_adjusted",
+            include_set=include_set,
         )
         panel["bars"] = bars
 
@@ -358,6 +380,7 @@ async def decision_panel(
                 parsed_indicators,
                 as_of,
                 end=as_of.date(),
+                include_set=include_set,
             )
             if bars
             else {}
@@ -373,7 +396,7 @@ async def decision_panel(
             snapshot_id=snapshot_id,
         )
         panel["fundamentals"] = (
-            [_fundamental_row_to_item(r, set()) for r in fund_df.rows(named=True)]
+            [_fundamental_row_to_item(r, include_set) for r in fund_df.rows(named=True)]
             if not fund_df.is_empty()
             else []
         )
@@ -385,6 +408,7 @@ async def decision_panel(
             as_of,
             snapshot_id=snapshot_id,
             source_precedence_dataset="insider_tx",
+            include_set=include_set,
         )
         panel["earnings_events"] = _fetch_dataset(
             con,
@@ -394,6 +418,7 @@ async def decision_panel(
             start=as_of.date() - timedelta(days=90),
             end=as_of.date(),
             snapshot_id=snapshot_id,
+            include_set=include_set,
         )
         panel["attention_mentions"] = _fetch_dataset(
             con,
@@ -403,6 +428,7 @@ async def decision_panel(
             start=as_of.date() - timedelta(days=30),
             end=as_of.date(),
             snapshot_id=snapshot_id,
+            include_set=include_set,
         )
 
         # Optional sections gated by include parameter
@@ -422,6 +448,7 @@ async def decision_panel(
                 sec_id,
                 as_of,
                 snapshot_id=snapshot_id,
+                include_set=include_set,
             )
 
         results[symbol] = panel
@@ -446,6 +473,7 @@ async def insider_transactions(
     symbol: str,
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
+    include: str | None = None,
 ):
     _auth(request)
     if as_of is None:
@@ -459,6 +487,7 @@ async def insider_transactions(
         as_of,
         snapshot_id=snapshot_id,
         source_precedence_dataset="insider_tx",
+        include_set=_parse_include(include),
     )
     if not rows:
         raise HTTPException(404, f"No insider data for symbol: {symbol}")
@@ -476,6 +505,7 @@ async def earnings_calendar(
     end: date | None = None,
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
+    include: str | None = None,
 ):
     _auth(request)
     if as_of is None:
@@ -492,6 +522,7 @@ async def earnings_calendar(
         start=start,
         end=end,
         snapshot_id=snapshot_id,
+        include_set=_parse_include(include),
     )
     return JSONResponse({"as_of": as_of.isoformat(), "earnings": rows})
 
@@ -506,6 +537,7 @@ async def attention_metrics(
     days: int = 30,
     as_of: datetime | None = None,
     snapshot_id: str | None = None,
+    include: str | None = None,
 ):
     _auth(request)
     if as_of is None:
@@ -521,6 +553,7 @@ async def attention_metrics(
         start=start,
         end=as_of.date(),
         snapshot_id=snapshot_id,
+        include_set=_parse_include(include),
     )
     if not rows:
         raise HTTPException(404, f"No attention data for symbol: {symbol}")
@@ -642,6 +675,7 @@ class FactsBundleRequest(BaseModel):
     readout_ids: str = ""
     metric_ids: str = ""
     snapshot_id: str | None = None
+    include: str = ""
 
 
 @app.get("/v1/symbol/{symbol}/readouts")
@@ -731,6 +765,7 @@ async def symbol_facts_bundle(
     readout_ids: str = "",
     metric_ids: str = "",
     snapshot_id: str | None = None,
+    include: str | None = None,
 ):
     _auth(request)
     if as_of is None and not latest:
@@ -740,6 +775,7 @@ async def symbol_facts_bundle(
         if as_of is None
         else _aware(as_of)
     )
+    include_set = _parse_include(include)
     con = _get_con()
 
     from alpha_lake.serving.readouts import compute_readouts
@@ -759,7 +795,14 @@ async def symbol_facts_bundle(
 
         sec_id = resolve_security(con, symbol, as_of=as_of.date())
         if sec_id is not None:
-            bars = _fetch_bars(con, sec_id, as_of, end=as_of.date(), snapshot_id=snapshot_id)
+            bars = _fetch_bars(
+                con,
+                sec_id,
+                as_of,
+                end=as_of.date(),
+                snapshot_id=snapshot_id,
+                include_set=include_set,
+            )
             if bars:
                 sections["price"] = {
                     "last": bars[-1].get("close"),
@@ -771,7 +814,6 @@ async def symbol_facts_bundle(
                     "low": min(b.get("low", 0) for b in bars if b.get("low")),
                     "open": bars[-1].get("open"),
                     "latest_date": bars[-1].get("date"),
-                    "source_id": bars[-1].get("source_id"),
                 }
     except Exception:
         missing.append("price")
@@ -812,7 +854,9 @@ async def symbol_facts_bundle(
             )
             if not df.is_empty():
                 sections["fundamentals"] = {
-                    "metrics": [_fundamental_row_to_item(r, set()) for r in df.rows(named=True)],
+                    "metrics": [
+                        _fundamental_row_to_item(r, include_set) for r in df.rows(named=True)
+                    ],
                     "metric_count": len(df),
                 }
     except Exception:
@@ -828,6 +872,7 @@ async def symbol_facts_bundle(
                 as_of,
                 snapshot_id=snapshot_id,
                 source_precedence_dataset="insider_tx",
+                include_set=include_set,
             )
             if insider_rows:
                 sections["insider_tx"] = insider_rows
@@ -847,6 +892,7 @@ async def symbol_facts_bundle(
                 start=as_of.date() - _dt.timedelta(days=90),
                 end=as_of.date(),
                 snapshot_id=snapshot_id,
+                include_set=include_set,
             )
             if earnings_rows:
                 sections["earnings_events"] = earnings_rows
@@ -866,6 +912,7 @@ async def symbol_facts_bundle(
                 start=as_of.date() - _dt.timedelta(days=30),
                 end=as_of.date(),
                 snapshot_id=snapshot_id,
+                include_set=include_set,
             )
             if mention_rows:
                 sections["attention_metrics"] = mention_rows
@@ -916,6 +963,7 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
         if body.as_of is None
         else _aware(body.as_of)
     )
+    include_set = _parse_include(body.include)
     con = _get_con()
 
     items: dict[str, object] = {}
@@ -932,7 +980,12 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
             sec_id = resolve_security(con, sym, as_of=as_of.date())
             if sec_id is not None:
                 bars = _fetch_bars(
-                    con, sec_id, as_of, end=as_of.date(), snapshot_id=body.snapshot_id
+                    con,
+                    sec_id,
+                    as_of,
+                    end=as_of.date(),
+                    snapshot_id=body.snapshot_id,
+                    include_set=include_set,
                 )
                 if bars:
                     sections["price"] = {
@@ -945,7 +998,6 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
                         "low": min(b.get("low", 0) for b in bars if b.get("low")),
                         "open": bars[-1].get("open"),
                         "latest_date": bars[-1].get("date"),
-                        "source_id": bars[-1].get("source_id"),
                     }
 
             try:
@@ -986,7 +1038,8 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
                     if not df.is_empty():
                         sections["fundamentals"] = {
                             "metrics": [
-                                _fundamental_row_to_item(r, set()) for r in df.rows(named=True)
+                                _fundamental_row_to_item(r, include_set)
+                                for r in df.rows(named=True)
                             ],
                             "metric_count": len(df),
                         }
@@ -1005,6 +1058,7 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
                         as_of,
                         snapshot_id=body.snapshot_id,
                         source_precedence_dataset="insider_tx",
+                        include_set=include_set,
                     )
                     if insider_rows:
                         sections["insider_tx"] = insider_rows
@@ -1016,6 +1070,7 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
                         start=as_of.date() - _dt.timedelta(days=90),
                         end=as_of.date(),
                         snapshot_id=body.snapshot_id,
+                        include_set=include_set,
                     )
                     if earnings_rows:
                         sections["earnings_events"] = earnings_rows
