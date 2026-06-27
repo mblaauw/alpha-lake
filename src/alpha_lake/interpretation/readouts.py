@@ -633,7 +633,7 @@ def compute_all_readouts(
             continue
 
         try:
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "bars": bars,
                 "as_of": as_of,
                 "definition": defn,

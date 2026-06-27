@@ -748,6 +748,10 @@ async def symbol_facts_bundle(
     missing: list[str] = []
     experimental: list[str] = []
 
+    from alpha_lake.transport._shared import _fetch_dataset
+
+    sec_id: str | None = None
+
     # Price summary
     try:
         from alpha_lake.serving import read_fundamental_metrics_asof
@@ -816,8 +820,6 @@ async def symbol_facts_bundle(
 
     # Insider transactions
     try:
-        from alpha_lake.transport._shared import _fetch_dataset
-
         if sec_id is not None:
             insider_rows = _fetch_dataset(
                 con,
@@ -875,8 +877,9 @@ async def symbol_facts_bundle(
     for section_key, section_data in sections.items():
         if isinstance(section_data, dict):
             for f in ("as_of", "latest_date", "computed_at"):
-                if f in section_data:
-                    freshness[section_key] = str(section_data[f])
+                val = section_data.get(f)
+                if val is not None:
+                    freshness[section_key] = str(val)
                     break
 
     return JSONResponse(

@@ -38,6 +38,19 @@ def rebuild_parquet() -> list[str]:
         print(f"  ⚠ STOOQ zip not found at {_ZIP_PATH}")
         return []
 
+    # Fast path: skip extraction when Parquet files exist and are up to date
+    zip_mtime = _ZIP_PATH.stat().st_mtime
+    stocks_ok = _STOCKS_PARQUET.exists() and _STOCKS_PARQUET.stat().st_mtime >= zip_mtime
+    etfs_ok = _ETFS_PARQUET.exists() and _ETFS_PARQUET.stat().st_mtime >= zip_mtime
+    if stocks_ok and etfs_ok:
+        symbols = set()
+        if _STOCKS_PARQUET.exists():
+            symbols.update(pl.read_parquet(str(_STOCKS_PARQUET))["symbol"].unique())
+        if _ETFS_PARQUET.exists():
+            symbols.update(pl.read_parquet(str(_ETFS_PARQUET))["symbol"].unique())
+        print(f"  Skipping extraction — Parquet files are current ({len(symbols)} cached symbols)")
+        return sorted(symbols)
+
     print(f"  Reading {_ZIP_PATH}...")
     stock_rows: list[dict[str, Any]] = []
     etf_rows: list[dict[str, Any]] = []

@@ -154,9 +154,9 @@ def search(
         "AND (effective_start IS NULL OR effective_start <= ?)"
         " AND (effective_end IS NULL OR effective_end >= ?)"
     )
-    params = []
+    params: list[str] = []
     if as_of:
-        params = [as_of, as_of]
+        params = [as_of.isoformat(), as_of.isoformat()]
 
     prefix_results: list[dict[str, str]] = []
     substring_results: list[dict[str, str]] = []

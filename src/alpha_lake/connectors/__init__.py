@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
 from alpha_lake.connectors.alpaca_bars import fetch_daily_bars as _alpaca_bars
 from alpha_lake.connectors.alphav import fetch_corp_actions as _alphav_corp_actions
@@ -49,7 +49,7 @@ from alpha_lake.connectors.tiingo_news import fetch_news as _tiingo_news
 if TYPE_CHECKING:
     from alpha_lake.connectors.base import RawFetch
 
-ConnectorFn = Callable[..., Awaitable["RawFetch"]]
+ConnectorFn = Callable[..., Coroutine[Any, Any, "RawFetch"]]
 
 _REGISTRY: dict[tuple[str, str], ConnectorFn] = {}
 

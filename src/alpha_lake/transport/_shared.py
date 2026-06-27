@@ -299,7 +299,7 @@ def _dataset_health(
     tables: list[str],
     *,
     snapshot_id: str | None = None,
-) -> dict[str, dict[str, object]]:
+) -> dict[str, object]:
     datasets: dict[str, dict[str, object]] = {}
     for table in tables:
         try:
@@ -319,7 +319,7 @@ def _dataset_health(
             }
         except Exception as exc:
             datasets[table] = {"status": "error", "detail": str(exc)}
-    result: dict[str, dict[str, object]] = {"datasets": datasets}
+    result: dict[str, object] = {"datasets": datasets}
     if snapshot_id:
         result["snapshot_id"] = snapshot_id
     return result

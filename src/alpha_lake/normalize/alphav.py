@@ -169,6 +169,8 @@ def fundamentals_from_json(
                     quarter = (period_end.month - 1) // 3 + 1
                 elif period_kind_label == "fiscal_year":
                     quarter = 4
+                else:
+                    quarter = 0
                 fiscal_period = f"FY{fiscal_year}Q{quarter}"
 
                 for av_key, line_item in _AV_LINE_ITEM_MAP.items():
