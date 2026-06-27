@@ -418,6 +418,83 @@ def _fetch_multi(
     return result
 
 
+def _parse_as_of(as_of: datetime | None) -> datetime:
+    """Default as_of to now() when not provided."""
+    return as_of if as_of is not None else datetime.now(UTC)
+
+
+def _resolve_or_raise(con: duckdb.DuckDBPyConnection, symbol: str, as_of: date) -> str:
+    """Resolve symbol to security_id, raising 404 on failure."""
+    from alpha_lake.security_master import resolve as _resolve
+
+    sec_id = _resolve(con, symbol, as_of=as_of)
+    if sec_id is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    return sec_id
+
+
+def _handle_bars(
+    con: duckdb.DuckDBPyConnection,
+    sec_id: str,
+    as_of: datetime,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    snapshot_id: str | None = None,
+    price_mode: str = "raw",
+    include_set: set[str] | None = None,
+    fields: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Shared bars fetch logic for both app and dashboard routers."""
+    result = _fetch_bars(
+        con,
+        sec_id,
+        as_of,
+        start=start,
+        end=end,
+        snapshot_id=snapshot_id,
+        price_mode=price_mode,
+        include_set=include_set,
+        fields=fields,
+    )
+    if not result:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Unknown symbol or no bars available")
+    return result
+
+
+def _handle_bars_indicators(
+    con: duckdb.DuckDBPyConnection,
+    sec_id: str,
+    parsed: list[tuple[str, list[int | float]]],
+    as_of: datetime,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    include_set: set[str] | None = None,
+    fields: set[str] | None = None,
+) -> dict[str, list[Any]]:
+    """Shared bars/indicators fetch + compute logic."""
+    result = _compute_and_serialize_indicators(
+        con,
+        sec_id,
+        parsed,
+        as_of,
+        start=start,
+        end=end,
+        include_set=include_set,
+        fields=fields,
+    )
+    if not result:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Unknown symbol or no bars available")
+    return result
+
+
 def _dataset_health(
     con: duckdb.DuckDBPyConnection,
     tables: list[str],

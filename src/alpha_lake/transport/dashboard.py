@@ -64,9 +64,9 @@ from alpha_lake.transport._models import (
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
     _MAX_LOOKBACK_DAYS,
-    _compute_and_serialize_indicators,
-    _fetch_bars,
     _fundamental_row_to_item,
+    _handle_bars,
+    _handle_bars_indicators,
     _now,
     _parse_indicators,
     _pl_to_dicts,
@@ -283,11 +283,20 @@ async def bars(
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:
         return JSONResponse([])
-    return JSONResponse(
-        _fetch_bars(
-            con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
+    try:
+        return JSONResponse(
+            _handle_bars(
+                con,
+                sec_id,
+                as_of,
+                start=start,
+                end=end,
+                snapshot_id=snapshot_id,
+                price_mode=price_mode,
+            )
         )
-    )
+    except HTTPException:
+        return JSONResponse([])
 
 
 @router.get("/bars/indicators")
@@ -316,8 +325,12 @@ async def bars_indicators(
         if name not in _INDICATOR_MAP:
             raise HTTPException(422, f"Unknown indicator: {name}")
 
-    result = _compute_and_serialize_indicators(con, sec_id, parsed, as_of, start=start, end=end)
-    return JSONResponse(result)
+    try:
+        return JSONResponse(
+            _handle_bars_indicators(con, sec_id, parsed, as_of, start=start, end=end)
+        )
+    except HTTPException:
+        return JSONResponse({})
 
 
 # ── Readouts ──────────────────────────────────────────────────────────────
