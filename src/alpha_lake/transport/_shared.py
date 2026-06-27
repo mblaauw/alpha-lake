@@ -43,6 +43,21 @@ _RECURSIVE_MULTIPLIER: dict[str, int] = {
 _MAX_LOOKBACK_DAYS = 365 * 3
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 
+_AUDIT_COLUMNS: frozenset[str] = frozenset(
+    {
+        "source_fetch_id",
+        "raw_payload_hash",
+        "ingestion_run_id",
+        "content_hash",
+        "version_hash",
+        "schema_version",
+        "parser_version",
+        "normalization_version",
+        "source_id",
+        "quality_status",
+    }
+)
+
 
 def _validate_price_mode(price_mode: str) -> None:
     if price_mode not in _VALID_PRICE_MODES:
@@ -243,6 +258,24 @@ def _v(val: Any) -> Any:
     return val
 
 
+def _strip_audit_cols(
+    items: list[dict[str, Any]], include_set: set[str] | None
+) -> list[dict[str, Any]]:
+    """Remove audit/provenance columns from row dicts unless ``provenance`` is requested."""
+    if include_set and "provenance" in include_set:
+        return items
+    return [{k: v for k, v in row.items() if k not in _AUDIT_COLUMNS} for row in items]
+
+
+def _strip_audit_cols_dict(
+    result: dict[str, list[Any]], include_set: set[str] | None
+) -> dict[str, list[Any]]:
+    """Remove audit/provenance column keys from a column-oriented dict."""
+    if include_set and "provenance" in include_set:
+        return result
+    return {k: v for k, v in result.items() if k not in _AUDIT_COLUMNS}
+
+
 def _fetch_bars(
     con: duckdb.DuckDBPyConnection,
     sec_id: str,
@@ -252,6 +285,7 @@ def _fetch_bars(
     end: date | None = None,
     snapshot_id: str | None = None,
     price_mode: str = "raw",
+    include_set: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of}
     if start:
@@ -263,7 +297,7 @@ def _fetch_bars(
     if price_mode != "raw":
         kwargs["price_mode"] = price_mode
     df = read_bars_adjusted(con, **kwargs) if price_mode != "raw" else read_bars_asof(con, **kwargs)
-    return _pl_to_dicts(df)
+    return _strip_audit_cols(_pl_to_dicts(df), include_set)
 
 
 def _fetch_dataset(
@@ -276,6 +310,7 @@ def _fetch_dataset(
     end: date | None = None,
     snapshot_id: str | None = None,
     source_precedence_dataset: str | None = None,
+    include_set: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {
         "table": table,
@@ -291,7 +326,7 @@ def _fetch_dataset(
     if source_precedence_dataset:
         kwargs["source_precedence_dataset"] = source_precedence_dataset
     df = pit_read(con, **kwargs)
-    return _pl_to_dicts(df)
+    return _strip_audit_cols(_pl_to_dicts(df), include_set)
 
 
 def _dataset_health(
@@ -333,6 +368,7 @@ def _compute_and_serialize_indicators(
     *,
     start: date | None = None,
     end: date | None = None,
+    include_set: set[str] | None = None,
 ) -> dict[str, list[Any]]:
     parsed = [(n, list(a) if a else list(_DEFAULT_ARGS.get(n, []))) for n, a in parsed]
     warmup_start = start
@@ -373,4 +409,4 @@ def _compute_and_serialize_indicators(
         for key in list(result.keys()):
             result[key] = [v for v, m in zip(result[key], mask, strict=True) if m]
 
-    return result
+    return _strip_audit_cols_dict(result, include_set)

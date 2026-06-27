@@ -79,10 +79,11 @@ Return PIT-correct OHLCV bars.
 | `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
 | `price_mode` | string | no | `raw` | `raw` or `split_adjusted` |
 | `snapshot_id` | string | no | — | DuckLake snapshot for pinned reads |
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
 
 \* Research reads require `as_of`. The `latest` query parameter provides an explicit non-research convenience path.
 
-Response: JSON array of bar objects. `max_lookback_days` caps the query range.
+Response: JSON array of bar objects. Audit columns (`source_id`, `version_hash`, `content_hash`, `schema_version`, `parser_version`, `normalization_version`, `source_fetch_id`, `ingestion_run_id`, `raw_payload_hash`) are excluded by default; pass `?include=provenance` to include them. `max_lookback_days` caps the query range.
 
 #### `GET /v1/fundamentals/metrics`
 
@@ -134,8 +135,9 @@ Batch readouts for multiple symbols.
 | `categories` | string | no | Comma-separated category filter |
 | `readout_ids` | string | no | Comma-separated readout ID filter |
 | `snapshot_id` | string | no | DuckLake snapshot |
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
 
-Response: `{as_of, snapshot_id, items: {symbol: {...}}, errors: {symbol: str}}`.
+Response: `{as_of, snapshot_id, items: {symbol: {...}}, errors: {symbol: str}}`. Audit columns are excluded by default.
 
 #### `GET /v1/symbol/{symbol}/facts-bundle`
 
@@ -150,11 +152,12 @@ Aggregated neutral facts for a single symbol in a single response.
 | `readout_ids` | string | no | all | Comma-separated readout ID filter |
 | `metric_ids` | string | no | all | Comma-separated fundamental metric IDs |
 | `snapshot_id` | string | no | — | DuckLake snapshot |
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns in sections |
 
 Response sections: `price`, `readouts`, `fundamentals`, `insider_tx`,
 `earnings_events`, `attention_metrics` (experimental).
 Plus `freshness`, `provenance`, and `metadata` with `missing_sections`
-and `experimental_sections`.
+and `experimental_sections`. Audit columns are excluded by default.
 
 #### `POST /v1/facts-bundle/batch`
 
@@ -169,6 +172,7 @@ Batch facts bundle for multiple symbols.
 | `readout_ids` | string | no | Comma-separated readout ID filter |
 | `metric_ids` | string | no | Comma-separated fundamental metric IDs |
 | `snapshot_id` | string | no | DuckLake snapshot |
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
 
 #### `GET /v1/insider-transactions/{symbol}`
 
@@ -179,6 +183,7 @@ Return per-executive insider buy/sell transactions from Alpha Vantage.
 | `symbol` | string | yes | Ticker symbol |
 | `as_of` | datetime | no | PIT knowledge-time boundary (defaults to now) |
 | `snapshot_id` | string | no | DuckLake snapshot for pinned reads |
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
 
 Response: JSON array of insider transaction objects with `insider_name`,
 `insider_title`, `transaction_type`, `shares`, `price`, `transaction_date`.
@@ -220,7 +225,8 @@ Return PIT-correct bars with computed technical indicators.
 | `start` | date | no | — | Start effective date (inclusive) |
 | `end` | date | no | — | End effective date (inclusive) |
 | `as_of` | datetime | yes* | — | PIT knowledge-time boundary |
-Recursive indicators (RSI, EMA, ATR) receive automatic warm-up via `calendar_.shift_trading_days()` before the requested range; warm-up rows are trimmed from the response.
+| `include` | string | no | — | Comma-separated extras: `provenance` to include audit columns |
+Recursive indicators (RSI, EMA, ATR) receive automatic warm-up via `calendar_.shift_trading_days()` before the requested range; warm-up rows are trimmed from the response. Audit columns are excluded by default.
 
 #### `GET /v1/health`
 
