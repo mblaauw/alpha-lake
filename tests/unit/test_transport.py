@@ -12,7 +12,7 @@ def _reset_store():
     prev = get_store()
     store = StaticSecretStore()
     set_store(store)
-    store.set("alpha_lake_api_key_test", "al_test_supersecret123")
+    store.set("api_key_test", "al_test_supersecret123")
     yield
     set_store(prev)
 
@@ -525,9 +525,6 @@ def test_batch_facts_bundle(client):
         data = resp.json()
         assert "items" in data
         assert "errors" in data
-
-
-import pytest
 
 
 @pytest.mark.xfail(reason="indicator parsing default format mismatch in test env")

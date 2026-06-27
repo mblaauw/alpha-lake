@@ -33,6 +33,7 @@ def test_embedded_output_matches_golden_fixture():
 
 def test_harness_cleanup_removes_temp_dir():
     import os
+
     h = EmbeddedHarness()
     h.start()
     path = h.data_path
@@ -46,15 +47,30 @@ def _run_full_pipeline(harness: EmbeddedHarness) -> str:
 
     from alpha_lake.replay import canonical_hash as canonical_hash
 
-    df = pl.DataFrame({
-        "security_id": ["sec_aap"], "effective_date": [date(2026, 1, 5)],
-        "available_at": [datetime(2026, 1, 5, 16, 0, 0)],
-        "source_id": ["eodhd"], "open": [200.0], "high": [205.0], "low": [199.0], "close": [203.5],
-        "volume": [5000000], "source_fetch_id": ["f1"], "raw_payload_hash": ["h1"],
-        "ingestion_run_id": ["r1"], "content_hash": ["c1"], "version_hash": [""],
-        "schema_version": [1], "parser_version": [1], "quality_status": ["valid"],
-        "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
-    }).with_columns(
+    df = pl.DataFrame(
+        {
+            "security_id": ["sec_aap"],
+            "effective_date": [date(2026, 1, 5)],
+            "available_at": [datetime(2026, 1, 5, 16, 0, 0)],
+            "source_id": ["eodhd"],
+            "open": [200.0],
+            "high": [205.0],
+            "low": [199.0],
+            "close": [203.5],
+            "volume": [5000000],
+            "source_fetch_id": ["f1"],
+            "raw_payload_hash": ["h1"],
+            "ingestion_run_id": ["r1"],
+            "content_hash": ["c1"],
+            "version_hash": [""],
+            "schema_version": [1],
+            "parser_version": [1],
+            "quality_status": ["valid"],
+            "source_published_at": [None],
+            "ingested_at": [None],
+            "validated_at": [None],
+        }
+    ).with_columns(
         pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),

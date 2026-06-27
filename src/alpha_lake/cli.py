@@ -451,13 +451,19 @@ def freeze_fixtures():
 
 @app.command(name="bootstrap-bars", rich_help_panel="System")
 def cli_bootstrap_bars():
-    """Backfill historical daily bars from the STOOQ bootstrap Parquet."""
+    """Backfill historical daily bars from the STOOQ bootstrap Parquet.
+
+    Rebuilds STOOQ Parquet files (us_stocks.parquet, us_etfs.parquet)
+    from the zip archive, seeds the _symbol_registry, and backfills any
+    missing bar rows.
+    """
     _require_infra(get_config())
     con = connect(get_config())
-    from alpha_lake.flows.bootstrap import bootstrap_bars
+    from alpha_lake.flows.bootstrap import ensure_registry
 
-    with spinner("Bootstrapping historical bars…"):
-        count = bootstrap_bars(con)
+    count = 0
+    with spinner("Rebuilding STOOQ Parquet & backfilling…"):
+        count = ensure_registry(con)
     if count:
         ok(f"Bootstrapped [bold]{count}[/] historical bar rows.")
     else:

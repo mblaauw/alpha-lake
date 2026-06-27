@@ -544,6 +544,9 @@ FastAPI with endpoints:
 |---|---|---|
 | `GET /v1/bars` | API key | PIT bar data with `as_of`, `snapshot_id`, lookback cap |
 | `GET /v1/bars/indicators` | API key | Bars with computed indicators (SMA, EMA, RSI, MACD, Bollinger, ATR) |
+| `GET /v1/symbols` | API key | List active/removed symbols from `_symbol_registry` |
+| `POST /v1/symbols` | API key | Add symbol (validate STOOQ, backfill bars, compute indicators) |
+| `DELETE /v1/symbols/{symbol}` | API key | Soft-remove symbol (hide from UI, stop ingestion) |
 | `GET /v1/health` | API key | Catalog health (snapshots, latest ID) |
 | `GET /v1/dashboard/*` | None when `dashboard_enabled=true` | Dev-only data-validation API (see §18.5) |
 
@@ -582,6 +585,7 @@ Read-only, dev-only, air-gap safe. No build step, no CDN, no npm.
 | `GET /v1/dashboard/snapshots` | `catalog.list_snapshots` | Snapshot list for reproducible inspection |
 | `GET /v1/dashboard/bars` | `read_bars_asof` | PIT bar data (mirrors `/v1/bars` without auth) |
 | `GET /v1/dashboard/bars/indicators` | Indicators pipeline | Bar data with indicator overlays (mirrors `/v1/bars/indicators` without auth) |
+| `GET /v1/dashboard/bars/symbols` | `_symbol_registry` query | Active symbols with lake data |
 | `GET /v1/dashboard/bars/summary` | `read_bars_adjusted` + indicators | Per-symbol card (last, RSI, SMA50, ATR, MACD, vol, trend) |
 | `GET /v1/dashboard/attention/leaderboard` | `compute_attention_deltas` + `compute_sentiment_ratios` | Sentiment leaderboard ranked by mentions |
 | `GET /v1/dashboard/macro/{series_id}` | `read_macro_series_asof` | FRED macro series PIT observations |

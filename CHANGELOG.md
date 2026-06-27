@@ -18,10 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Decision-panel: `include=readouts,insider_transactions_detail` parameter
   - Shared readout service extracted to `serving/readouts.py`
   - See ADR-0031 for full architecture
-- **STOOQ historical bootstrap** — `just bootstrap-bars` backfills 3 years of
-  daily OHLCV bars from a pre-extracted STOOQ Parquet file. Sanity checks
-  against existing lake data before import. Idempotent (+8,454 initial rows).
-  See `src/alpha_lake/flows/bootstrap.py`.
+- **STOOQ bootstrap v2** — On every container restart, extracts the STOOQ zip
+  into `us_stocks.parquet` and `us_etfs.parquet` (with `exchange` and `geo`
+  columns), then backfills missing bars. See `src/alpha_lake/flows/bootstrap.py`.
+- **Symbol management API** — three new authenticated endpoints:
+  - `GET /v1/symbols` — list active/removed symbols
+  - `POST /v1/symbols` — add symbol (validate STOOQ, backfill, compute indicators)
+  - `DELETE /v1/symbols/{symbol}` — soft-remove (hides from UI, stops ingestion)
+- **`_symbol_registry` table** — tracks active/removed symbols with timestamps.
+  Automatically seeded from `lake_bars` on first creation.
+- **Ingestion skip for removed symbols** — `ingest_bars` checks the registry and
+  silently skips removed symbols.
+- **Dashboard `bars/symbols` now queries registry** — only active symbols shown.
+- **compose.yaml** — `~/Downloads:/downloads:ro` for STOOQ zip access; `/data`
+  now read-write for bootstrap Parquet.
+- **Server lifespan** — `ensure_registry()` runs on FastAPI startup.
 
 ### Fixed
 

@@ -8,16 +8,13 @@ class SecretStore(abc.ABC):
     """Interface for secret retrieval — replaceable in tests."""
 
     @abc.abstractmethod
-    def get(self, key: str) -> str:
-        ...
+    def get(self, key: str) -> str: ...
 
     @abc.abstractmethod
-    def set(self, key: str, value: str) -> None:
-        ...
+    def set(self, key: str, value: str) -> None: ...
 
     @abc.abstractmethod
-    def delete(self, key: str) -> None:
-        ...
+    def delete(self, key: str) -> None: ...
 
 
 class EnvSecretStore(SecretStore):

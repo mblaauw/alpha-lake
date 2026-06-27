@@ -183,6 +183,32 @@ Return per-executive insider buy/sell transactions from Alpha Vantage.
 Response: JSON array of insider transaction objects with `insider_name`,
 `insider_title`, `transaction_type`, `shares`, `price`, `transaction_date`.
 
+#### `GET /v1/symbols`
+
+List symbols in the registry. Active (non-removed) by default.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `active_only` | bool | no | `true` | If `false`, also returns removed symbols |
+
+Response: JSON array of `{symbol, added_at, added_by}` (or `removed_at` if `active_only=false`).
+
+#### `POST /v1/symbols`
+
+Add a symbol: validates against STOOQ data, backfills historical bars, computes indicators, registers in `_symbol_registry`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | yes | Ticker symbol |
+
+Response: `{symbol, status: "added"|"already_active"|"restored", bars_backfilled: int}`.
+
+#### `DELETE /v1/symbols/{symbol}`
+
+Soft-remove a symbol: hides from dashboard UI, stops ingestion. Data stays in the lake.
+
+Response: `{symbol, status: "removed"}`.
+
 #### `GET /v1/bars/indicators`
 
 Return PIT-correct bars with computed technical indicators.
@@ -244,7 +270,7 @@ read-only endpoints are available at `/v1/dashboard/*` **without** API key auth:
 | `GET /v1/dashboard/macro/{series_id}` | `as_of`, `start`, `end` | FRED macro series observations |
 | `GET /v1/dashboard/insider/{symbol}` | `as_of`, `limit` | Insider transactions by ticker |
 | `GET /v1/dashboard/analyst/{symbol}` | `as_of`, `limit` | Analyst estimate consensus (strong_buy … target_low) |
-| `GET /v1/dashboard/bars/symbols` | — | Distinct symbols with data in the lake |
+| `GET /v1/dashboard/bars/symbols` | — | Active symbols (from `_symbol_registry`) with lake data |
 | `GET /v1/dashboard/indicators/glossary` | — | Full indicator glossary (name, description, formula) |
 | `GET /v1/dashboard/symbol/{symbol}/fundamentals` | `as_of`, `latest`, `include` | PIT fundamental metrics by symbol (gated) |
 | `GET /v1/dashboard/fundamentals/glossary` | — | Full fundamentals glossary (metric_id, name, formula, profile) |

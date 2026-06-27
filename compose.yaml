@@ -48,11 +48,13 @@ services:
       ALPHA_LAKE_MARKETAUX_API_KEY: "${ALPHA_LAKE_MARKETAUX_API_KEY:-}"
       ALPHA_LAKE_ALPHAV_API_KEY: "${ALPHA_LAKE_ALPHAV_API_KEY:-}"
       ALPHA_LAKE_FMP_API_KEY: "${ALPHA_LAKE_FMP_API_KEY:-}"
+      ALPHA_LAKE_API_KEY_TEST: "al_test_supersecret123"
       RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
       RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin}"
     volumes:
       - ./config:/config:ro
-      - ./data:/data:ro
+      - ./data:/data
+      - ~/Downloads:/downloads:ro
     depends_on:
       postgres:
         condition: service_healthy

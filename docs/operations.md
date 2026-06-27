@@ -125,3 +125,38 @@ at `http://localhost:8000/`. The dashboard is enabled via `ALPHA_LAKE_DASHBOARD_
 | Snapshot count | >1000 | >5000 |
 | Catalog metadata size | >1 GB | >5 GB |
 | Per-table rows | >10M | >50M |
+
+## STOOQ Bootstrap
+
+On every server restart, `ensure_registry()` auto-runs:
+
+1. **Rebuilds Parquet** — extracts `~/Downloads/d_us_txt.zip` (mounted at `/downloads:ro`) into `us_stocks.parquet` and `us_etfs.parquet` at `/data/bootstrap/`, each with `symbol`, `exchange`, `geo`, `effective_date`, OHLCV.
+2. **Seeds `_symbol_registry`** — creates the table if missing, populates from `lake_bars`.
+3. **Backfills bars** — inserts missing STOOQ rows (up to 3yr lookback) for all active symbols.
+
+Manual trigger: `just bootstrap-bars` (`docker compose run --rm app bootstrap-bars`).
+
+## Symbol Registry
+
+The `_symbol_registry` table tracks active tickers:
+
+- `symbol VARCHAR PK` — normalized ticker
+- `added_at TIMESTAMPTZ` — when added
+- `removed_at TIMESTAMPTZ` — when soft-removed (NULL = active)
+- `added_by VARCHAR` — `'auto'` (from lake) or `'manual'` (via API)
+
+Symbols with `removed_at IS NOT NULL` are hidden from the dashboard and skipped during ingestion. The data stays in the lake (no deletion). Manage via:
+
+- `GET /v1/symbols` — list symbols
+- `POST /v1/symbols {"symbol": "..."}` — add/restore
+- `DELETE /v1/symbols/{symbol}` — soft-remove
+
+## compose.yaml Volumes
+
+The `app` service mounts:
+
+| Host | Container | Mode | Purpose |
+|------|-----------|------|---------|
+| `./config/` | `/config/` | `:ro` | Stack config |
+| `./data/` | `/data/` | rw | Bootstrap Parquet, runtime state |
+| `~/Downloads/` | `/downloads/` | `:ro` | STOOQ zip for bootstrap |

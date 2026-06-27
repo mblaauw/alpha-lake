@@ -2,10 +2,8 @@ from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
-import pytest
 
 from alpha_lake.canonical import write_bars
-from alpha_lake.derived import ema, returns, sma
 from alpha_lake.kernel import register_kernel
 from alpha_lake.serving import read_asof_join, read_bars_latest, read_panel
 
@@ -85,5 +83,3 @@ def test_read_asof_join():
     assert result["close"][0] == 100.0
     assert result["close"][1] == 200.0
     con.close()
-
-

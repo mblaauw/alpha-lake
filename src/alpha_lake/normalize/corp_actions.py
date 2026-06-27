@@ -27,25 +27,27 @@ def splits_from_json(
     for record in raw:
         split_str = record.get("splitRatio") or record.get("split") or ""
         ratio = parse_ratio(split_str)
-        rows.append({
-            "security_id": security_id,
-            "effective_date": record.get("date"),
-            "available_at": available_at,
-            "source_id": source_id,
-            "action_type": "split",
-            "ratio_numerator": ratio[0],
-            "ratio_denominator": ratio[1],
-            "dividend_amount": None,
-            "dividend_currency": None,
-            "source_fetch_id": source_fetch_id,
-            "raw_payload_hash": content_hash,
-            "ingestion_run_id": ingestion_run_id,
-            "content_hash": content_hash,
-            "version_hash": "",
-            "schema_version": 1,
-            "parser_version": 1,
-            "quality_status": "valid",
-        })
+        rows.append(
+            {
+                "security_id": security_id,
+                "effective_date": record.get("date"),
+                "available_at": available_at,
+                "source_id": source_id,
+                "action_type": "split",
+                "ratio_numerator": ratio[0],
+                "ratio_denominator": ratio[1],
+                "dividend_amount": None,
+                "dividend_currency": None,
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
     if not rows:
         return pl.DataFrame()
     df = pl.DataFrame(rows)
@@ -71,25 +73,27 @@ def dividends_from_json(
     source_id = _SOURCE_MAP.get(source_key, source_key)
     rows = []
     for record in raw:
-        rows.append({
-            "security_id": security_id,
-            "effective_date": record.get("date"),
-            "available_at": available_at,
-            "source_id": source_id,
-            "action_type": "dividend",
-            "ratio_numerator": None,
-            "ratio_denominator": None,
-            "dividend_amount": float(record.get("dividend", record.get("amount", 0))),
-            "dividend_currency": record.get("currency"),
-            "source_fetch_id": source_fetch_id,
-            "raw_payload_hash": content_hash,
-            "ingestion_run_id": ingestion_run_id,
-            "content_hash": content_hash,
-            "version_hash": "",
-            "schema_version": 1,
-            "parser_version": 1,
-            "quality_status": "valid",
-        })
+        rows.append(
+            {
+                "security_id": security_id,
+                "effective_date": record.get("date"),
+                "available_at": available_at,
+                "source_id": source_id,
+                "action_type": "dividend",
+                "ratio_numerator": None,
+                "ratio_denominator": None,
+                "dividend_amount": float(record.get("dividend", record.get("amount", 0))),
+                "dividend_currency": record.get("currency"),
+                "source_fetch_id": source_fetch_id,
+                "raw_payload_hash": content_hash,
+                "ingestion_run_id": ingestion_run_id,
+                "content_hash": content_hash,
+                "version_hash": "",
+                "schema_version": 1,
+                "parser_version": 1,
+                "quality_status": "valid",
+            }
+        )
     if not rows:
         return pl.DataFrame()
     df = pl.DataFrame(rows)

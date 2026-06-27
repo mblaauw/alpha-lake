@@ -156,7 +156,6 @@ def test_mode_parity_storage():
         )
         con_stk.close()
 
-
     # --- 3. Compare ---
     assert embedded_raw == stack_raw, "raw payloads must be identical"
     assert embedded_bars["close"][0] == stack_bars["close"][0], "canonical close must match"

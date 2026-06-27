@@ -410,5 +410,3 @@ def test_social_attention_fact():
         rank_24h_ago=2,
     )
     assert SocialAttentionFact.validate(df).height == 1
-
-

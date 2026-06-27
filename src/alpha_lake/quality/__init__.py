@@ -18,4 +18,3 @@ def check_market_sanity(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.lit("quarantined"))
         .alias("quality_status")
     )
-

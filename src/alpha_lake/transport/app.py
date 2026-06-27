@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -70,7 +71,7 @@ def _verify_key(key: str) -> bool:
     )
     if suffix is None:
         return False
-    stored = store.get(f"alpha_lake_api_key_{suffix}")
+    stored = store.get(f"api_key_{suffix}")
     if not stored:
         return False
     return hmac.compare_digest(
@@ -106,7 +107,22 @@ def _auth(request: Request) -> str:
     return key
 
 
-app = FastAPI(title="Alpha-Lake", version="0.1.0")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Startup: ensure STOOQ Parquet, registry, and backfill."""
+    try:
+        con = _get_con()
+        from alpha_lake.flows.bootstrap import ensure_registry
+
+        ensure_registry(con)
+    except Exception as exc:
+        import logging
+
+        logging.warning("Bootstrap startup skipped: %s", exc)
+    yield
+
+
+app = FastAPI(title="Alpha-Lake", version="0.1.0", lifespan=_lifespan)
 
 
 @app.get("/v1/health", response_model=HealthResponse)
@@ -662,6 +678,10 @@ async def batch_readouts(request: Request, body: BatchReadoutRequest):
     _auth(request)
     if not body.symbols:
         raise HTTPException(422, "At least one symbol is required")
+    if body.as_of is None and not body.latest:
+        raise HTTPException(
+            422, "as_of is required for research reads. Use latest=true for convenience."
+        )
     as_of = _now() if body.as_of is None else _aware(body.as_of)
     con = _get_con()
     from alpha_lake.serving.readouts import compute_readouts
@@ -870,6 +890,10 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
     _auth(request)
     if not body.symbols:
         raise HTTPException(422, "At least one symbol is required")
+    if body.as_of is None and not body.latest:
+        raise HTTPException(
+            422, "as_of is required for research reads. Use latest=true for convenience."
+        )
     as_of = _now() if body.as_of is None else _aware(body.as_of)
     con = _get_con()
 
@@ -995,6 +1019,50 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
             "errors": errors,
         }
     )
+
+
+# ── Symbol Management (authenticated) ──────────────────────────────────────────
+
+
+class AddSymbolRequest(BaseModel):
+    symbol: str
+
+
+class RemoveSymbolRequest(BaseModel):
+    symbol: str
+
+
+@app.get("/v1/symbols")
+async def list_symbols_endpoint(request: Request, active_only: bool = True):
+    """List symbols in the registry (active or all)."""
+    _auth(request)
+    from alpha_lake.flows.bootstrap import list_symbols
+
+    return JSONResponse(list_symbols(active_only=active_only))
+
+
+@app.post("/v1/symbols")
+async def add_symbol_endpoint(request: Request, body: AddSymbolRequest):
+    """Add a symbol: backfill STOOQ bars, compute indicators, register."""
+    _auth(request)
+    con = _get_con()
+    from alpha_lake.flows.bootstrap import add_symbol
+
+    try:
+        result = add_symbol(con, body.symbol)
+        return JSONResponse(result)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@app.delete("/v1/symbols/{symbol}")
+async def remove_symbol_endpoint(request: Request, symbol: str):
+    """Soft-remove a symbol: hides from UI, stops ingestion."""
+    _auth(request)
+    from alpha_lake.flows.bootstrap import remove_symbol
+
+    result = remove_symbol(symbol)
+    return JSONResponse(result)
 
 
 # ── Dashboard API router ────────────────────────────────────────────────────

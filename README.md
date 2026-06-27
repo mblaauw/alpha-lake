@@ -80,12 +80,14 @@ git clone https://github.com/mblaauw/alpha-lake.git && cd alpha-lake
 cp .env.example .env              # edit .env with your API keys
 just up                           # start Postgres + RustFS + app server
 just bootstrap                    # initialize catalog tables
+# Place ~/Downloads/d_us_txt.zip for auto STOOQ bootstrap on serve
 just health                       # verify dataset freshness
 # → open http://localhost:8000/   # Lake Watch dashboard
 
 # One-off CLI commands:
 docker compose run --rm app ingest --market-bars
 docker compose run --rm app compute-indicators
+docker compose run --rm app bootstrap-bars     # rebuild STOOQ Parquet + backfill
 ```
 
 ### Live Ingestion — API Keys
@@ -156,6 +158,13 @@ curl 'http://localhost:8000/v1/dashboard/symbol/AAPL/fundamentals?latest=true'
 
 # Catalog health
 curl 'http://localhost:8000/v1/health'
+
+# Symbol management API (authenticated)
+curl -H 'X-API-Key: al_test_...' 'http://localhost:8000/v1/symbols'
+curl -X POST -H 'X-API-Key: al_test_...' -H 'Content-Type: application/json' \
+  -d '{"symbol":"AAPL"}' 'http://localhost:8000/v1/symbols'
+curl -X DELETE -H 'X-API-Key: al_test_...' \
+  'http://localhost:8000/v1/symbols/AAPL'
 ```
 
 ### Python Reader

@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime
 
 import duckdb
 import polars as pl
-import pytest
 
 from alpha_lake.canonical import write_bars, write_corp_actions
 from alpha_lake.normalize.corp_actions import splits_from_json
@@ -40,9 +39,7 @@ def _bar(sid: str, eff: date, close: float, avail: datetime) -> pl.DataFrame:
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
 
-
-# ── #34: Adjusted-price leakage detection ──────────────────────────────
-
+    # ── #34: Adjusted-price leakage detection ──────────────────────────────
 
     """A split with ex_date before all bars should adjust all bars."""
     con = duckdb.connect()
@@ -71,7 +68,6 @@ def _bar(sid: str, eff: date, close: float, avail: datetime) -> pl.DataFrame:
     assert result["close"][0] == 50.0
     assert result["close"][1] == 100.0
     con.close()
-
 
     """A delisted security (no longer in security_master) should return empty."""
     con = duckdb.connect()

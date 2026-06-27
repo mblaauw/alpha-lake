@@ -11,14 +11,18 @@ from alpha_lake.source_registry import get_source
 async def _get_oauth_token() -> str:
     """Get Reddit OAuth2 token via client credentials flow."""
     from alpha_lake.secrets import get_store
+
     store = get_store()
     client_id = store.get("reddit_client_id")
     client_secret = store.get("reddit_client_secret")
     auth = httpx.BasicAuth(client_id, client_secret)
     async with httpx.AsyncClient() as client:
-        r = await client.post("https://www.reddit.com/api/v1/access_token",
-            auth=auth, data={"grant_type": "client_credentials"},
-            headers={"User-Agent": "alpha-lake/0.1"})
+        r = await client.post(
+            "https://www.reddit.com/api/v1/access_token",
+            auth=auth,
+            data={"grant_type": "client_credentials"},
+            headers={"User-Agent": "alpha-lake/0.1"},
+        )
         r.raise_for_status()
         return r.json()["access_token"]
 

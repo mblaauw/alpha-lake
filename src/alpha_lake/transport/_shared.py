@@ -281,7 +281,8 @@ def _dataset_health(
     for table in tables:
         try:
             row = con.execute(
-                "SELECT COUNT(*) AS cnt, MAX(effective_date) AS latest, MAX(available_at) AS newest "
+                "SELECT COUNT(*) AS cnt, MAX(effective_date) AS latest,"
+                " MAX(available_at) AS newest "
                 f"FROM {table}"
             ).fetchone()
             count = row[0] if row else 0

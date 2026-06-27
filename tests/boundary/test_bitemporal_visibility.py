@@ -14,15 +14,30 @@ def _df(
     available: str,
 ) -> pl.DataFrame:
     ts = datetime.fromisoformat(available)
-    return pl.DataFrame({
-        "security_id": ["sec_t"], "effective_date": [date.fromisoformat(effective)],
-        "available_at": [ts], "source_id": ["eodhd"],
-        "open": [100.0], "high": [101.0], "low": [99.0], "close": [close_val],
-        "volume": [10000], "source_fetch_id": [""], "raw_payload_hash": [""],
-        "ingestion_run_id": [""], "content_hash": [""], "version_hash": [""],
-        "schema_version": [1], "parser_version": [1], "quality_status": ["valid"],
-        "source_published_at": [None], "ingested_at": [None], "validated_at": [None],
-    }).with_columns(
+    return pl.DataFrame(
+        {
+            "security_id": ["sec_t"],
+            "effective_date": [date.fromisoformat(effective)],
+            "available_at": [ts],
+            "source_id": ["eodhd"],
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.0],
+            "close": [close_val],
+            "volume": [10000],
+            "source_fetch_id": [""],
+            "raw_payload_hash": [""],
+            "ingestion_run_id": [""],
+            "content_hash": [""],
+            "version_hash": [""],
+            "schema_version": [1],
+            "parser_version": [1],
+            "quality_status": ["valid"],
+            "source_published_at": [None],
+            "ingested_at": [None],
+            "validated_at": [None],
+        }
+    ).with_columns(
         pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
@@ -66,20 +81,30 @@ def test_older_as_of_sees_older_version(con):
 
 
 def test_multiple_securities_independent_visibility(con):
-    df1 = pl.DataFrame({
-        "security_id": ["sec_a", "sec_b"],
-        "effective_date": [date(2026, 1, 5), date(2026, 1, 5)],
-        "available_at": [datetime(2026, 1, 10), datetime(2026, 1, 11)],
-        "source_id": ["eodhd", "eodhd"],
-        "open": [100.0, 200.0], "high": [101.0, 201.0], "low": [99.0, 199.0],
-        "close": [100.5, 200.5], "volume": [10000, 20000],
-        "source_fetch_id": ["", ""], "raw_payload_hash": ["", ""],
-        "ingestion_run_id": ["", ""], "content_hash": ["", ""],
-        "version_hash": ["", ""], "schema_version": [1, 1],
-        "parser_version": [1, 1], "quality_status": ["valid", "valid"],
-        "source_published_at": [None, None], "ingested_at": [None, None],
-        "validated_at": [None, None],
-    }).with_columns(
+    df1 = pl.DataFrame(
+        {
+            "security_id": ["sec_a", "sec_b"],
+            "effective_date": [date(2026, 1, 5), date(2026, 1, 5)],
+            "available_at": [datetime(2026, 1, 10), datetime(2026, 1, 11)],
+            "source_id": ["eodhd", "eodhd"],
+            "open": [100.0, 200.0],
+            "high": [101.0, 201.0],
+            "low": [99.0, 199.0],
+            "close": [100.5, 200.5],
+            "volume": [10000, 20000],
+            "source_fetch_id": ["", ""],
+            "raw_payload_hash": ["", ""],
+            "ingestion_run_id": ["", ""],
+            "content_hash": ["", ""],
+            "version_hash": ["", ""],
+            "schema_version": [1, 1],
+            "parser_version": [1, 1],
+            "quality_status": ["valid", "valid"],
+            "source_published_at": [None, None],
+            "ingested_at": [None, None],
+            "validated_at": [None, None],
+        }
+    ).with_columns(
         pl.col("source_published_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),

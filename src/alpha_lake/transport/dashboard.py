@@ -8,7 +8,7 @@ import polars as pl  # type: ignore[unresolved-import]
 from fastapi import APIRouter, HTTPException  # type: ignore[unresolved-import]
 from fastapi.responses import JSONResponse  # type: ignore[unresolved-import]
 
-from alpha_lake.calendar_ import shift_trading_days
+from alpha_lake.calendar_ import previous_trading_day, shift_trading_days
 from alpha_lake.catalog import (
     catalog_health,
     connect,
@@ -356,46 +356,21 @@ async def symbol_readouts(
 
 @router.get("/bars/symbols", response_model=list[SymbolInfo])
 async def bars_symbols():
-    """Return distinct symbols that have data in the lake.
-
-    Uses a single UNION query across price, indicator, and social tables.
-    Falls back to individual per-table queries if any table is missing.
-    """
+    """Return symbols from the registry that have data in the lake."""
     _check_enabled()
     con = _get_con()
-    tables = [
-        "lake_bars",
-        "technical_indicators",
-        "attention_metrics",
-        "sentiment_annotations",
-        "insider_tx",
-    ]
+    from alpha_lake.flows.bootstrap import _get_ops
+
+    ops = _get_ops()
+    rows = ops.execute(
+        "SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL ORDER BY symbol"
+    ).fetchall()
 
     sids: set[str] = set()
-    try:
-        union_parts = [
-            f"SELECT DISTINCT security_id FROM {t}"
-            f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
-            for t in tables
-        ]
-        rows = con.execute(" UNION ".join(union_parts)).fetchall()
-        for row in rows:
-            sid = str(row[0])
-            if sid:
-                sids.add(sid)
-    except Exception:
-        for table in tables:
-            try:
-                rows = con.execute(
-                    f"SELECT DISTINCT security_id FROM {table}"
-                    f" WHERE security_id IS NOT NULL AND security_id != '' LIMIT 200"
-                ).fetchall()
-                for row in rows:
-                    sid = str(row[0])
-                    if sid:
-                        sids.add(sid)
-            except Exception:
-                pass
+    for row in rows:
+        sym = str(row[0])
+        if sym and not sym.startswith("sec_"):
+            sids.add(sym)
 
     seen: dict[str, dict[str, str]] = {}
     for sid in sids:
@@ -439,8 +414,9 @@ async def bars_summary(
     if as_of is None:
         as_of = _now()
     con = _get_con()
-    sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    start = shift_trading_days(as_of.date(), -180)
+    trade_date = previous_trading_day(as_of.date())
+    sec_id = resolve_security(con, symbol, as_of=trade_date)
+    start = shift_trading_days(trade_date, -180)
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
     if price_mode != "raw":
         kwargs["price_mode"] = price_mode

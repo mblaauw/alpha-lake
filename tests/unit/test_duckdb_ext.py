@@ -1,5 +1,4 @@
 import duckdb
-import pytest
 
 
 def test_ducklake_extension_available():

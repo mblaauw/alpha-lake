@@ -220,6 +220,31 @@ def _ingest_synthetic(
     return write_bars(con, df)
 
 
+def _filter_active(_con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
+    """Filter to symbols that are active in the registry (not removed)."""
+    from alpha_lake.flows.bootstrap import _get_ops
+
+    ops = _get_ops()
+    rows = ops.execute("SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL").fetchall()
+    active = {r[0] for r in rows}
+    return [s for s in sids if s in active] or sids
+
+
+def _check_registry(_con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
+    """Check registry; warn about removed symbols, return active subset."""
+    from alpha_lake.flows.bootstrap import _get_ops
+
+    ops = _get_ops()
+    rows = ops.execute("SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL").fetchall()
+    active = {r[0] for r in rows}
+    removed = [s for s in sids if s not in active]
+    for s in removed:
+        warn(f"Symbol '{s}' is not in the active registry — skipping")
+    if not active and sids:
+        return sids
+    return [s for s in sids if s in active]
+
+
 def ingest_bars(
     con: duckdb.DuckDBPyConnection,
     security_ids: list[str],
@@ -239,6 +264,9 @@ def ingest_bars(
     4. Validate with market sanity checks
     5. Write to canonical table
     """
+    security_ids = _check_registry(con, security_ids)
+    if not security_ids:
+        return 0
     src = source_id or get_primary_source("bars_daily")
     if not src:
         raise ValueError("No source configured for bars_daily")
