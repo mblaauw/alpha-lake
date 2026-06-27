@@ -159,6 +159,8 @@ async def bars(
     _validate_price_mode(price_mode)
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
     result = _fetch_bars(
         con,
         sec_id,
@@ -194,6 +196,8 @@ async def bars_indicators(
 
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
@@ -236,6 +240,8 @@ async def fundamentals_metrics(
     _validate_price_mode(price_mode)
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
 
     cat_list = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
     mid_list = [m.strip() for m in metric_ids.split(",") if m.strip()] if metric_ids else None
@@ -480,6 +486,8 @@ async def insider_transactions(
         as_of = _now()
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
     rows = _fetch_dataset(
         con,
         "insider_tx",
@@ -544,6 +552,8 @@ async def attention_metrics(
         as_of = _now()
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
     start = as_of.date() - timedelta(days=days - 1)
     rows = _fetch_dataset(
         con,

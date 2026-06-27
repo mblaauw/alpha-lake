@@ -88,14 +88,13 @@ def mint_security_id(figi: str = "", cik: str = "", isin: str = "", composite: s
     return ""
 
 
-def resolve(con: Any, symbol: str, as_of: date | None = None) -> str:
+def resolve(con: Any, symbol: str, as_of: date | None = None) -> str | None:
     """Resolve a symbol to security_id at a given as_of.
 
     Tries the ``security_master`` table first. If the table is missing or empty,
     falls back to ``lake_bars`` (where security_id == ticker symbol in the
-    current synthetic/demo data). Returns *symbol* itself if neither table
-    contains it — this matches the ``bars/symbols`` endpoint behaviour where
-    ``security_id`` may be the ticker directly.
+    current synthetic/demo data). Returns ``None`` if the symbol cannot be
+    resolved — callers must raise a ``404`` with a clear message.
     """
     try:
         if as_of:
@@ -135,7 +134,7 @@ def resolve(con: Any, symbol: str, as_of: date | None = None) -> str:
     except Exception:
         pass
 
-    return symbol
+    return None
 
 
 def search(
