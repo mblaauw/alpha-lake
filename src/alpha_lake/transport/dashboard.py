@@ -281,6 +281,8 @@ async def bars(
     _validate_price_mode(price_mode)
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        return JSONResponse([])
     return JSONResponse(
         _fetch_bars(
             con, sec_id, as_of, start=start, end=end, snapshot_id=snapshot_id, price_mode=price_mode
@@ -306,6 +308,8 @@ async def bars_indicators(
 
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
+    if sec_id is None:
+        return JSONResponse({})
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
@@ -420,6 +424,8 @@ async def bars_summary(
     con = _get_con()
     trade_date = previous_trading_day(as_of.date())
     sec_id = resolve_security(con, symbol, as_of=trade_date)
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
     start = shift_trading_days(trade_date, -180)
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
     if price_mode != "raw":
