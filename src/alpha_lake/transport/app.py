@@ -13,8 +13,10 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
+from typing import Any
 
 import duckdb
+import polars as pl  # type: ignore[unresolved-import]
 from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-import]
 from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
@@ -25,7 +27,7 @@ from alpha_lake.config import get_config, load_config
 from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
 from alpha_lake.secrets import get_store
 from alpha_lake.security_master import resolve as resolve_security
-from alpha_lake.serving import read_fundamental_metrics_asof
+from alpha_lake.serving import read_bars_adjusted, read_fundamental_metrics_asof
 from alpha_lake.transport._models import (
     HealthResponse,
 )
@@ -34,13 +36,17 @@ from alpha_lake.transport._shared import (
     _MAX_LOOKBACK_DAYS,
     _aware,
     _compute_and_serialize_indicators,
+    _compute_indicators_from_df,
     _dataset_health,
     _fetch_bars,
     _fetch_dataset,
+    _fetch_multi,
     _fundamental_row_to_item,
     _now,
     _parse_fields,
     _parse_indicators,
+    _pl_to_dicts,
+    _strip_audit_cols,
     _validate_price_mode,
 )
 
@@ -364,83 +370,119 @@ async def decision_panel(
         raise HTTPException(422, "At least one symbol is required")
 
     include_set = {s.strip() for s in include.split(",") if s.strip()}
-    results: dict[str, object] = {}
+    parsed_indicators = _parse_indicators(indicators)
+
+    # ── Batch-resolve all symbols ──────────────────────────────────────
+    symbol_to_sec: dict[str, str] = {}
     for symbol in symbol_list:
         sec_id = resolve_security(con, symbol, as_of=as_of.date())
+        if sec_id is not None:
+            symbol_to_sec[symbol] = sec_id
+    all_sec_ids = list(symbol_to_sec.values())
+    if not all_sec_ids:
+        return JSONResponse(
+            {
+                "as_of": as_of.isoformat(),
+                "snapshot_id": snapshot_id,
+                "symbols": symbol_list,
+                "capabilities": ["readouts", "insider_transactions_detail"],
+                "panels": {},
+            }
+        )
+
+    # ── Batch-fetch bars (single query for all symbols) ────────────────
+    bars_kwargs: dict[str, Any] = {
+        "security_ids": all_sec_ids,
+        "as_of": as_of,
+        "end_date": as_of.date(),
+    }
+    if snapshot_id:
+        bars_kwargs["snapshot_id"] = snapshot_id
+    all_bars = read_bars_adjusted(con, price_mode="split_adjusted", **bars_kwargs)
+
+    # Group bars by security_id
+    bars_by_sec: dict[str, pl.DataFrame] = {}
+    if not all_bars.is_empty():
+        for sid in all_sec_ids:
+            sub = all_bars.filter(pl.col("security_id") == sid)
+            if not sub.is_empty():
+                bars_by_sec[sid] = sub
+
+    # ── Batch-fetch fundamentals ───────────────────────────────────────
+    cat_list = [c.strip() for c in metric_categories.split(",") if c.strip()]
+    all_fund = read_fundamental_metrics_asof(
+        con,
+        security_ids=all_sec_ids,
+        as_of=as_of,
+        categories=cat_list,
+        price_mode="split_adjusted",
+        snapshot_id=snapshot_id,
+    )
+    fund_by_sec: dict[str, list[dict[str, Any]]] = {}
+    if not all_fund.is_empty():
+        for row in all_fund.rows(named=True):
+            fund_by_sec.setdefault(row["security_id"], []).append(row)
+
+    # ── Batch-fetch insider, earnings, attention ───────────────────────
+    insider_by_sec = _fetch_multi(
+        con,
+        "insider_tx",
+        all_sec_ids,
+        as_of,
+        snapshot_id=snapshot_id,
+        source_precedence_dataset="insider_tx",
+        include_set=include_set,
+    )
+    earnings_by_sec = _fetch_multi(
+        con,
+        "earnings_calendar",
+        all_sec_ids,
+        as_of,
+        start=as_of.date() - timedelta(days=90),
+        end=as_of.date(),
+        snapshot_id=snapshot_id,
+        include_set=include_set,
+    )
+    attention_by_sec = _fetch_multi(
+        con,
+        "attention_metrics",
+        all_sec_ids,
+        as_of,
+        start=as_of.date() - timedelta(days=30),
+        end=as_of.date(),
+        snapshot_id=snapshot_id,
+        include_set=include_set,
+    )
+
+    # ── Per-symbol assembly (in-memory, no more queries) ───────────────
+    results: dict[str, object] = {}
+    for symbol in symbol_list:
+        sec_id = symbol_to_sec.get(symbol)
         if sec_id is None:
             continue
 
         panel: dict[str, object] = {}
+        sec_bars = bars_by_sec.get(sec_id)
 
-        bars = _fetch_bars(
-            con,
-            sec_id,
-            as_of,
-            end=as_of.date(),
-            snapshot_id=snapshot_id,
-            price_mode="split_adjusted",
-            include_set=include_set,
-        )
-        panel["bars"] = bars
-
-        parsed_indicators = _parse_indicators(indicators)
-        panel["indicators"] = (
-            _compute_and_serialize_indicators(
-                con,
-                sec_id,
+        if sec_bars is not None:
+            panel["bars"] = _strip_audit_cols(_pl_to_dicts(sec_bars), include_set)
+            panel["indicators"] = _compute_indicators_from_df(
+                sec_bars,
                 parsed_indicators,
-                as_of,
-                end=as_of.date(),
                 include_set=include_set,
             )
-            if bars
-            else {}
-        )
+        else:
+            panel["bars"] = []
+            panel["indicators"] = {}
 
-        cat_list = [c.strip() for c in metric_categories.split(",") if c.strip()]
-        fund_df = read_fundamental_metrics_asof(
-            con,
-            security_ids=[sec_id],
-            as_of=as_of,
-            categories=cat_list,
-            price_mode="split_adjusted",
-            snapshot_id=snapshot_id,
-        )
+        fund_rows = fund_by_sec.get(sec_id, [])
         panel["fundamentals"] = (
-            [_fundamental_row_to_item(r, include_set) for r in fund_df.rows(named=True)]
-            if not fund_df.is_empty()
-            else []
+            [_fundamental_row_to_item(r, include_set) for r in fund_rows] if fund_rows else []
         )
 
-        panel["insider_transactions"] = _fetch_dataset(
-            con,
-            "insider_tx",
-            sec_id,
-            as_of,
-            snapshot_id=snapshot_id,
-            source_precedence_dataset="insider_tx",
-            include_set=include_set,
-        )
-        panel["earnings_events"] = _fetch_dataset(
-            con,
-            "earnings_calendar",
-            sec_id,
-            as_of,
-            start=as_of.date() - timedelta(days=90),
-            end=as_of.date(),
-            snapshot_id=snapshot_id,
-            include_set=include_set,
-        )
-        panel["attention_mentions"] = _fetch_dataset(
-            con,
-            "attention_metrics",
-            sec_id,
-            as_of,
-            start=as_of.date() - timedelta(days=30),
-            end=as_of.date(),
-            snapshot_id=snapshot_id,
-            include_set=include_set,
-        )
+        panel["insider_transactions"] = insider_by_sec.get(sec_id, [])
+        panel["earnings_events"] = earnings_by_sec.get(sec_id, [])
+        panel["attention_mentions"] = attention_by_sec.get(sec_id, [])
 
         # Optional sections gated by include parameter
         if "readouts" in include_set:
@@ -453,7 +495,7 @@ async def decision_panel(
                 snapshot_id=snapshot_id,
             )
         if "insider_transactions_detail" in include_set:
-            panel["insider_transactions_detail"] = _fetch_dataset(
+            detail_rows = _fetch_dataset(
                 con,
                 "insider_transactions",
                 sec_id,
@@ -461,6 +503,8 @@ async def decision_panel(
                 snapshot_id=snapshot_id,
                 include_set=include_set,
             )
+            if detail_rows:
+                panel["insider_transactions_detail"] = detail_rows
 
         results[symbol] = panel
 
