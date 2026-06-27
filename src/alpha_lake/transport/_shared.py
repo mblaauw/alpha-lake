@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -42,6 +43,38 @@ _RECURSIVE_MULTIPLIER: dict[str, int] = {
 
 _MAX_LOOKBACK_DAYS = 365 * 3
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
+_CACHE_TTL = 30  # seconds
+
+
+class _TTLCache:
+    """Simple in-memory TTL cache with a max size."""
+
+    def __init__(self, ttl: float = _CACHE_TTL, maxsize: int = 256) -> None:
+        self._ttl = ttl
+        self._maxsize = maxsize
+        self._store: dict[str, tuple[float, Any]] = {}
+
+    def get(self, key: str) -> Any | None:
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        expires, value = entry
+        if time.monotonic() > expires:
+            del self._store[key]
+            return None
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        if len(self._store) >= self._maxsize:
+            oldest = min(self._store.keys(), key=lambda k: self._store[k][0])
+            del self._store[oldest]
+        self._store[key] = (time.monotonic() + self._ttl, value)
+
+    def clear(self) -> None:
+        self._store.clear()
+
+
+_RESPONSE_CACHE = _TTLCache()
 
 _AUDIT_COLUMNS: frozenset[str] = frozenset(
     {
@@ -464,6 +497,14 @@ def _compute_indicators_from_df(
     return result
 
 
+def _cache_key(prefix: str, sec_id: str, as_of: datetime, **kwargs: Any) -> str:
+    parts = [prefix, sec_id, as_of.isoformat()]
+    for k, v in sorted(kwargs.items()):
+        if v is not None and v != set():
+            parts.append(f"{k}={v!r}")
+    return ":".join(parts)
+
+
 def _compute_and_serialize_indicators(
     con: duckdb.DuckDBPyConnection,
     sec_id: str,
@@ -476,6 +517,20 @@ def _compute_and_serialize_indicators(
     fields: set[str] | None = None,
 ) -> dict[str, list[Any]]:
     parsed = [(n, list(a) if a else list(_DEFAULT_ARGS.get(n, []))) for n, a in parsed]
+
+    ck = _cache_key(
+        "indicators",
+        sec_id,
+        as_of,
+        start=start,
+        end=end,
+        parsed=parsed,
+        include=include_set,
+        fields=fields,
+    )
+    cached = _RESPONSE_CACHE.get(ck)
+    if cached is not None:
+        return cached
     warmup_start = start
     for name, args in parsed:
         w = _compute_warmup(name, args, start)
@@ -526,4 +581,5 @@ def _compute_and_serialize_indicators(
     if fields is not None:
         result = {k: v for k, v in result.items() if k in fields}
 
+    _RESPONSE_CACHE.set(ck, result)
     return result
