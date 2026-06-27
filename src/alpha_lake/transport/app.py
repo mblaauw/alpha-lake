@@ -548,7 +548,14 @@ async def insider_transactions(
     )
     if not rows:
         raise HTTPException(404, f"No insider data for symbol: {symbol}")
-    return JSONResponse({"symbol": symbol, "as_of": as_of.isoformat(), "transactions": rows})
+    return JSONResponse(
+        {
+            "symbol": symbol,
+            "as_of": as_of.isoformat(),
+            "transactions": rows,
+            "metadata": {"computed_at": _now().isoformat(), "rows_returned": len(rows)},
+        }
+    )
 
 
 # ── Earnings Calendar ───────────────────────────────────────────────────────
@@ -581,7 +588,13 @@ async def earnings_calendar(
         snapshot_id=snapshot_id,
         include_set=_parse_include(include),
     )
-    return JSONResponse({"as_of": as_of.isoformat(), "earnings": rows})
+    return JSONResponse(
+        {
+            "as_of": as_of.isoformat(),
+            "earnings": rows,
+            "metadata": {"computed_at": _now().isoformat(), "rows_returned": len(rows)},
+        }
+    )
 
 
 # ── Attention Metrics ───────────────────────────────────────────────────────
@@ -616,7 +629,14 @@ async def attention_metrics(
     )
     if not rows:
         raise HTTPException(404, f"No attention data for symbol: {symbol}")
-    return JSONResponse({"symbol": symbol, "as_of": as_of.isoformat(), "mentions": rows})
+    return JSONResponse(
+        {
+            "symbol": symbol,
+            "as_of": as_of.isoformat(),
+            "mentions": rows,
+            "metadata": {"computed_at": _now().isoformat(), "rows_returned": len(rows)},
+        }
+    )
 
 
 # ── Trading Calendar ────────────────────────────────────────────────────────
