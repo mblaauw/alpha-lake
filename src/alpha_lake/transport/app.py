@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 
@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-i
 from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
-from alpha_lake.calendar_ import is_trading_day
+from alpha_lake.calendar_ import is_trading_day, previous_trading_day
 from alpha_lake.catalog import catalog_health, connect
 from alpha_lake.config import get_config, load_config
 from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
@@ -319,7 +319,7 @@ async def decision_panel(
     symbols: str,
     as_of: datetime,
     snapshot_id: str | None = None,
-    indicators: str = "sma:20,50,200,ema:12,26,rsi:14,atr:14,macd:12,26,9,bollinger:20",
+    indicators: str = "sma:20;sma:50;sma:200;ema:12;ema:26;rsi:14;atr:14;macd:12,26,9;bollinger:20,2",
     metric_categories: str = "valuation,profitability,growth,financial_health,efficiency,liquidity",
     include: str = "",
 ):
@@ -657,7 +657,11 @@ async def authenticated_symbol_readouts(
         raise HTTPException(
             422, "as_of is required for research reads. Use latest=true for convenience."
         )
-    as_of = _now() if as_of is None else _aware(as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if as_of is None
+        else _aware(as_of)
+    )
     con = _get_con()
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -682,7 +686,11 @@ async def batch_readouts(request: Request, body: BatchReadoutRequest):
         raise HTTPException(
             422, "as_of is required for research reads. Use latest=true for convenience."
         )
-    as_of = _now() if body.as_of is None else _aware(body.as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if body.as_of is None
+        else _aware(body.as_of)
+    )
     con = _get_con()
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -725,7 +733,11 @@ async def symbol_facts_bundle(
     _auth(request)
     if as_of is None and not latest:
         raise HTTPException(422, "as_of is required. Use latest=true for convenience.")
-    as_of = _now() if as_of is None else _aware(as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if as_of is None
+        else _aware(as_of)
+    )
     con = _get_con()
 
     from alpha_lake.serving.readouts import compute_readouts
@@ -894,7 +906,11 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
         raise HTTPException(
             422, "as_of is required for research reads. Use latest=true for convenience."
         )
-    as_of = _now() if body.as_of is None else _aware(body.as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if body.as_of is None
+        else _aware(body.as_of)
+    )
     con = _get_con()
 
     items: dict[str, object] = {}

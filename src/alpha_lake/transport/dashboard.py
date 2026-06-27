@@ -337,7 +337,11 @@ async def symbol_readouts(
             "Use latest=true for the most recent observation.",
         )
 
-    as_of = _now() if as_of is None else _aware(as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if as_of is None
+        else _aware(as_of)
+    )
 
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -876,7 +880,11 @@ async def symbol_fundamentals(
             "Use latest=true for the most recent observation.",
         )
 
-    as_of = _now() if as_of is None else _aware(as_of)
+    as_of = (
+        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+        if as_of is None
+        else _aware(as_of)
+    )
 
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:

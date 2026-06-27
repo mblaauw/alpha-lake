@@ -89,22 +89,48 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
+def _parse_args(args_str: str) -> list[int | float]:
+    """Parse comma-separated arg string into list of int or float."""
+    result: list[int | float] = []
+    for a in args_str.split(","):
+        a = a.strip()
+        if not a:
+            continue
+        v = float(a)
+        result.append(int(v) if v == int(v) else v)
+    return result
+
+
 def _parse_indicators(spec: str) -> list[tuple[str, list[int | float]]]:
-    sep = ";" if ";" in spec or ":" in spec else ","
+    """Parse indicator spec string into list of (name, args) tuples.
+
+    Two formats:
+      - semicolon-separated:  "sma:20,50;ema:12,26;rsi:14"
+      - comma-separated:      "sma:20,50,200,ema:12,26,rsi:14"
+    """
+    if ";" in spec:
+        parts = spec.split(";")
+    else:
+        parts = spec.split(",")
     result: list[tuple[str, list[int | float]]] = []
-    for part in spec.split(sep):
+    current_name: str | None = None
+    current_args: list[int | float] = []
+    for part in parts:
         part = part.strip()
         if not part:
             continue
         if ":" in part:
+            if current_name is not None:
+                result.append((current_name, current_args))
             name, args_str = part.split(":", 1)
-            args: list[int | float] = []
-            for a in args_str.split(","):
-                v = float(a.strip())
-                args.append(int(v) if v == int(v) else v)
-            result.append((name.strip(), args))
+            current_name = name.strip()
+            current_args = _parse_args(args_str)
+        elif current_name is not None:
+            current_args.append(float(part))
         else:
             result.append((part, []))
+    if current_name is not None:
+        result.append((current_name, current_args))
     return result
 
 
