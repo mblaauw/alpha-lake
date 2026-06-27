@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import json
-import time
 from datetime import UTC, date, datetime
+from time import monotonic
 from typing import Any
 
 import duckdb  # type: ignore[unresolved-import]
@@ -45,6 +45,55 @@ _RECURSIVE_MULTIPLIER: dict[str, int] = {
 _MAX_LOOKBACK_DAYS = 365 * 3
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 _CACHE_TTL = 30  # seconds
+_CONN_TTL = 300.0  # seconds
+
+
+class _ConnectionPool:
+    """Simple TTL-based connection pool. Recreates connections on expiry."""
+
+    def __init__(self) -> None:
+        self._conn: duckdb.DuckDBPyConnection | None = None
+        self._expires: float = 0.0
+
+    def get(self) -> duckdb.DuckDBPyConnection:
+        if self._conn is not None and monotonic() < self._expires:
+            return self._conn
+        try:
+            if self._conn is not None:
+                self._conn.close()
+        except Exception:
+            pass
+        self._conn = self._connect()
+        self._expires = monotonic() + _CONN_TTL
+        return self._conn
+
+    @staticmethod
+    def _connect() -> duckdb.DuckDBPyConnection:
+        from alpha_lake.catalog import connect
+        from alpha_lake.config import load_config
+
+        try:
+            return connect(load_config())
+        except Exception:
+            import logging
+
+            logging.getLogger("alpha_lake").warning(
+                "Failed to attach catalog; creating raw DuckDB connection"
+            )
+            return duckdb.connect()
+
+
+_conn_pool = _ConnectionPool()
+
+
+def _get_connection() -> duckdb.DuckDBPyConnection:
+    return _conn_pool.get()
+
+
+def _set_test_connection(con: duckdb.DuckDBPyConnection) -> None:
+    """Inject a connection for testing (bypasses TTL pool)."""
+    _conn_pool._conn = con
+    _conn_pool._expires = monotonic() + 3600
 
 
 class _TTLCache:
@@ -60,7 +109,7 @@ class _TTLCache:
         if entry is None:
             return None
         expires, value = entry
-        if time.monotonic() > expires:
+        if monotonic() > expires:
             del self._store[key]
             return None
         return value
@@ -69,7 +118,7 @@ class _TTLCache:
         if len(self._store) >= self._maxsize:
             oldest = min(self._store.keys(), key=lambda k: self._store[k][0])
             del self._store[oldest]
-        self._store[key] = (time.monotonic() + self._ttl, value)
+        self._store[key] = (monotonic() + self._ttl, value)
 
     def clear(self) -> None:
         self._store.clear()

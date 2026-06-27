@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse  # type: ignore[unresolved-import]
 from alpha_lake.calendar_ import previous_trading_day, shift_trading_days
 from alpha_lake.catalog import (
     catalog_health,
-    connect,
     dataset_health,
     list_datasets,
     list_snapshots,
@@ -76,19 +75,15 @@ from alpha_lake.transport._shared import (
 router = APIRouter(prefix="/v1/dashboard")
 
 
-_connection: duckdb.DuckDBPyConnection | None = None
-
-
 def _check_enabled() -> None:
     if not get_config().transport.dashboard_enabled:
         raise HTTPException(404)
 
 
 def _get_con() -> duckdb.DuckDBPyConnection:
-    global _connection
-    if _connection is None:
-        _connection = connect(get_config())
-    return _connection
+    from alpha_lake.transport._shared import _get_connection
+
+    return _get_connection()
 
 
 def _aware(dt: datetime) -> datetime:

@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresol
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
 from alpha_lake.calendar_ import is_trading_day, previous_trading_day
-from alpha_lake.catalog import catalog_health, connect
+from alpha_lake.catalog import catalog_health
 from alpha_lake.config import get_config, load_config
 from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
 from alpha_lake.secrets import get_store
@@ -87,15 +87,13 @@ def _verify_key(key: str) -> bool:
     )
 
 
-_connection: duckdb.DuckDBPyConnection | None = None
 _buckets: dict[str, _TokenBucket] = {}
 
 
 def _get_con() -> duckdb.DuckDBPyConnection:
-    global _connection
-    if _connection is None:
-        _connection = connect(load_config())
-    return _connection
+    from alpha_lake.transport._shared import _get_connection
+
+    return _get_connection()
 
 
 def _auth(request: Request) -> str:
