@@ -88,7 +88,7 @@ def _pg_catalog_attach_str(cfg: RootConfig) -> str | None:
     raw = cfg.lake.catalog
     if raw.startswith("ducklake:postgres:"):
         conn = raw.removeprefix("ducklake:postgres:")
-        return f"postgres:{conn}"
+        return conn
     return None
 
 

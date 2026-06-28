@@ -28,10 +28,26 @@ def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-_OPS_SCHEMA = "pg_catalog.ops"
+_OPS_SCHEMA: str = "ops"
+
+
+def _resolve_ops_schema(con: duckdb.DuckDBPyConnection) -> str:
+    """Return the correct ops schema name for *con*.
+
+    When Postgres is attached as ``pg_catalog``, ops tables must live there
+    so they are shared across containers.  In embedded mode the native
+    ``ops`` schema is used.
+    """
+    try:
+        con.execute("SELECT 1 FROM pg_catalog.ops.job_definition LIMIT 0")
+        return "pg_catalog.ops"
+    except Exception:
+        return "ops"
 
 
 def ensure_ops_schema(con: duckdb.DuckDBPyConnection) -> None:
+    global _OPS_SCHEMA
+    _OPS_SCHEMA = _resolve_ops_schema(con)
     con.execute(f"CREATE SCHEMA IF NOT EXISTS {_OPS_SCHEMA}")
     con.execute(
         f"CREATE TABLE IF NOT EXISTS {_OPS_SCHEMA}.job_definition ("
@@ -51,10 +67,16 @@ def ensure_ops_schema(con: duckdb.DuckDBPyConnection) -> None:
         "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
         ")"
     )
+    _fk_cross_catalog = "." in _OPS_SCHEMA
+    _job_name_col = (
+        "  job_name TEXT NOT NULL"
+        if _fk_cross_catalog
+        else f"  job_name TEXT NOT NULL REFERENCES {_OPS_SCHEMA}.job_definition(job_name)"
+    )
     con.execute(
         f"CREATE TABLE IF NOT EXISTS {_OPS_SCHEMA}.job_run ("
         "  run_id TEXT PRIMARY KEY,"
-        "  job_name TEXT NOT NULL REFERENCES pg_catalog.ops.job_definition(job_name),"
+        f"{_job_name_col},"
         "  job_type TEXT NOT NULL,"
         "  status TEXT NOT NULL,"
         "  idempotency_key TEXT NOT NULL,"
@@ -180,6 +202,7 @@ def seed_job_defs_from_config(con: duckdb.DuckDBPyConnection, cfg: RootConfig) -
                 jd.dataset,
                 now,
                 now,
+                now,
             ],
         )
 
@@ -220,6 +243,10 @@ class PostgresJobStore:
 
     def __init__(self, con: duckdb.DuckDBPyConnection) -> None:
         self._con = con
+
+    @property
+    def _ops(self) -> str:
+        return _OPS_SCHEMA
 
     def _row_to_job_def(self, row: tuple[Any, ...]) -> JobDefinition:
         return JobDefinition(
@@ -269,7 +296,7 @@ class PostgresJobStore:
 
     def list_job_defs(self) -> list[JobDefinition]:
         rows = self._con.execute(
-            f"SELECT * FROM {_OPS_SCHEMA}.job_definition ORDER BY priority, job_name"
+            f"SELECT * FROM {self._ops}.job_definition ORDER BY priority, job_name"
         ).fetchall()
         return [self._row_to_job_def(r) for r in rows]
 

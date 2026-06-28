@@ -58,11 +58,9 @@ class _ConnectionPool:
     def get(self) -> duckdb.DuckDBPyConnection:
         if self._conn is not None and monotonic() < self._expires:
             return self._conn
-        try:
+        with contextlib.suppress(Exception):
             if self._conn is not None:
                 self._conn.close()
-        except Exception:
-            pass
         self._conn = self._connect()
         self._expires = monotonic() + _CONN_TTL
         return self._conn
@@ -80,7 +78,12 @@ class _ConnectionPool:
             logging.getLogger("alpha_lake").warning(
                 "Failed to attach catalog; creating raw DuckDB connection"
             )
-            return duckdb.connect()
+            con = duckdb.connect()
+            from alpha_lake.jobs.store import ensure_ops_schema
+
+            with contextlib.suppress(Exception):
+                ensure_ops_schema(con)
+            return con
 
 
 _conn_pool = _ConnectionPool()

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import csv
 import io
-import zipfile
 import os
+import zipfile
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
