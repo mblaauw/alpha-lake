@@ -62,6 +62,34 @@ services:
         condition: service_healthy
     entrypoint: ["alpha-lake"]
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["worker", "--poll-interval", "10"]
+    environment:
+      ALPHA_LAKE_CONFIG: /config/stack.toml
+      ALPHA_LAKE_EODHD_API_KEY: "${ALPHA_LAKE_EODHD_API_KEY:-}"
+      ALPHA_LAKE_TIINGO_API_KEY: "${ALPHA_LAKE_TIINGO_API_KEY:-}"
+      ALPHA_LAKE_FINNHUB_API_KEY: "${ALPHA_LAKE_FINNHUB_API_KEY:-}"
+      ALPHA_LAKE_MARKETAUX_API_KEY: "${ALPHA_LAKE_MARKETAUX_API_KEY:-}"
+      ALPHA_LAKE_ALPHAV_API_KEY: "${ALPHA_LAKE_ALPHAV_API_KEY:-}"
+      ALPHA_LAKE_FMP_API_KEY: "${ALPHA_LAKE_FMP_API_KEY:-}"
+      ALPHA_LAKE_API_KEY_TEST: "al_test_supersecret123"
+      RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
+      RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin}"
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+      - ~/Downloads:/downloads:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint: ["alpha-lake"]
+
 volumes:
   pgdata:
   rustfsdata:
