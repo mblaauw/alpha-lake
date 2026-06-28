@@ -473,6 +473,27 @@ def cli_bootstrap_bars():
 
 # ── Operations Commands ───────────────────────────────────────────────────
 
+
+@app.command(rich_help_panel="System")
+def worker(
+    poll_interval: float = typer.Option(5.0, "--poll-interval", help="Poll interval in seconds"),
+    once: bool = typer.Option(False, "--once", help="Run once then exit"),
+):
+    """Start the data-job worker process."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.scheduler import Scheduler
+    from alpha_lake.jobs.store import PostgresJobStore
+    from alpha_lake.jobs.worker import Worker
+
+    cfg = get_config()
+    con = connect(cfg)
+    store = PostgresJobStore(con)
+    sched = Scheduler(store, cfg)
+    w = Worker(store, sched, cfg, poll_interval=poll_interval, once=once)
+    w.run()
+    con.close()
+
+
 _ops_app = typer.Typer(help="Manage data-job definitions and runs")
 
 
@@ -527,6 +548,26 @@ def ops_jobs_runs(
             ]
         )
     table("Runs", ["ID", "Job", "Status", "Attempt", "Scheduled", "Finished"], rows)
+    con.close()
+
+
+@_ops_app.command("enqueue")
+def ops_jobs_enqueue(
+    job_name: str = typer.Option(..., "--job", help="Job name to enqueue"),
+):
+    """Enqueue a manual run for the given job definition."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.scheduler import Scheduler
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    sched = Scheduler(store, get_config())
+    run = sched.enqueue_manual(job_name)
+    if run:
+        ok(f"Enqueued [bold]{job_name}[/] as run [bold]{run.run_id[:8]}[/].")
+    else:
+        warn(f"Job [bold]{job_name}[/] not found or disabled.")
     con.close()
 
 
