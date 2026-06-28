@@ -27,10 +27,6 @@ def get_dataset_posture(dataset: str) -> DatasetPostureConfig:
     return cfg.datasets.get(dataset, DatasetPostureConfig())
 
 
-def is_experimental_dataset(dataset: str) -> bool:
-    return get_dataset_posture(dataset).tier == "experimental"
-
-
 def get_primary_source(dataset: str) -> str | None:
     precedence = get_source_precedence(dataset)
     try:

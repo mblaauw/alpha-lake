@@ -25,10 +25,6 @@ def load_golden_hash(path: Path) -> str:
     return (path / "output_hash.txt").read_text().strip()
 
 
-def load_golden_output(path: Path) -> pl.DataFrame:
-    return pl.read_parquet(str(path / "output.parquet"))
-
-
 def check_replay(path: Path, actual: pl.DataFrame) -> bool:
     golden_hash = load_golden_hash(path)
     rows = json.loads(actual.write_json())

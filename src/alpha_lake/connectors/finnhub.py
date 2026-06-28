@@ -68,6 +68,7 @@ async def fetch_recommendation_trends(symbol: str) -> RawFetch:
 
 async def fetch_news(symbol: str, from_date: str, to_date: str) -> RawFetch:
     cfg = get_source("finnhub")
+    check_budget(cfg)
     params: dict[str, Any] = {
         "token": cfg.api_key,
         "symbol": symbol,

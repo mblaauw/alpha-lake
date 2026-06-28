@@ -77,15 +77,6 @@ def _prev_or_none(s: pl.Series) -> float | None:
     return float(v)
 
 
-def _value_at(s: pl.Series, idx: int) -> float | None:
-    if idx < 0 or idx >= len(s):
-        return None
-    v = s[idx]
-    if v is None or (isinstance(v, float) and not math.isfinite(v)):
-        return None
-    return float(v)
-
-
 def _make_obs(
     defn: ReadoutDefinition,
     value: float | None,

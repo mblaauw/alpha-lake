@@ -376,11 +376,6 @@ CATEGORIES: dict[str, str] = {
 }
 
 
-def readouts_by_category(category: str) -> list[ReadoutDefinition]:
-    """Return all readout definitions for a given category."""
-    return [r for r in READOUTS.values() if r.category == category]
-
-
 __all__ = [
     "ReadoutDefinition",
     "READOUTS",

@@ -519,11 +519,6 @@ def _fetch_multi(
     return result
 
 
-def _parse_as_of(as_of: datetime | None) -> datetime:
-    """Default as_of to now() when not provided."""
-    return as_of if as_of is not None else datetime.now(UTC)
-
-
 def _handle_bars(
     con: duckdb.DuckDBPyConnection,
     sec_id: str,

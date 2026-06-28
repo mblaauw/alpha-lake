@@ -216,12 +216,14 @@ def _ingest_synthetic(
     return write_bars(con, df)
 
 
-def _check_registry(_con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
+def _check_registry(con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
     """Check registry; warn about removed symbols, return active subset."""
-    from alpha_lake.flows.bootstrap import _get_ops
+    from alpha_lake.jobs.store import _resolve_ops_schema
 
-    ops = _get_ops()
-    rows = ops.execute("SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL").fetchall()
+    ops_schema = _resolve_ops_schema(con)
+    rows = con.execute(
+        f"SELECT symbol FROM {ops_schema}.symbol_registry WHERE removed_at IS NULL"
+    ).fetchall()
     active = {r[0] for r in rows}
     removed = [s for s in sids if s not in active]
     for s in removed:

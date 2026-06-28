@@ -12,6 +12,7 @@ from alpha_lake.interpretation.fundamentals_glossary import (
     get_threshold_profile,
     resolve_fundamental_state,
 )
+from alpha_lake.serving import _ensure_kernel, _pin_snapshot
 
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 _PRICE_CURRENCY = "USD"
@@ -262,19 +263,6 @@ def _display_suffix(unit: Any) -> str:
     if unit == "multiple":
         return "x"
     return ""
-
-
-def _pin_snapshot(con: duckdb.DuckDBPyConnection, snapshot_id: str | None) -> None:
-    if snapshot_id is not None:
-        from alpha_lake.catalog import set_snapshot
-
-        set_snapshot(con, snapshot_id)
-
-
-def _ensure_kernel(con: duckdb.DuckDBPyConnection) -> None:
-    from alpha_lake.kernel import register_kernel
-
-    register_kernel(con)
 
 
 def _empty_output() -> pl.DataFrame:

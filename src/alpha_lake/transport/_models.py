@@ -213,10 +213,3 @@ class FundamentalMetricsMetadata(BaseModel):
     computed_at: str
     metrics_returned: int = 0
     latest: bool = False
-
-
-class FundamentalMetricsResponse(BaseModel):
-    symbol: str
-    as_of: str
-    metrics: list[FundamentalMetricItem]
-    metadata: FundamentalMetricsMetadata

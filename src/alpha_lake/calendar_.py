@@ -34,11 +34,6 @@ def previous_trading_day(dt: datetime.date, exchange: str = "XNYS") -> datetime.
     return cal.date_to_session(dt.isoformat(), direction="previous").date()
 
 
-def next_trading_day(dt: datetime.date, exchange: str = "XNYS") -> datetime.date:
-    cal = _get_calendar(_resolve(exchange))
-    return cal.date_to_session(dt.isoformat(), direction="next").date()
-
-
 def shift_trading_days(dt: datetime.date, n: int, exchange: str = "XNYS") -> datetime.date:
     cal = _get_calendar(_resolve(exchange))
     if n == 0:

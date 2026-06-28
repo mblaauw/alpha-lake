@@ -10,6 +10,7 @@ from alpha_lake.derived.indicators import (
     ema,
     macd,
     obv,
+    returns,
     rsi,
     sma,
     vwap,

@@ -89,12 +89,6 @@ def _value(df: pl.DataFrame, metric_id: str) -> float | None:
     return row["value"][0]
 
 
-def _quality(df: pl.DataFrame, metric_id: str) -> str:
-    row = df.filter(pl.col("metric_id") == metric_id)
-    assert row.height == 1, f"expected 1 row for {metric_id}, got {row.height}"
-    return row["quality_status"][0]
-
-
 def test_estimates_computes_target_price():
     as_of = datetime(2025, 6, 15, tzinfo=UTC)
     estimates = _df(
