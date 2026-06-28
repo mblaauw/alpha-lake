@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from alpha_lake.config import RootConfig
 from alpha_lake.jobs.models import JobDefinition, JobRun, JobStore
@@ -22,10 +23,18 @@ class Scheduler:
         self._store = store
         self._cfg = cfg
 
+    def _source_is_held(self, source_id: str | None) -> bool:
+        if not source_id:
+            return False
+        src = self._store.get_source(source_id)
+        return bool(src and src.hold)
+
     def enqueue_manual(self, job_name: str) -> JobRun | None:
         """Enqueue a manual run for the given job definition."""
         jd = self._store.get_job_def(job_name)
         if jd is None or not jd.enabled or jd.hold:
+            return None
+        if self._source_is_held(jd.source_id):
             return None
         run = JobRun(
             run_id=_new_id(),
@@ -54,6 +63,8 @@ class Scheduler:
             if not jd.enabled or jd.hold:
                 continue
             if jd.schedule_kind == "manual":
+                continue
+            if self._source_is_held(jd.source_id):
                 continue
             run = self._build_due_run(jd, now)
             if run is not None:
@@ -104,18 +115,23 @@ class Scheduler:
         if sk == "daily_time":
             cal = sched.get("calendar", "XNYS")
             run_time = sched.get("time", "18:00")
+            tz_name = sched.get("timezone", "UTC")
+            tz = ZoneInfo(tz_name)
+            local_now = now.astimezone(tz)
             if cal:
                 from alpha_lake.calendar_ import is_trading_day
 
-                today = now.date()
+                today = local_now.date()
                 if not is_trading_day(today):
                     return None
             cutoff = datetime.combine(
-                now.date(), datetime.strptime(run_time, "%H:%M").time(), tzinfo=UTC
+                local_now.date(),
+                datetime.strptime(run_time, "%H:%M").time(),
+                tzinfo=tz,
             )
-            if now < cutoff:
+            if local_now < cutoff:
                 return None
-            return f"scheduled:daily_time:{now.date().isoformat()}:{run_time}"
+            return f"scheduled:daily_time:{local_now.date().isoformat()}:{run_time}"
 
         if sk == "market_close":
             today = now.date()
