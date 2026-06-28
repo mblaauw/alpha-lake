@@ -229,6 +229,16 @@ def seed_default_job_defs(con: duckdb.DuckDBPyConnection) -> None:
         )
 
 
+def _parse_json(val: Any) -> dict[str, Any]:
+    """Safely parse a JSON string value, returning ``{}`` on failure."""
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except json.JSONDecodeError:
+            return {}
+    return val or {}
+
+
 class PostgresJobStore:
     """JobStore implementation backed by Postgres through DuckDB's pg_catalog."""
 
@@ -246,8 +256,8 @@ class PostgresJobStore:
             enabled=row[2],
             hold=row[3],
             schedule_kind=row[4],
-            schedule_json=json.loads(row[5]) if isinstance(row[5], str) else (row[5] or {}),
-            params_json=json.loads(row[6]) if isinstance(row[6], str) else (row[6] or {}),
+            schedule_json=_parse_json(row[5]),
+            params_json=_parse_json(row[6]),
             max_attempts=row[7],
             priority=row[8],
             concurrency_key=row[9],
@@ -264,7 +274,7 @@ class PostgresJobStore:
             job_type=row[2],
             status=row[3],
             idempotency_key=row[4],
-            params_json=json.loads(row[5]) if isinstance(row[5], str) else (row[5] or {}),
+            params_json=_parse_json(row[5]),
             requested_for_date=row[6],
             source_id=row[7],
             dataset=row[8],
@@ -276,8 +286,8 @@ class PostgresJobStore:
             finished_at=row[14],
             heartbeat_at=row[15],
             worker_id=row[16],
-            result_json=json.loads(row[17]) if isinstance(row[17], str) and row[17] else None,
-            failure_json=json.loads(row[18]) if isinstance(row[18], str) and row[18] else None,
+            result_json=_parse_json(row[17]) if row[17] else None,
+            failure_json=_parse_json(row[18]) if row[18] else None,
             ingestion_run_id=row[19],
             ducklake_snapshot_id=row[20],
             created_at=row[21],
@@ -424,12 +434,10 @@ class PostgresJobStore:
         return run
 
     def claim_next(self, worker_id: str) -> JobRun | None:
+        # Postgres via DuckDB scanner does not support UPDATE … RETURNING,
+        # so we SELECT first, then UPDATE by run_id.
         row = self._con.execute(
-            f"UPDATE {_OPS_SCHEMA}.job_run "
-            "SET status = 'running', started_at = ?, heartbeat_at = ?,"
-            "  worker_id = ?, attempt = attempt + 1 "
-            f"WHERE run_id = ("
-            f"  SELECT r.run_id FROM {_OPS_SCHEMA}.job_run r"
+            f"SELECT r.run_id FROM {_OPS_SCHEMA}.job_run r"
             f"  JOIN {_OPS_SCHEMA}.job_definition d ON d.job_name = r.job_name"
             f"  LEFT JOIN {_OPS_SCHEMA}.source_rate_limit_override o"
             f"    ON o.source_id = r.source_id"
@@ -439,12 +447,24 @@ class PostgresJobStore:
             "    AND d.hold = FALSE"
             "    AND (o.hold IS NULL OR o.hold = FALSE)"
             "  ORDER BY r.priority ASC, r.scheduled_at ASC"
-            "  LIMIT 1"
-            ")"
-            " RETURNING *",
-            [_utcnow(), _utcnow(), worker_id],
+            "  LIMIT 1",
         ).fetchone()
-        return self._row_to_run(row) if row else None
+        if row is None:
+            return None
+        run_id: str = row[0]
+        now = _utcnow()
+        self._con.execute(
+            f"UPDATE {_OPS_SCHEMA}.job_run "
+            "SET status = 'running', started_at = ?, heartbeat_at = ?,"
+            "  worker_id = ?, attempt = attempt + 1 "
+            "WHERE run_id = ?",
+            [now, now, worker_id, run_id],
+        )
+        updated = self._con.execute(
+            f"SELECT * FROM {_OPS_SCHEMA}.job_run WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        return self._row_to_run(updated) if updated else None
 
     def succeed_run(self, run_id: str, result: dict[str, Any]) -> None:
         self._con.execute(
