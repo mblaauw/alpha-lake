@@ -15,6 +15,7 @@ from alpha_lake.jobs.models import (
     SourceRateLimitOverride,
     SourceWithLimits,
     SymbolEntry,
+    SymbolSourceOverride,
     WorkerState,
 )
 
@@ -130,6 +131,15 @@ def ensure_ops_schema(con: duckdb.DuckDBPyConnection) -> None:
         "  metadata TEXT"
         ")"
     )
+    con.execute(
+        f"CREATE TABLE IF NOT EXISTS {_OPS_SCHEMA}.symbol_source_override ("
+        "  symbol TEXT PRIMARY KEY,"
+        "  source_id TEXT NOT NULL,"
+        "  reason TEXT NOT NULL DEFAULT '',"
+        "  updated_by TEXT NOT NULL DEFAULT 'operator',"
+        "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+        ")"
+    )
 
 
 def seed_job_defs_from_config(con: duckdb.DuckDBPyConnection, cfg: RootConfig) -> None:
@@ -163,6 +173,37 @@ def seed_job_defs_from_config(con: duckdb.DuckDBPyConnection, cfg: RootConfig) -
                 jd.schedule_kind,
                 json.dumps(jd.schedule),
                 json.dumps(jd.params),
+                jd.max_attempts,
+                jd.priority,
+                jd.concurrency_key,
+                jd.source_id,
+                jd.dataset,
+                now,
+                now,
+            ],
+        )
+
+
+def seed_default_job_defs(con: duckdb.DuckDBPyConnection) -> None:
+    from alpha_lake.jobs.models import DEFAULT_JOB_DEFS
+
+    now = _utcnow()
+    for jd in DEFAULT_JOB_DEFS:
+        con.execute(
+            f"INSERT INTO {_OPS_SCHEMA}.job_definition "
+            "(job_name, job_type, enabled, hold, schedule_kind, schedule_json, "
+            " params_json, max_attempts, priority, concurrency_key, source_id, dataset,"
+            " created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (job_name) DO NOTHING",
+            [
+                jd.job_name,
+                jd.job_type,
+                jd.enabled,
+                jd.hold,
+                jd.schedule_kind,
+                json.dumps(jd.schedule_json),
+                json.dumps(jd.params_json),
                 jd.max_attempts,
                 jd.priority,
                 jd.concurrency_key,
@@ -306,6 +347,7 @@ class PostgresJobStore:
         source_id: str | None = None,
         dataset: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[JobRun]:
         clauses: list[str] = []
         values: list[Any] = []
@@ -324,7 +366,7 @@ class PostgresJobStore:
         where = " AND ".join(clauses) if clauses else "TRUE"
         rows = self._con.execute(
             f"SELECT * FROM {_OPS_SCHEMA}.job_run WHERE {where}"
-            f" ORDER BY created_at DESC LIMIT {int(limit)}",
+            f" ORDER BY created_at DESC LIMIT {int(limit)} OFFSET {int(offset)}",
             values,
         ).fetchall()
         return [self._row_to_run(r) for r in rows]
@@ -707,6 +749,63 @@ class PostgresJobStore:
             metadata=row[4],
         )
 
+    def list_symbol_source_overrides(self) -> list[SymbolSourceOverride]:
+        rows = self._con.execute(
+            f"SELECT symbol, source_id, reason, updated_by, updated_at"
+            f" FROM {_OPS_SCHEMA}.symbol_source_override ORDER BY symbol"
+        ).fetchall()
+        return [
+            SymbolSourceOverride(
+                symbol=r[0],
+                source_id=r[1],
+                reason=r[2] or "",
+                updated_by=r[3] or "operator",
+                updated_at=r[4],
+            )
+            for r in rows
+        ]
+
+    def get_symbol_source_override(self, symbol: str) -> SymbolSourceOverride | None:
+        row = self._con.execute(
+            f"SELECT symbol, source_id, reason, updated_by, updated_at"
+            f" FROM {_OPS_SCHEMA}.symbol_source_override WHERE symbol = ?",
+            [symbol],
+        ).fetchone()
+        if not row:
+            return None
+        return SymbolSourceOverride(
+            symbol=row[0],
+            source_id=row[1],
+            reason=row[2] or "",
+            updated_by=row[3] or "operator",
+            updated_at=row[4],
+        )
+
+    def set_symbol_source_override(
+        self,
+        symbol: str,
+        source_id: str,
+        reason: str = "",
+    ) -> SymbolSourceOverride:
+        self._con.execute(
+            f"INSERT INTO {_OPS_SCHEMA}.symbol_source_override"
+            " (symbol, source_id, reason, updated_at)"
+            " VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (symbol) DO UPDATE SET"
+            "  source_id = EXCLUDED.source_id,"
+            "  reason = EXCLUDED.reason,"
+            "  updated_at = EXCLUDED.updated_at",
+            [symbol, source_id, reason, _utcnow()],
+        )
+        return SymbolSourceOverride(symbol=symbol, source_id=source_id, reason=reason)
+
+    def remove_symbol_source_override(self, symbol: str) -> bool:
+        self._con.execute(
+            f"DELETE FROM {_OPS_SCHEMA}.symbol_source_override WHERE symbol = ?",
+            [symbol],
+        )
+        return self._con.execute("SELECT changes()").fetchone()[0] > 0
+
 
 class MemoryJobStore:
     """In-memory JobStore for testing."""
@@ -718,6 +817,7 @@ class MemoryJobStore:
         self._call_ledger: list[SourceCallRecord] = []
         self._workers: dict[str, WorkerState] = {}
         self._symbols: dict[str, SymbolEntry] = {}
+        self._symbol_source_overrides: dict[str, SymbolSourceOverride] = {}
 
     # ── Job definitions ─────────────────────────────────────────────────
 
@@ -757,6 +857,7 @@ class MemoryJobStore:
         source_id: str | None = None,
         dataset: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[JobRun]:
         result = list(self._runs.values())
         if status:
@@ -768,7 +869,7 @@ class MemoryJobStore:
         if dataset:
             result = [r for r in result if r.dataset == dataset]
         result.sort(key=lambda r: r.created_at or _utcnow(), reverse=True)
-        return result[:limit]
+        return result[offset : offset + limit] if offset else result[:limit]
 
     def get_run(self, run_id: str) -> JobRun | None:
         return self._runs.get(run_id)
@@ -1074,3 +1175,24 @@ class MemoryJobStore:
 
     def get_symbol(self, symbol: str) -> SymbolEntry | None:
         return self._symbols.get(symbol)
+
+    def list_symbol_source_overrides(self) -> list[SymbolSourceOverride]:
+        return list(self._symbol_source_overrides.values())
+
+    def get_symbol_source_override(self, symbol: str) -> SymbolSourceOverride | None:
+        return self._symbol_source_overrides.get(symbol)
+
+    def set_symbol_source_override(
+        self,
+        symbol: str,
+        source_id: str,
+        reason: str = "",
+    ) -> SymbolSourceOverride:
+        override = SymbolSourceOverride(
+            symbol=symbol, source_id=source_id, reason=reason, updated_at=_utcnow()
+        )
+        self._symbol_source_overrides[symbol] = override
+        return override
+
+    def remove_symbol_source_override(self, symbol: str) -> bool:
+        return self._symbol_source_overrides.pop(symbol, None) is not None

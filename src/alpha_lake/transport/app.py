@@ -1245,6 +1245,7 @@ async def ops_runs(
     status: str | None = None,
     job_name: str | None = None,
     limit: int = 20,
+    offset: int = 0,
 ):
     """List job runs."""
     _auth(request)
@@ -1253,7 +1254,7 @@ async def ops_runs(
     con = _get_con()
     try:
         store = PostgresJobStore(con)
-        runs = store.list_runs(status=status, job_name=job_name, limit=limit)
+        runs = store.list_runs(status=status, job_name=job_name, limit=limit, offset=offset)
         return JSONResponse([asdict(r) for r in runs])
     finally:
         con.close()
