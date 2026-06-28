@@ -10,6 +10,7 @@ import duckdb
 from alpha_lake.cli_ui import fail as fail_log
 from alpha_lake.cli_ui import info, ok, warn
 from alpha_lake.config import RootConfig
+from alpha_lake.connectors.base import BudgetExhaustedError
 from alpha_lake.jobs.models import JobRun, JobStore
 from alpha_lake.jobs.scheduler import Scheduler
 
@@ -18,11 +19,15 @@ _HANDLERS: dict[str, Any] = {}
 
 def _register_handlers() -> None:
     from alpha_lake.jobs.handlers import (
+        handle_bars_bootstrap,
+        handle_bars_refresh,
         handle_indicators_compute,
         handle_source_health,
         handle_stooq_rebuild,
     )
 
+    _HANDLERS["bars_bootstrap"] = handle_bars_bootstrap
+    _HANDLERS["bars_refresh"] = handle_bars_refresh
     _HANDLERS["source_health"] = handle_source_health
     _HANDLERS["stooq_rebuild"] = handle_stooq_rebuild
     _HANDLERS["indicators_compute"] = handle_indicators_compute
@@ -108,6 +113,13 @@ class Worker:
             con = self._connect()
             result = handler(con, self._cfg, run, self._store)
             con.close()
+        except BudgetExhaustedError as exc:
+            duration = time.monotonic() - t0
+            fail_log(
+                f"Budget exhausted {run.job_name} ({run.run_id[:8]}) after {duration:.1f}s: {exc}"
+            )
+            self._store.quota_exhausted_run(run.run_id, {"error": str(exc)})
+            return
         except Exception as exc:
             duration = time.monotonic() - t0
             fail_log(f"Failed {run.job_name} ({run.run_id[:8]}) after {duration:.1f}s: {exc}")
