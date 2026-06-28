@@ -375,11 +375,11 @@ async def bars_symbols():
     """Return symbols from the registry that have data in the lake."""
     _check_enabled()
     con = _get_con()
-    from alpha_lake.flows.bootstrap import _get_ops
+    from alpha_lake.jobs.store import _resolve_ops_schema
 
-    ops = _get_ops()
-    rows = ops.execute(
-        "SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL ORDER BY symbol"
+    ops_schema = _resolve_ops_schema(con)
+    rows = con.execute(
+        f"SELECT symbol FROM {ops_schema}.symbol_registry WHERE removed_at IS NULL ORDER BY symbol"
     ).fetchall()
 
     sids: set[str] = set()
