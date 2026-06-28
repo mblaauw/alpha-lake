@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -215,16 +216,18 @@ def _backfill_stooq_bars(
         if to_insert.is_empty():
             return 0
 
-        clock_now = datetime.now(UTC)
-        run_id = f"stooq_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        available_at = datetime.fromtimestamp(os.path.getmtime(p), tz=UTC)
+        run_id = (
+            f"stooq_{datetime.fromtimestamp(os.path.getmtime(p), tz=UTC).strftime('%Y%m%d_%H%M%S')}"
+        )
         insert_rows = [
             {
                 "security_id": symbol,
                 "effective_date": r["effective_date"],
-                "available_at": clock_now,
+                "available_at": available_at,
                 "source_id": _STOOQ_SOURCE,
-                "source_published_at": clock_now,
-                "ingested_at": clock_now,
+                "source_published_at": available_at,
+                "ingested_at": available_at,
                 "validated_at": None,
                 "open": r["open"],
                 "high": r["high"],

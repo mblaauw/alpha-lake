@@ -173,6 +173,21 @@ DEFAULT_JOB_DEFS: list[JobDefinition] = [
         max_attempts=3,
         priority=50,
     ),
+    JobDefinition(
+        job_name="datasets.refresh.core",
+        job_type="dataset_refresh",
+        schedule_kind="daily_time",
+        schedule_json={
+            "timezone": "America/New_York",
+            "time": "06:00",
+        },
+        params_json={
+            "datasets": ["earnings_calendar", "insider_tx", "attention_metrics"],
+        },
+        concurrency_key="datasets",
+        max_attempts=3,
+        priority=30,
+    ),
 ]
 
 

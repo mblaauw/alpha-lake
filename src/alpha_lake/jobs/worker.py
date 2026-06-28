@@ -21,6 +21,7 @@ def _register_handlers() -> None:
     from alpha_lake.jobs.handlers import (
         handle_bars_bootstrap,
         handle_bars_refresh,
+        handle_dataset_refresh,
         handle_indicators_compute,
         handle_source_health,
         handle_stooq_rebuild,
@@ -28,6 +29,7 @@ def _register_handlers() -> None:
 
     _HANDLERS["bars_bootstrap"] = handle_bars_bootstrap
     _HANDLERS["bars_refresh"] = handle_bars_refresh
+    _HANDLERS["dataset_refresh"] = handle_dataset_refresh
     _HANDLERS["source_health"] = handle_source_health
     _HANDLERS["stooq_rebuild"] = handle_stooq_rebuild
     _HANDLERS["indicators_compute"] = handle_indicators_compute
