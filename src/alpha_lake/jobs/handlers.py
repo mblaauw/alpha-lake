@@ -241,3 +241,68 @@ def handle_bars_refresh(
         out["deferred_symbols"] = deferred
         out["budget_exhausted"] = True
     return out
+
+
+def handle_dataset_refresh(
+    con: duckdb.DuckDBPyConnection,
+    _cfg: RootConfig,
+    run: JobRun,
+    _store: JobStore,
+) -> dict[str, Any]:
+    """Refresh non-bars datasets from their primary connectors.
+
+    Reads ``run.params_json``:
+      - ``datasets``: list of dataset names (e.g. ``["earnings_calendar", "insider_tx"]``)
+      - ``source_id``: override source (default: primary source per dataset)
+      - ``from_date`` / ``to_date``: optional date bounds (ISO strings)
+    """
+    from alpha_lake.connectors.base import BudgetExhaustedError
+    from alpha_lake.flows import ingest_dataset
+
+    datasets = run.params_json.get("datasets", [])
+    source_id = run.params_json.get("source_id")
+    from_date = run.params_json.get("from_date", "")
+    to_date = run.params_json.get("to_date", "")
+
+    if not datasets:
+        return {"datasets_attempted": 0, "datasets_refreshed": 0, "total_rows": 0, "results": []}
+
+    results: list[dict[str, Any]] = []
+    total = 0
+    exhausted = False
+    deferred: list[str] = []
+
+    for ds in datasets:
+        if exhausted:
+            deferred.append(ds)
+            continue
+
+        try:
+            rows = ingest_dataset(
+                con=con,
+                dataset=ds,
+                from_date=from_date,
+                to_date=to_date,
+                source_id=source_id,
+            )
+            total += rows
+            results.append({"dataset": ds, "rows": rows})
+        except BudgetExhaustedError as exc:
+            warn(f"Budget exhausted for dataset {ds}: {exc}")
+            exhausted = True
+            deferred.append(ds)
+            results.append({"dataset": ds, "rows": 0, "reason": str(exc)})
+        except Exception as exc:
+            warn(f"Refresh failed for dataset {ds}: {exc}")
+            results.append({"dataset": ds, "rows": 0, "error": str(exc)})
+
+    out: dict[str, Any] = {
+        "datasets_attempted": len(datasets),
+        "datasets_refreshed": sum(1 for r in results if r.get("rows", 0) > 0),
+        "total_rows_written": total,
+        "results": results,
+    }
+    if deferred:
+        out["deferred_datasets"] = deferred
+        out["budget_exhausted"] = True
+    return out

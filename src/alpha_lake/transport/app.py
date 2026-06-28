@@ -1275,6 +1275,86 @@ async def ops_sources(request: Request):
         con.close()
 
 
+@app.post("/v1/ops/jobs/{job_name}/enqueue")
+async def ops_job_enqueue(request: Request, job_name: str):
+    """Enqueue a manual run for the given job definition."""
+    _auth(request)
+    from alpha_lake.jobs.scheduler import Scheduler
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        sched = Scheduler(store, get_config())
+        run = sched.enqueue_manual(job_name)
+        if run:
+            return JSONResponse({"run_id": run.run_id, "job_name": job_name})
+        return JSONResponse({"error": f"Job '{job_name}' not found or disabled"}, status_code=404)
+    finally:
+        con.close()
+
+
+@app.get("/v1/ops/symbols/{symbol}/source")
+async def ops_symbol_source_get(request: Request, symbol: str):
+    """Get the source override for a symbol."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        override = store.get_symbol_source_override(symbol)
+        if override:
+            return JSONResponse(asdict(override))
+        return JSONResponse({"symbol": symbol, "source_id": None})
+    finally:
+        con.close()
+
+
+@app.put("/v1/ops/symbols/{symbol}/source")
+async def ops_symbol_source_set(request: Request, symbol: str):
+    """Set (or clear) the source override for a symbol."""
+    _auth(request)
+    body = await request.json()
+    source_id = body.get("source_id")
+    reason = body.get("reason", "")
+    if not source_id:
+        from alpha_lake.jobs.store import PostgresJobStore
+
+        con = _get_con()
+        try:
+            store = PostgresJobStore(con)
+            store.remove_symbol_source_override(symbol)
+            return JSONResponse({"symbol": symbol, "source_id": None, "removed": True})
+        finally:
+            con.close()
+
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        override = store.set_symbol_source_override(symbol, source_id, reason=reason)
+        return JSONResponse(asdict(override))
+    finally:
+        con.close()
+
+
+@app.delete("/v1/ops/symbols/{symbol}/source")
+async def ops_symbol_source_delete(request: Request, symbol: str):
+    """Remove the source override for a symbol."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        removed = store.remove_symbol_source_override(symbol)
+        return JSONResponse({"symbol": symbol, "removed": removed})
+    finally:
+        con.close()
+
+
 # ── Dashboard API router ────────────────────────────────────────────────────
 
 from alpha_lake.transport.dashboard import router as dashboard_router  # noqa: E402

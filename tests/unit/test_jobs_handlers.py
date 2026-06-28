@@ -6,6 +6,7 @@ from alpha_lake.jobs.handlers import (
     _resolve_symbols,
     handle_bars_bootstrap,
     handle_bars_refresh,
+    handle_dataset_refresh,
     handle_source_health,
 )
 from alpha_lake.jobs.models import JobRun
@@ -116,6 +117,7 @@ def test_all_handlers_importable():
     from alpha_lake.jobs.handlers import (
         handle_bars_bootstrap,
         handle_bars_refresh,
+        handle_dataset_refresh,
         handle_indicators_compute,
         handle_source_health,
         handle_stooq_rebuild,
@@ -123,6 +125,49 @@ def test_all_handlers_importable():
 
     assert callable(handle_bars_bootstrap)
     assert callable(handle_bars_refresh)
+    assert callable(handle_dataset_refresh)
     assert callable(handle_indicators_compute)
     assert callable(handle_source_health)
     assert callable(handle_stooq_rebuild)
+
+
+# ── handle_dataset_refresh ──────────────────────────────────────────────
+
+
+def test_handle_dataset_refresh_empty():
+    """No datasets in params returns empty result."""
+    store = MemoryJobStore()
+    cfg = get_config()
+    run = JobRun(
+        run_id="test",
+        job_name="datasets.refresh.core",
+        job_type="dataset_refresh",
+        idempotency_key="test",
+        status="running",
+    )
+    con = duckdb.connect()
+    result = handle_dataset_refresh(con, cfg, run, store)
+    assert result["datasets_attempted"] == 0
+    assert result["datasets_refreshed"] == 0
+    assert result["total_rows"] == 0
+    con.close()
+
+
+def test_handle_dataset_refresh_no_connector():
+    """Datasets with no configured connector return error results."""
+    store = MemoryJobStore()
+    cfg = get_config()
+    run = JobRun(
+        run_id="test",
+        job_name="datasets.refresh.core",
+        job_type="dataset_refresh",
+        idempotency_key="test",
+        status="running",
+        params_json={"datasets": ["earnings_calendar"]},
+    )
+    con = duckdb.connect()
+    result = handle_dataset_refresh(con, cfg, run, store)
+    assert result["datasets_attempted"] == 1
+    assert result["datasets_refreshed"] == 0
+    assert result["total_rows_written"] == 0
+    con.close()
