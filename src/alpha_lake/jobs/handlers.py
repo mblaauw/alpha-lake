@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -8,10 +7,6 @@ import duckdb
 from alpha_lake.cli_ui import info, warn
 from alpha_lake.config import RootConfig
 from alpha_lake.jobs.models import JobRun, JobStore
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 def _resolve_symbols(

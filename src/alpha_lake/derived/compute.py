@@ -76,8 +76,6 @@ from alpha_lake.derived.indicators import (
     wma,
 )
 
-_TECH_SOURCE_ID = "derived"
-
 
 def compute_all_indicators(
     bars: pl.DataFrame,
@@ -265,7 +263,7 @@ def compute_all_indicators(
                     "security_id": sid,
                     "effective_date": sym_bars["effective_date"][i],
                     "available_at": as_of,
-                    "source_id": _TECH_SOURCE_ID,
+                    "source_id": "derived",
                     "sma_20": _v(_sma20, i),
                     "sma_50": _v(_sma50, i),
                     "sma_200": _v(_sma200, i),

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import signal
 import time
-from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -11,6 +10,7 @@ from alpha_lake.cli_ui import fail as fail_log
 from alpha_lake.cli_ui import info, ok, warn
 from alpha_lake.config import RootConfig
 from alpha_lake.connectors.base import BudgetExhaustedError
+from alpha_lake.jobs._shared import _utcnow
 from alpha_lake.jobs.models import JobRun, JobStore
 from alpha_lake.jobs.scheduler import Scheduler
 
@@ -33,10 +33,6 @@ def _register_handlers() -> None:
     _HANDLERS["source_health"] = handle_source_health
     _HANDLERS["stooq_rebuild"] = handle_stooq_rebuild
     _HANDLERS["indicators_compute"] = handle_indicators_compute
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 class Worker:

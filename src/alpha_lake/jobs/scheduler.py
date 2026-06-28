@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from alpha_lake.config import RootConfig
+from alpha_lake.jobs._shared import _new_id, _utcnow
 from alpha_lake.jobs.models import JobDefinition, JobRun, JobStore
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
-def _new_id() -> str:
-    return uuid.uuid4().hex
 
 
 class Scheduler:

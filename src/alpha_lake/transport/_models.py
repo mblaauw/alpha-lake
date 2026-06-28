@@ -100,12 +100,6 @@ class LeaderboardRow(BaseModel):
     trend: list[float] = []
 
 
-class MacroSeriesRow(BaseModel):
-    series_id: str = ""
-    effective_date: str = ""
-    value: float | None = None
-
-
 class TransactionRow(BaseModel):
     effective_date: str = ""
     available_at: str = ""

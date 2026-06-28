@@ -10,10 +10,6 @@ from alpha_lake.replay import load_golden_hash
 _FIXTURE_DIR = Path(__file__).parent / "replay" / "fixtures"
 
 
-def golden_dir() -> Path:
-    return _FIXTURE_DIR
-
-
 def golden_hash() -> str:
     return load_golden_hash(_FIXTURE_DIR)
 

@@ -18,7 +18,6 @@ _BOOTSTRAP_DIR = Path("/data/bootstrap")
 _STOCKS_PARQUET = _BOOTSTRAP_DIR / "us_stocks.parquet"
 _ETFS_PARQUET = _BOOTSTRAP_DIR / "us_etfs.parquet"
 _STOOQ_SOURCE = "stooq"
-_STOOQ_SOURCE_ID = "stooq"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -266,96 +265,9 @@ def _compute_for_symbol(con: duckdb.DuckDBPyConnection, symbol: str) -> None:
     compute_indicators(con, as_of=get_clock().now(), security_ids=[symbol])
 
 
-def _sanity_check(
-    con: duckdb.DuckDBPyConnection,
-    bootstrap: pl.DataFrame,
-) -> list[str]:
-    """Run sanity checks comparing bootstrap data against existing lake bars.
-
-    Returns a list of warning messages (empty = all checks passed).
-    """
-    warnings: list[str] = []
-    reference = ["AAPL", "MSFT", "SPY"]
-
-    for sym in reference:
-        stooq = bootstrap.filter(pl.col("symbol") == sym).sort("effective_date")
-        if stooq.is_empty():
-            warnings.append(f"{sym}: no bootstrap data")
-            continue
-
-        lake_rows = con.execute(
-            "SELECT effective_date, close FROM lake_catalog.lake_bars"
-            " WHERE security_id = ? ORDER BY effective_date DESC LIMIT 10",
-            [sym],
-        ).fetchall()
-        if not lake_rows:
-            warnings.append(f"{sym}: no lake data to compare")
-            continue
-
-        for ld, lc in lake_rows:
-            stooq_row = stooq.filter(pl.col("effective_date") == ld)
-            if stooq_row.is_empty():
-                warnings.append(f"{sym}: lake date {ld} missing from bootstrap — gap")
-                continue
-            sc = stooq_row["close"][0]
-            if sc == 0:
-                continue
-            ratio = abs(lc - sc) / sc
-            if ratio > 0.05:
-                warnings.append(
-                    f"{sym}: close mismatch on {ld}: lake={lc:.2f} stooq={sc:.2f} "
-                    f"({ratio * 100:.1f}% diff)"
-                )
-
-    if not warnings:
-        print(f"     Sanity OK — {len(reference)} reference symbols checked")
-    return warnings
-
-
 # ═══════════════════════════════════════════════════════════════════════
 #  Bootstrap bars (legacy + startup entrypoint)
 # ═══════════════════════════════════════════════════════════════════════
-
-
-def bootstrap_bars(con: duckdb.DuckDBPyConnection) -> int:
-    """Backfill historical daily bars from STOOQ Parquet.
-
-    Rebuilds Parquet from zip, then reads both stocks + etfs files.
-    """
-    _BOOTSTRAP_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Find Parquet files
-    parquet_paths = [p for p in (_STOCKS_PARQUET, _ETFS_PARQUET) if p.exists()]
-    if not parquet_paths:
-        # Try to rebuild
-        symbols = rebuild_parquet()
-        if not symbols:
-            print("     No STOOQ data available")
-            return 0
-        parquet_paths = [p for p in (_STOCKS_PARQUET, _ETFS_PARQUET) if p.exists()]
-
-    total = 0
-    for path in parquet_paths:
-        print(f"     Reading {path}...")
-        df = pl.read_parquet(str(path))
-        df = df.rename({"symbol": "security_id"})
-        print(f"     Loaded {len(df)} rows ({df['security_id'].n_unique()} symbols)")
-
-        warnings = _sanity_check(con, df)
-        for w in warnings:
-            print(f"     ⚠ {w}")
-        if any("mismatch" in w for w in warnings):
-            print("     ❌ Sanity check FAILED — aborting bootstrap")
-            return total if total > 0 else 0
-
-        for sym in sorted(df["security_id"].unique()):
-            inserted = _backfill_stooq_bars(con, sym)
-            if inserted:
-                print(f"     {sym}: +{inserted} rows")
-                total += inserted
-
-    print(f"     Bootstrap complete: {total} new bar rows")
-    return total
 
 
 def ensure_registry(con: duckdb.DuckDBPyConnection) -> int:

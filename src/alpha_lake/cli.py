@@ -1,7 +1,10 @@
+import contextlib
 import os
 import socket
 import sys
+from collections.abc import Iterator
 
+import duckdb
 import typer
 
 from alpha_lake.catalog import bootstrap as bootstrap_catalog
@@ -28,6 +31,21 @@ from alpha_lake.flows import (
     ingest_bars,
     reparse_bars,
 )
+
+
+@contextlib.contextmanager
+def _connect(
+    require_infra: bool = True,
+) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open a catalog connection (optionally requiring infra) and close on exit."""
+    if require_infra:
+        _require_infra(get_config())
+    con = connect(get_config())
+    try:
+        yield con
+    finally:
+        con.close()
+
 
 app = typer.Typer(name="alpha-lake")
 
@@ -81,19 +99,19 @@ def ingest(
     source: str = typer.Option(None, help="Source ID"),
 ):
     """Ingest market data for a security."""
-    _require_infra(get_config())
-    con = connect(get_config())
-    ids = [security_id]
-    with progress() as p:
-        tid = p.add_task("Ingesting…", total=1)
+    with _connect() as con:
+        ids = [security_id]
+        with progress() as p:
+            tid = p.add_task("Ingesting…", total=1)
 
-        def _on_step(cur: int, total: int | None, label: str) -> None:
-            p.update(tid, completed=cur, total=total, description=label)
+            def _on_step(cur: int, total: int | None, label: str) -> None:
+                p.update(tid, completed=cur, total=total, description=label)
 
-        count = ingest_bars(con, ids, from_date, to_date, source, on_step=_on_step)
-        p.update(tid, completed=1)
-    panel("Ingest", f"Ingested [bold]{count}[/] bars for [bold]{security_id}[/].", style="green")
-    con.close()
+            count = ingest_bars(con, ids, from_date, to_date, source, on_step=_on_step)
+            p.update(tid, completed=1)
+        panel(
+            "Ingest", f"Ingested [bold]{count}[/] bars for [bold]{security_id}[/].", style="green"
+        )
 
 
 @app.command(rich_help_panel="Data")
@@ -104,30 +122,28 @@ def backfill(
     source: str = typer.Option(None, help="Source ID"),
 ):
     """Backfill bars for a date range."""
-    _require_infra(get_config())
     from datetime import date
 
     from alpha_lake.calendar_ import trading_days_in_range
 
-    con = connect(get_config())
-    ids = [security_id]
-    sd = date.fromisoformat(start)
-    ed = date.fromisoformat(end)
-    est_total = max(1, len(list(trading_days_in_range(sd, ed))))
-    with progress() as p:
-        tid = p.add_task(f"Backfilling {security_id}…", total=est_total)
+    with _connect() as con:
+        ids = [security_id]
+        sd = date.fromisoformat(start)
+        ed = date.fromisoformat(end)
+        est_total = max(1, len(list(trading_days_in_range(sd, ed))))
+        with progress() as p:
+            tid = p.add_task(f"Backfilling {security_id}…", total=est_total)
 
-        def _on_step(cur: int, total: int | None, label: str) -> None:
-            p.update(tid, completed=cur, total=total or est_total, description=label)
+            def _on_step(cur: int, total: int | None, label: str) -> None:
+                p.update(tid, completed=cur, total=total or est_total, description=label)
 
-        count = backfill_bars(con, ids, sd, ed, source, on_step=_on_step)
-        p.update(tid, completed=est_total)
-    panel(
-        "Backfill",
-        f"Backfilled [bold]{count}[/] bars for [bold]{security_id}[/].",
-        style="green",
-    )
-    con.close()
+            count = backfill_bars(con, ids, sd, ed, source, on_step=_on_step)
+            p.update(tid, completed=est_total)
+        panel(
+            "Backfill",
+            f"Backfilled [bold]{count}[/] bars for [bold]{security_id}[/].",
+            style="green",
+        )
 
 
 @app.command(rich_help_panel="Data")
@@ -138,28 +154,26 @@ def reparse(
     ),
 ):
     """Reparse raw archive data for a security."""
-    _require_infra(get_config())
     from datetime import date
 
-    con = connect(get_config())
-    ids = [security_id]
-    ed = date.fromisoformat(effective_date) if effective_date else None
-    with progress() as p:
-        tid = p.add_task(f"Reparsing {security_id}…", total=None)
+    with _connect() as con:
+        ids = [security_id]
+        ed = date.fromisoformat(effective_date) if effective_date else None
+        with progress() as p:
+            tid = p.add_task(f"Reparsing {security_id}…", total=None)
 
-        def _on_step(cur: int, total: int | None, label: str) -> None:
-            if total is not None:
-                p.update(tid, total=total)
-            p.update(tid, completed=cur, description=label)
+            def _on_step(cur: int, total: int | None, label: str) -> None:
+                if total is not None:
+                    p.update(tid, total=total)
+                p.update(tid, completed=cur, description=label)
 
-        count = reparse_bars(con, ids, ed, on_step=_on_step)
-        p.update(tid, completed=count or 0, total=count or 0)
-    panel(
-        "Reparse",
-        f"Reparsed [bold]{count}[/] rows for [bold]{security_id}[/].",
-        style="green",
-    )
-    con.close()
+            count = reparse_bars(con, ids, ed, on_step=_on_step)
+            p.update(tid, completed=count or 0, total=count or 0)
+        panel(
+            "Reparse",
+            f"Reparsed [bold]{count}[/] rows for [bold]{security_id}[/].",
+            style="green",
+        )
 
 
 @app.command(name="dataset", rich_help_panel="Data")
@@ -175,31 +189,28 @@ def cli_ingest_dataset(
     ),
 ):
     """Ingest a dataset from its connector (macro_series, news, etc.)."""
-    _require_infra(get_config())
-    con = connect(get_config())
     from alpha_lake.flows import ingest_dataset as _ingest
 
-    try:
-        count = _ingest(
-            con,
-            dataset=dataset,
-            series_id=series_id,
-            security_id=security_id,
-            from_date=from_date,
-            to_date=to_date,
-            source_id=source,
-            cohort=cohort,
-        )
-        panel(
-            "Ingest",
-            f"Ingested [bold]{count}[/] rows for dataset [bold]{dataset}[/].",
-            style="green",
-        )
-    except ValueError as e:
-        fail(str(e))
-        raise typer.Exit(code=1) from e
-    finally:
-        con.close()
+    with _connect() as con:
+        try:
+            count = _ingest(
+                con,
+                dataset=dataset,
+                series_id=series_id,
+                security_id=security_id,
+                from_date=from_date,
+                to_date=to_date,
+                source_id=source,
+                cohort=cohort,
+            )
+            panel(
+                "Ingest",
+                f"Ingested [bold]{count}[/] rows for dataset [bold]{dataset}[/].",
+                style="green",
+            )
+        except ValueError as e:
+            fail(str(e))
+            raise typer.Exit(code=1) from e
 
 
 @app.command(name="compute-indicators", rich_help_panel="Data")
@@ -213,42 +224,40 @@ def cli_compute_indicators(
     Uses wall-clock ``as_of`` because this is an interactive command, not a
     canonical pipeline step (invariant I7 exception for non-replay paths).
     """
-    _require_infra(get_config())
-    con = connect(get_config())
-    ids = [security_id] if security_id else None
-    from alpha_lake.clock import get_clock
+    with _connect() as con:
+        ids = [security_id] if security_id else None
+        from alpha_lake.clock import get_clock
 
-    with progress() as p:
-        tid = p.add_task("Computing indicators…", total=1)
+        with progress() as p:
+            tid = p.add_task("Computing indicators…", total=1)
 
-        def _on_step(cur: int, total: int | None, label: str) -> None:
-            p.update(tid, completed=cur, total=total or 1, description=label)
+            def _on_step(cur: int, total: int | None, label: str) -> None:
+                p.update(tid, completed=cur, total=total or 1, description=label)
 
-        count = compute_indicators(con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step)
-        p.update(tid, completed=1)
-    panel(
-        "Compute Indicators",
-        f"Wrote [bold]{count}[/] indicator rows.",
-        style="green",
-    )
-    con.close()
+            count = compute_indicators(
+                con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step
+            )
+            p.update(tid, completed=1)
+        panel(
+            "Compute Indicators",
+            f"Wrote [bold]{count}[/] indicator rows.",
+            style="green",
+        )
 
 
 @app.command(rich_help_panel="Data")
 def compact(table: str = typer.Option(..., help="Table to compact")):
     """Compact a canonical table by removing duplicate versions."""
-    _require_infra(get_config())
-    con = connect(get_config())
-    with spinner(f"Compacting {table}…"):
-        count = compact_dataset(con, table)
-    ok(f"Compacted [bold]{table}[/]: [bold]{count}[/] rows remaining.")
-    con.close()
+    with _connect() as con:
+        with spinner(f"Compacting {table}…"):
+            count = compact_dataset(con, table)
+        ok(f"Compacted [bold]{table}[/]: [bold]{count}[/] rows remaining.")
 
 
 @app.command(rich_help_panel="Validation")
 def validate():
     """Validate dataset integrity and freshness (not yet implemented)."""
-    warn("validate: not yet implemented — use [bold]just test[/] for validation checks.")
+    raise NotImplementedError("not yet implemented — see just test / just replay for validation")
 
 
 @app.command(rich_help_panel="Validation")
@@ -258,7 +267,7 @@ def gap_fill(
     end: str = typer.Option(..., help="End date (YYYY-MM-DD)"),
 ):
     """Gap-fill missing dates for a security (not yet implemented)."""
-    warn(f"gap-fill: not yet implemented for [bold]{security_id}[/] {start}–{end}.")
+    raise NotImplementedError("not yet implemented — see just test / just replay for validation")
 
 
 @app.command(rich_help_panel="Validation")
@@ -266,7 +275,7 @@ def rebuild(
     table: str = typer.Option(..., help="Table to rebuild"),
 ):
     """Rebuild a canonical table from raw archives (not yet implemented)."""
-    warn(f"rebuild: not yet implemented for [bold]{table}[/].")
+    raise NotImplementedError("not yet implemented — see just test / just replay for validation")
 
 
 @app.command(rich_help_panel="Utilities")
@@ -321,38 +330,39 @@ def health():
     from alpha_lake.catalog import catalog_health, list_datasets
 
     try:
-        con = connect(cfg)
-        hlth = catalog_health(con)
-        checks["catalog"] = hlth
-        s = hlth["snapshots"]
-        s_id = hlth["latest_snapshot_id"]
-        info(f"Snapshots: [bold]{s}[/], latest: [bold]{s_id}[/]")
-        ds_rows = []
-        for ds in list_datasets(con):
-            ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
-            checks.setdefault("datasets_list", []).append(ds)
-        if ds_rows:
-            table("Catalog Tables", ["Dataset", "Schema", "Rows"], ds_rows)
+        with _connect(require_infra=False) as con:
+            hlth = catalog_health(con)
+            checks["catalog"] = hlth
+            s = hlth["snapshots"]
+            s_id = hlth["latest_snapshot_id"]
+            info(f"Snapshots: [bold]{s}[/], latest: [bold]{s_id}[/]")
+            ds_rows = []
+            for ds in list_datasets(con):
+                ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
+                checks.setdefault("datasets_list", []).append(ds)
+            if ds_rows:
+                table("Catalog Tables", ["Dataset", "Schema", "Rows"], ds_rows)
 
-        # Per-source last ingestion timestamps
-        from alpha_lake.canonical import DATASETS
+            # Per-source last ingestion timestamps
+            from alpha_lake.canonical import DATASETS
 
-        ingest_rows = []
-        for dname, ds in sorted(DATASETS.items()):
-            table_name = ds.table
-            try:
-                r = con.execute(
-                    f"SELECT source_id, MAX(available_at)::varchar FROM {table_name} "
-                    f"WHERE available_at IS NOT NULL GROUP BY source_id ORDER BY source_id"
-                ).fetchall()
-                for src_id, last_at in r:
-                    ingest_rows.append([dname, src_id, last_at[:19] if last_at else "-"])
-                    checks.setdefault("last_ingestion", {}).setdefault(src_id, {})[dname] = last_at
-            except Exception:
-                pass
-        if ingest_rows:
-            table("Last Ingestion", ["Dataset", "Source", "Last Ingested At"], ingest_rows)
-        con.close()
+            ingest_rows = []
+            for dname, ds in sorted(DATASETS.items()):
+                table_name = ds.table
+                try:
+                    r = con.execute(
+                        f"SELECT source_id, MAX(available_at)::varchar FROM {table_name} "
+                        f"WHERE available_at IS NOT NULL GROUP BY source_id ORDER BY source_id"
+                    ).fetchall()
+                    for src_id, last_at in r:
+                        ingest_rows.append([dname, src_id, last_at[:19] if last_at else "-"])
+                        checks.setdefault("last_ingestion", {}).setdefault(src_id, {})[dname] = (
+                            last_at
+                        )
+                except Exception:
+                    pass
+            if ingest_rows:
+                table("Last Ingestion", ["Dataset", "Source", "Last Ingested At"], ingest_rows)
     except Exception:
         pass
 
@@ -415,28 +425,30 @@ def catalog(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show snapshot details"),
 ):
     """List datasets and their status."""
-    _require_infra(get_config())
     from alpha_lake.catalog import catalog_health, list_datasets, list_snapshots
 
-    con = connect(get_config())
-    hlth = catalog_health(con)
-    info(f"Snapshots: [bold]{hlth['snapshots']}[/], latest: [bold]{hlth['latest_snapshot_id']}[/]")
-
-    ds_rows = []
-    for ds in list_datasets(con):
-        ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
-    if ds_rows:
-        table("Datasets", ["Dataset", "Schema", "Rows"], ds_rows)
-
-    if verbose:
-        snap_rows = []
-        for snap in list_snapshots(con):
-            snap_rows.append(
-                [f"#{snap['snapshot_id']}", str(snap["timestamp"]), str(snap["changes"])]
+    with _connect() as con:
+        hlth = catalog_health(con)
+        info(
+            "Snapshots: [bold]{}[/], latest: [bold]{}[/]".format(
+                hlth["snapshots"], hlth["latest_snapshot_id"]
             )
-        if snap_rows:
-            table("Snapshots", ["Snapshot", "Timestamp", "Changes"], snap_rows)
-    con.close()
+        )
+
+        ds_rows = []
+        for ds in list_datasets(con):
+            ds_rows.append([ds["dataset"], str(ds["schema_version"]), str(ds["rows"])])
+        if ds_rows:
+            table("Datasets", ["Dataset", "Schema", "Rows"], ds_rows)
+
+        if verbose:
+            snap_rows = []
+            for snap in list_snapshots(con):
+                snap_rows.append(
+                    [f"#{snap['snapshot_id']}", str(snap["timestamp"]), str(snap["changes"])]
+                )
+            if snap_rows:
+                table("Snapshots", ["Snapshot", "Timestamp", "Changes"], snap_rows)
 
 
 @app.command(name="freeze-fixtures", rich_help_panel="System")
@@ -457,18 +469,16 @@ def cli_bootstrap_bars():
     from the zip archive, seeds the _symbol_registry, and backfills any
     missing bar rows.
     """
-    _require_infra(get_config())
-    con = connect(get_config())
     from alpha_lake.flows.bootstrap import ensure_registry
 
-    count = 0
-    with spinner("Rebuilding STOOQ Parquet & backfilling…"):
-        count = ensure_registry(con)
-    if count:
-        ok(f"Bootstrapped [bold]{count}[/] historical bar rows.")
-    else:
-        info("No new historical bars to bootstrap.")
-    con.close()
+    with _connect() as con:
+        count = 0
+        with spinner("Rebuilding STOOQ Parquet & backfilling…"):
+            count = ensure_registry(con)
+        if count:
+            ok(f"Bootstrapped [bold]{count}[/] historical bar rows.")
+        else:
+            info("No new historical bars to bootstrap.")
 
 
 # ── Operations Commands ───────────────────────────────────────────────────
@@ -480,18 +490,16 @@ def worker(
     once: bool = typer.Option(False, "--once", help="Run once then exit"),
 ):
     """Start the data-job worker process."""
-    _require_infra(get_config())
     from alpha_lake.jobs.scheduler import Scheduler
     from alpha_lake.jobs.store import PostgresJobStore
     from alpha_lake.jobs.worker import Worker
 
     cfg = get_config()
-    con = connect(cfg)
-    store = PostgresJobStore(con)
-    sched = Scheduler(store, cfg)
-    w = Worker(store, sched, cfg, poll_interval=poll_interval, once=once)
-    w.run()
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        sched = Scheduler(store, cfg)
+        w = Worker(store, sched, cfg, poll_interval=poll_interval, once=once)
+        w.run()
 
 
 _ops_app = typer.Typer(help="Manage data-job definitions and runs")
@@ -500,22 +508,19 @@ _ops_app = typer.Typer(help="Manage data-job definitions and runs")
 @_ops_app.command("list")
 def ops_jobs_list():
     """List configured job definitions."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    jobs = store.list_job_defs()
-    if not jobs:
-        info("No job definitions configured.")
-        con.close()
-        return
-    rows = []
-    for j in jobs:
-        status = "✓ active" if j.enabled and not j.hold else "held" if j.hold else "disabled"
-        rows.append([j.job_name, j.job_type, j.schedule_kind, status, str(j.priority)])
-    table("Jobs", ["Name", "Type", "Schedule", "Status", "Priority"], rows)
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        jobs = store.list_job_defs()
+        if not jobs:
+            info("No job definitions configured.")
+            return
+        rows = []
+        for j in jobs:
+            status = "✓ active" if j.enabled and not j.hold else "held" if j.hold else "disabled"
+            rows.append([j.job_name, j.job_type, j.schedule_kind, status, str(j.priority)])
+        table("Jobs", ["Name", "Type", "Schedule", "Status", "Priority"], rows)
 
 
 @_ops_app.command("runs")
@@ -526,30 +531,27 @@ def ops_jobs_runs(
     offset: int = typer.Option(0, "--offset", help="Row offset for pagination"),
 ):
     """List recent job runs."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    runs = store.list_runs(status=status, job_name=job_name, limit=limit, offset=offset)
-    if not runs:
-        info("No job runs found.")
-        con.close()
-        return
-    rows = []
-    for r in runs:
-        rows.append(
-            [
-                r.run_id[:8],
-                r.job_name,
-                r.status,
-                r.attempt,
-                str(r.scheduled_at)[:19] if r.scheduled_at else "-",
-                str(r.finished_at)[:19] if r.finished_at else "-",
-            ]
-        )
-    table("Runs", ["ID", "Job", "Status", "Attempt", "Scheduled", "Finished"], rows)
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        runs = store.list_runs(status=status, job_name=job_name, limit=limit, offset=offset)
+        if not runs:
+            info("No job runs found.")
+            return
+        rows = []
+        for r in runs:
+            rows.append(
+                [
+                    r.run_id[:8],
+                    r.job_name,
+                    r.status,
+                    r.attempt,
+                    str(r.scheduled_at)[:19] if r.scheduled_at else "-",
+                    str(r.finished_at)[:19] if r.finished_at else "-",
+                ]
+            )
+        table("Runs", ["ID", "Job", "Status", "Attempt", "Scheduled", "Finished"], rows)
 
 
 @_ops_app.command("enqueue")
@@ -557,19 +559,17 @@ def ops_jobs_enqueue(
     job_name: str = typer.Option(..., "--job", help="Job name to enqueue"),
 ):
     """Enqueue a manual run for the given job definition."""
-    _require_infra(get_config())
     from alpha_lake.jobs.scheduler import Scheduler
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    sched = Scheduler(store, get_config())
-    run = sched.enqueue_manual(job_name)
-    if run:
-        ok(f"Enqueued [bold]{job_name}[/] as run [bold]{run.run_id[:8]}[/].")
-    else:
-        warn(f"Job [bold]{job_name}[/] not found or disabled.")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        sched = Scheduler(store, get_config())
+        run = sched.enqueue_manual(job_name)
+        if run:
+            ok(f"Enqueued [bold]{job_name}[/] as run [bold]{run.run_id[:8]}[/].")
+        else:
+            warn(f"Job [bold]{job_name}[/] not found or disabled.")
 
 
 @_ops_app.command("hold")
@@ -578,14 +578,12 @@ def ops_jobs_hold(
     _reason: str = typer.Option("", "--reason", help="Reason for hold"),
 ):
     """Hold a job definition (prevents scheduling)."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    store.update_job_def(job_name, hold=True)
-    ok(f"Held [bold]{job_name}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        store.update_job_def(job_name, hold=True)
+        ok(f"Held [bold]{job_name}[/].")
 
 
 @_ops_app.command("resume")
@@ -593,14 +591,12 @@ def ops_jobs_resume(
     job_name: str = typer.Option(..., "--job", help="Job name"),
 ):
     """Resume a held job definition."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    store.update_job_def(job_name, hold=False)
-    ok(f"Resumed [bold]{job_name}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        store.update_job_def(job_name, hold=False)
+        ok(f"Resumed [bold]{job_name}[/].")
 
 
 _sources_app = typer.Typer(help="Manage source rate limits and holds")
@@ -609,37 +605,34 @@ _sources_app = typer.Typer(help="Manage source rate limits and holds")
 @_sources_app.command("list")
 def ops_sources_list():
     """List configured sources with limits and overrides."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    sources = store.list_sources()
-    if not sources:
-        info("No sources configured.")
-        con.close()
-        return
-    rows = []
-    for s in sources:
-        hold_mark = "held" if s.hold else ""
-        rows.append(
-            [
-                s.source_id,
-                "✓" if s.has_key else "✗",
-                str(s.effective_rate_limit_per_sec) if s.effective_rate_limit_per_sec else "-",
-                str(s.effective_rate_limit_per_min) if s.effective_rate_limit_per_min else "-",
-                str(s.effective_rate_limit_per_day) if s.effective_rate_limit_per_day else "-",
-                hold_mark,
-                str(s.calls_last_min),
-                str(s.calls_last_day),
-            ]
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        sources = store.list_sources()
+        if not sources:
+            info("No sources configured.")
+            return
+        rows = []
+        for s in sources:
+            hold_mark = "held" if s.hold else ""
+            rows.append(
+                [
+                    s.source_id,
+                    "✓" if s.has_key else "✗",
+                    str(s.effective_rate_limit_per_sec) if s.effective_rate_limit_per_sec else "-",
+                    str(s.effective_rate_limit_per_min) if s.effective_rate_limit_per_min else "-",
+                    str(s.effective_rate_limit_per_day) if s.effective_rate_limit_per_day else "-",
+                    hold_mark,
+                    str(s.calls_last_min),
+                    str(s.calls_last_day),
+                ]
+            )
+        table(
+            "Sources",
+            ["Source", "Key", "/sec", "/min", "/day", "Hold", "1m calls", "24h calls"],
+            rows,
         )
-    table(
-        "Sources",
-        ["Source", "Key", "/sec", "/min", "/day", "Hold", "1m calls", "24h calls"],
-        rows,
-    )
-    con.close()
 
 
 @_sources_app.command("hold")
@@ -648,14 +641,12 @@ def ops_sources_hold(
     reason: str = typer.Option("", "--reason", help="Reason for hold"),
 ):
     """Hold a source (prevents jobs using it from starting)."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    store.set_source_hold(source_id, hold=True, reason=reason)
-    ok(f"Held source [bold]{source_id}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        store.set_source_hold(source_id, hold=True, reason=reason)
+        ok(f"Held source [bold]{source_id}[/].")
 
 
 @_sources_app.command("resume")
@@ -663,14 +654,12 @@ def ops_sources_resume(
     source_id: str = typer.Option(..., "--source", help="Source ID"),
 ):
     """Resume a held source."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    store.set_source_hold(source_id, hold=False)
-    ok(f"Resumed source [bold]{source_id}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        store.set_source_hold(source_id, hold=False)
+        ok(f"Resumed source [bold]{source_id}[/].")
 
 
 @_sources_app.command("set-limit")
@@ -682,21 +671,18 @@ def ops_sources_set_limit(
     reason: str = typer.Option("", "--reason", help="Reason"),
 ):
     """Override rate limits for a source."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    try:
-        store.set_rate_limit(
-            source_id, per_sec=per_sec, per_min=per_min, per_day=per_day, reason=reason
-        )
-        ok(f"Updated limits for [bold]{source_id}[/].")
-    except ValueError as e:
-        fail(str(e))
-        raise typer.Exit(code=1) from e
-    finally:
-        con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        try:
+            store.set_rate_limit(
+                source_id, per_sec=per_sec, per_min=per_min, per_day=per_day, reason=reason
+            )
+            ok(f"Updated limits for [bold]{source_id}[/].")
+        except ValueError as e:
+            fail(str(e))
+            raise typer.Exit(code=1) from e
 
 
 app.add_typer(_ops_app, name="jobs")
@@ -708,21 +694,18 @@ _symbols_app = typer.Typer(help="Manage symbols and symbol-source overrides")
 @_symbols_app.command("list")
 def ops_symbols_list():
     """List symbols in the registry."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    symbols = store.list_symbols(active_only=True)
-    if not symbols:
-        info("No symbols in registry.")
-        con.close()
-        return
-    rows = []
-    for s in symbols:
-        rows.append([s.symbol, str(s.added_at)[:19] if s.added_at else "-", s.added_by])
-    table("Symbols", ["Symbol", "Added", "Source"], rows)
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        symbols = store.list_symbols(active_only=True)
+        if not symbols:
+            info("No symbols in registry.")
+            return
+        rows = []
+        for s in symbols:
+            rows.append([s.symbol, str(s.added_at)[:19] if s.added_at else "-", s.added_by])
+        table("Symbols", ["Symbol", "Added", "Source"], rows)
 
 
 @_symbols_app.command("source-set")
@@ -732,36 +715,31 @@ def ops_symbol_source_set(
     reason: str = typer.Option("", "--reason", help="Reason for override"),
 ):
     """Pin a symbol to a specific source."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    store.set_symbol_source_override(symbol, source_id, reason=reason)
-    ok(f"Symbol [bold]{symbol}[/] → source [bold]{source_id}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        store.set_symbol_source_override(symbol, source_id, reason=reason)
+        ok(f"Symbol [bold]{symbol}[/] → source [bold]{source_id}[/].")
 
 
 @_symbols_app.command("source-list")
 def ops_symbol_source_list():
     """List symbol-source overrides."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    overrides = store.list_symbol_source_overrides()
-    if not overrides:
-        info("No symbol-source overrides configured.")
-        con.close()
-        return
-    rows = []
-    for o in overrides:
-        rows.append(
-            [o.symbol, o.source_id, o.reason, str(o.updated_at)[:19] if o.updated_at else "-"]
-        )
-    table("Symbol Source Overrides", ["Symbol", "Source", "Reason", "Updated"], rows)
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        overrides = store.list_symbol_source_overrides()
+        if not overrides:
+            info("No symbol-source overrides configured.")
+            return
+        rows = []
+        for o in overrides:
+            rows.append(
+                [o.symbol, o.source_id, o.reason, str(o.updated_at)[:19] if o.updated_at else "-"]
+            )
+        table("Symbol Source Overrides", ["Symbol", "Source", "Reason", "Updated"], rows)
 
 
 @_symbols_app.command("source-remove")
@@ -769,16 +747,14 @@ def ops_symbol_source_remove(
     symbol: str = typer.Option(..., "--symbol", help="Symbol / security ID"),
 ):
     """Remove a symbol-source override."""
-    _require_infra(get_config())
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = connect(get_config())
-    store = PostgresJobStore(con)
-    if store.remove_symbol_source_override(symbol):
-        ok(f"Removed source override for [bold]{symbol}[/].")
-    else:
-        warn(f"No source override found for [bold]{symbol}[/].")
-    con.close()
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        if store.remove_symbol_source_override(symbol):
+            ok(f"Removed source override for [bold]{symbol}[/].")
+        else:
+            warn(f"No source override found for [bold]{symbol}[/].")
 
 
 app.add_typer(_symbols_app, name="symbols")

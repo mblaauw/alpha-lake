@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import polars as pl
-
 from alpha_lake.derived.fundamental_metrics import (
     compute_estimate_metrics,
     compute_fundamental_period_metrics,
@@ -30,8 +28,3 @@ __all__ = [
     "vwap",
     "returns",
 ]
-
-
-def returns(df: pl.DataFrame, period: int = 1) -> pl.Series:
-    """Simple period-over-period returns: close / close.shift(period) - 1."""
-    return df["close"] / df["close"].shift(period) - 1

@@ -424,23 +424,7 @@ def eom(high: pl.Series, low: pl.Series, volume: pl.Series, window: int = 14) ->
 
 def obv_slope(close: pl.Series, volume: pl.Series, window: int = 20) -> pl.Series:
     """OBV slope over N periods (simple linear regression slope)."""
-    obv_series = obv(close, volume)
-    n = float(window)
-    x_mean = (window - 1.0) / 2.0
-    x_ss = sum((i - x_mean) ** 2 for i in range(window))
-    out: list[float | None] = []
-    for i in range(len(obv_series)):
-        if i < window - 1:
-            out.append(None)
-        else:
-            y_vals = [
-                float(obv_series[j]) if obv_series[j] is not None else 0.0
-                for j in range(i - window + 1, i + 1)
-            ]
-            y_mean = sum(y_vals) / n
-            slope = sum((j - x_mean) * (y - y_mean) for j, y in enumerate(y_vals)) / x_ss
-            out.append(slope)
-    return pl.Series(out)
+    return _linreg_slope(obv(close, volume), window)
 
 
 def volume_spike(

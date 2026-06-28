@@ -11,7 +11,7 @@ import hashlib
 import hmac
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Request  # type: ignore[unresolved-i
 from fastapi.responses import FileResponse, JSONResponse  # type: ignore[unresolved-import]
 from fastapi.staticfiles import StaticFiles  # type: ignore[unresolved-import]
 
-from alpha_lake.calendar_ import is_trading_day, previous_trading_day
+from alpha_lake.calendar_ import is_trading_day
 from alpha_lake.catalog import catalog_health
 from alpha_lake.config import get_config, load_config
 from alpha_lake.interpretation.fundamentals_glossary import glossary_to_json
@@ -34,8 +34,6 @@ from alpha_lake.transport._models import (
 )
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
-    _MAX_LOOKBACK_DAYS,
-    _aware,
     _compute_and_serialize_indicators,
     _compute_indicators_from_df,
     _dataset_health,
@@ -47,7 +45,10 @@ from alpha_lake.transport._shared import (
     _parse_fields,
     _parse_indicators,
     _pl_to_dicts,
+    _resolve_as_of,
+    _resolve_or_raise,
     _strip_audit_cols,
+    _validate_lookback,
     _validate_price_mode,
 )
 
@@ -160,14 +161,11 @@ async def bars(
     if as_of is None:
         as_of = _now()
 
-    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
+    _validate_lookback(start, end)
 
     _validate_price_mode(price_mode)
     con = _get_con()
-    sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    sec_id = _resolve_or_raise(con, symbol, as_of.date())
     result = _fetch_bars(
         con,
         sec_id,
@@ -200,13 +198,10 @@ async def bars_indicators(
     if as_of is None:
         as_of = _now()
 
-    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
+    _validate_lookback(start, end)
 
     con = _get_con()
-    sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    sec_id = _resolve_or_raise(con, symbol, as_of.date())
 
     parsed = _parse_indicators(indicators)
     for name, _args in parsed:
@@ -249,9 +244,7 @@ async def fundamentals_metrics(
 
     _validate_price_mode(price_mode)
     con = _get_con()
-    sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    sec_id = _resolve_or_raise(con, symbol, as_of.date())
 
     cat_list = [c.strip() for c in categories.split(",") if c.strip()] if categories else None
     mid_list = [m.strip() for m in metric_ids.split(",") if m.strip()] if metric_ids else None
@@ -534,9 +527,7 @@ async def insider_transactions(
     if as_of is None:
         as_of = _now()
     con = _get_con()
-    sec_id = resolve_security(con, symbol, as_of=as_of.date())
-    if sec_id is None:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    sec_id = _resolve_or_raise(con, symbol, as_of.date())
     rows = _fetch_dataset(
         con,
         "insider_tx",
@@ -769,15 +760,7 @@ async def authenticated_symbol_readouts(
     snapshot_id: str | None = None,
 ):
     _auth(request)
-    if as_of is None and not latest:
-        raise HTTPException(
-            422, "as_of is required for research reads. Use latest=true for convenience."
-        )
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if as_of is None
-        else _aware(as_of)
-    )
+    as_of = _resolve_as_of(as_of, latest)
     con = _get_con()
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -798,15 +781,7 @@ async def batch_readouts(request: Request, body: BatchReadoutRequest):
     _auth(request)
     if not body.symbols:
         raise HTTPException(422, "At least one symbol is required")
-    if body.as_of is None and not body.latest:
-        raise HTTPException(
-            422, "as_of is required for research reads. Use latest=true for convenience."
-        )
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if body.as_of is None
-        else _aware(body.as_of)
-    )
+    as_of = _resolve_as_of(body.as_of, body.latest)
     con = _get_con()
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -848,13 +823,7 @@ async def symbol_facts_bundle(
     include: str | None = None,
 ):
     _auth(request)
-    if as_of is None and not latest:
-        raise HTTPException(422, "as_of is required. Use latest=true for convenience.")
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if as_of is None
-        else _aware(as_of)
-    )
+    as_of = _resolve_as_of(as_of, latest)
     include_set = _parse_include(include)
     con = _get_con()
 
@@ -1034,15 +1003,7 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
     _auth(request)
     if not body.symbols:
         raise HTTPException(422, "At least one symbol is required")
-    if body.as_of is None and not body.latest:
-        raise HTTPException(
-            422, "as_of is required for research reads. Use latest=true for convenience."
-        )
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if body.as_of is None
-        else _aware(body.as_of)
-    )
+    as_of = _resolve_as_of(body.as_of, body.latest)
     include_set = _parse_include(body.include)
     con = _get_con()
 
@@ -1181,10 +1142,6 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
 
 
 class AddSymbolRequest(BaseModel):
-    symbol: str
-
-
-class RemoveSymbolRequest(BaseModel):
     symbol: str
 
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import duckdb
 
 from alpha_lake.config import RootConfig
+from alpha_lake.jobs._shared import _new_id, _utcnow
 from alpha_lake.jobs.models import (
     JobDefinition,
     JobRun,
@@ -18,15 +18,6 @@ from alpha_lake.jobs.models import (
     SymbolSourceOverride,
     WorkerState,
 )
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
-def _new_id() -> str:
-    return uuid.uuid4().hex
-
 
 _OPS_SCHEMA: str = "ops"
 

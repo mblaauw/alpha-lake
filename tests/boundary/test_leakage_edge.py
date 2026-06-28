@@ -9,6 +9,54 @@ from alpha_lake.security_master import mint_security_id, register, resolve
 from alpha_lake.serving import read_bars_adjusted, read_bars_asof
 
 
+def test_adjusted_price_leakage_prevents_forward_look() -> None:
+    """A split with ex_date before all bars should adjust all bars."""
+    con = duckdb.connect()
+    write_bars(
+        con,
+        _bar("sec_t", date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)),
+    )
+    write_bars(
+        con, _bar("sec_t", date(2025, 2, 15), 200.0, datetime(2025, 2, 16, 16, 0, tzinfo=UTC))
+    )
+
+    split_data = splits_from_json(
+        [{"date": "2025-01-10", "splitRatio": "2:1"}],
+        "sec_t",
+        "eodhd_splits",
+        "f1",
+        "r1",
+        "c1",
+        datetime(2025, 1, 11, tzinfo=UTC),
+    )
+    write_corp_actions(con, split_data)
+
+    as_of = datetime(2025, 6, 1, tzinfo=UTC)
+    result = read_bars_adjusted(con, ["sec_t"], as_of, price_mode="split_adjusted")
+    assert result.height == 2
+    assert result["close"][0] == 50.0
+    assert result["close"][1] == 100.0
+    con.close()
+
+
+def test_delisted_security_still_visible() -> None:
+    """A delisted security (no longer in security_master) should return empty."""
+    con = duckdb.connect()
+    sid = mint_security_id(figi="DELISTED123")
+    register(
+        con,
+        "DEAD",
+        sid,
+        date(2020, 1, 1),
+        effective_end=date(2023, 12, 31),
+        available_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+
+    write_bars(con, _bar(sid, date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)))
+    result = read_bars_asof(con, [sid], datetime(2025, 6, 1, tzinfo=UTC))
+    assert result.height == 1  # bars still exist, but security is delisted
+
+
 def _bar(sid: str, eff: date, close: float, avail: datetime) -> pl.DataFrame:
     return pl.DataFrame(
         {
@@ -38,52 +86,6 @@ def _bar(sid: str, eff: date, close: float, avail: datetime) -> pl.DataFrame:
         pl.col("ingested_at").cast(pl.Datetime(time_zone="UTC")),
         pl.col("validated_at").cast(pl.Datetime(time_zone="UTC")),
     )
-
-    # ── #34: Adjusted-price leakage detection ──────────────────────────────
-
-    """A split with ex_date before all bars should adjust all bars."""
-    con = duckdb.connect()
-    write_bars(
-        con,
-        _bar("sec_t", date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)),
-    )
-    write_bars(
-        con, _bar("sec_t", date(2025, 2, 15), 200.0, datetime(2025, 2, 16, 16, 0, tzinfo=UTC))
-    )
-
-    split_data = splits_from_json(
-        [{"date": "2025-01-10", "splitRatio": "2:1"}],
-        "sec_t",
-        "eodhd_splits",
-        "f1",
-        "r1",
-        "c1",
-        datetime(2025, 1, 11, tzinfo=UTC),
-    )
-    write_corp_actions(con, split_data)
-
-    as_of = datetime(2025, 6, 1, tzinfo=UTC)
-    result = read_bars_adjusted(con, ["sec_t"], as_of, price_mode="split_adjusted")
-    assert result.height == 2
-    assert result["close"][0] == 50.0
-    assert result["close"][1] == 100.0
-    con.close()
-
-    """A delisted security (no longer in security_master) should return empty."""
-    con = duckdb.connect()
-    sid = mint_security_id(figi="DELISTED123")
-    register(
-        con,
-        "DEAD",
-        sid,
-        date(2020, 1, 1),
-        effective_end=date(2023, 12, 31),
-        available_at=datetime(2020, 1, 1, tzinfo=UTC),
-    )
-
-    write_bars(con, _bar(sid, date(2025, 1, 15), 100.0, datetime(2025, 1, 16, 16, 0, tzinfo=UTC)))
-    result = read_bars_asof(con, [sid], datetime(2025, 6, 1, tzinfo=UTC))
-    assert result.height == 1  # bars still exist, but security is delisted
 
 
 def test_symbol_reuse_correct_security():

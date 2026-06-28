@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import duckdb  # type: ignore[unresolved-import]
@@ -62,13 +62,16 @@ from alpha_lake.transport._models import (
 )
 from alpha_lake.transport._shared import (
     _INDICATOR_MAP,
-    _MAX_LOOKBACK_DAYS,
+    _aware,
     _fundamental_row_to_item,
     _handle_bars,
     _handle_bars_indicators,
     _now,
     _parse_indicators,
     _pl_to_dicts,
+    _resolve_as_of,
+    _resolve_or_raise,
+    _validate_lookback,
     _validate_price_mode,
 )
 
@@ -84,17 +87,6 @@ def _get_con() -> duckdb.DuckDBPyConnection:
     from alpha_lake.transport._shared import _get_connection
 
     return _get_connection()
-
-
-def _aware(dt: datetime) -> datetime:
-    """Normalize a datetime to tz-aware UTC for TIMESTAMPTZ comparisons.
-
-    ``available_at`` columns are stored as TIMESTAMPTZ (the connection runs in
-    UTC). Passing a naive datetime into a raw ``?`` parameter mixes types; this
-    guarantees a tz-aware value so every comparison casts to ``::TIMESTAMPTZ``
-    cleanly.
-    """
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -270,8 +262,7 @@ async def bars(
     if as_of is None:
         as_of = _now()
 
-    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
+    _validate_lookback(start, end)
 
     _validate_price_mode(price_mode)
     con = _get_con()
@@ -307,8 +298,7 @@ async def bars_indicators(
     if as_of is None:
         as_of = _now()
 
-    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
-        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
+    _validate_lookback(start, end)
 
     con = _get_con()
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
@@ -342,18 +332,7 @@ async def symbol_readouts(
     _check_enabled()
     con = _get_con()
 
-    if as_of is None and not latest:
-        raise HTTPException(
-            422,
-            "as_of is required for point-in-time reads. "
-            "Use latest=true for the most recent observation.",
-        )
-
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if as_of is None
-        else _aware(as_of)
-    )
+    as_of = _resolve_as_of(as_of, latest)
 
     from alpha_lake.serving.readouts import compute_readouts
 
@@ -431,9 +410,7 @@ async def bars_summary(
         as_of = _now()
     con = _get_con()
     trade_date = previous_trading_day(as_of.date())
-    sec_id = resolve_security(con, symbol, as_of=trade_date)
-    if sec_id is None:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    sec_id = _resolve_or_raise(con, symbol, trade_date)
     start = shift_trading_days(trade_date, -180)
     kwargs: dict[str, Any] = {"security_ids": [sec_id], "as_of": as_of, "start_date": start}
     if price_mode != "raw":
@@ -910,18 +887,7 @@ async def symbol_fundamentals(
     _check_enabled()
     con = _get_con()
 
-    if as_of is None and not latest:
-        raise HTTPException(
-            422,
-            "as_of is required for point-in-time reads. "
-            "Use latest=true for the most recent observation.",
-        )
-
-    as_of = (
-        datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
-        if as_of is None
-        else _aware(as_of)
-    )
+    as_of = _resolve_as_of(as_of, latest)
 
     sec_id = resolve_security(con, symbol, as_of=as_of.date())
     if sec_id is None:

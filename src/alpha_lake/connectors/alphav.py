@@ -129,7 +129,3 @@ async def fetch_etf_profile(symbol: str) -> RawFetch:
 
 async def fetch_ipo_calendar() -> RawFetch:
     return await _alphav_fetch({"function": "IPO_CALENDAR"})
-
-
-async def fetch_listing_status() -> RawFetch:
-    return await _alphav_fetch({"function": "LISTING_STATUS"})

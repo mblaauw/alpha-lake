@@ -10,8 +10,9 @@ from typing import Any
 
 import duckdb  # type: ignore[unresolved-import]
 import polars as pl  # type: ignore[unresolved-import]
+from fastapi import HTTPException  # type: ignore[unresolved-import]
 
-from alpha_lake.calendar_ import shift_trading_days
+from alpha_lake.calendar_ import previous_trading_day, shift_trading_days
 from alpha_lake.derived import atr, bollinger_bands, ema, macd, rsi, sma
 from alpha_lake.serving import pit_read, read_bars_adjusted, read_bars_asof
 
@@ -390,6 +391,36 @@ def _strip_audit_cols_dict(
     return {k: v for k, v in result.items() if k not in _AUDIT_COLUMNS}
 
 
+def _resolve_as_of(as_of: datetime | None, latest: bool) -> datetime:
+    """Return *as_of* or the latest trading day start.
+
+    Raises 422 when neither is provided (I5 invariant).
+    """
+    if as_of is None and not latest:
+        raise HTTPException(
+            422, "as_of is required for research reads. Use latest=true for convenience."
+        )
+    if as_of is not None:
+        return _aware(as_of)
+    return datetime.combine(previous_trading_day(_now().date()), datetime.min.time(), tzinfo=UTC)
+
+
+def _validate_lookback(start: date | None, end: date | None) -> None:
+    """Raise 422 if start-end range exceeds *MAX_LOOKBACK_DAYS*."""
+    if start and end and (end - start).days > _MAX_LOOKBACK_DAYS:
+        raise HTTPException(422, f"Lookback exceeds max of {_MAX_LOOKBACK_DAYS} days")
+
+
+def _resolve_or_raise(con: duckdb.DuckDBPyConnection, symbol: str, as_of: date) -> str:
+    """Resolve *symbol* to a security_id or raise 404."""
+    from alpha_lake.security_master import resolve as resolve_security
+
+    sec_id = resolve_security(con, symbol, as_of=as_of)
+    if sec_id is None:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    return sec_id
+
+
 def _fetch_bars(
     con: duckdb.DuckDBPyConnection,
     sec_id: str,
@@ -491,18 +522,6 @@ def _fetch_multi(
 def _parse_as_of(as_of: datetime | None) -> datetime:
     """Default as_of to now() when not provided."""
     return as_of if as_of is not None else datetime.now(UTC)
-
-
-def _resolve_or_raise(con: duckdb.DuckDBPyConnection, symbol: str, as_of: date) -> str:
-    """Resolve symbol to security_id, raising 404 on failure."""
-    from alpha_lake.security_master import resolve as _resolve
-
-    sec_id = _resolve(con, symbol, as_of=as_of)
-    if sec_id is None:
-        from fastapi import HTTPException
-
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
-    return sec_id
 
 
 def _handle_bars(

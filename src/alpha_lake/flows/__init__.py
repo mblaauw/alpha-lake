@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -125,7 +126,6 @@ def _synthetic_payload(from_date: str, to_date: str, clock_now: datetime, sid: s
     ``"demo"`` so the data is clearly distinguishable from real data.
     """
     import hashlib
-    import json
     import random
 
     seed = int(hashlib.sha256(sid.encode()).hexdigest()[:8], 16) if sid else 42
@@ -171,8 +171,6 @@ async def _fetch_and_ingest(
     raw_bytes = raw_fetch.body
     content_hash = archive(raw_bytes)
 
-    import json
-
     raw_data = json.loads(raw_bytes)
     records = raw_data if isinstance(raw_data, list) else [raw_data]
 
@@ -202,8 +200,6 @@ def _ingest_synthetic(
     raw_bytes = _synthetic_payload(from_date, to_date, clock_now, sid)
     content_hash = archive(raw_bytes)
 
-    import json
-
     raw_data = json.loads(raw_bytes)
     records = raw_data if isinstance(raw_data, list) else [raw_data]
 
@@ -218,16 +214,6 @@ def _ingest_synthetic(
     )
     df = check_market_sanity(df)
     return write_bars(con, df)
-
-
-def _filter_active(_con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
-    """Filter to symbols that are active in the registry (not removed)."""
-    from alpha_lake.flows.bootstrap import _get_ops
-
-    ops = _get_ops()
-    rows = ops.execute("SELECT symbol FROM _symbol_registry WHERE removed_at IS NULL").fetchall()
-    active = {r[0] for r in rows}
-    return [s for s in sids if s in active] or sids
 
 
 def _check_registry(_con: duckdb.DuckDBPyConnection, sids: list[str]) -> list[str]:
@@ -369,8 +355,6 @@ def reparse_bars(
     pointing to the original raw archive blobs. Both the original and
     the new reparse version coexist in the lake.
     """
-    import json
-
     from alpha_lake.normalize import bars_from_json
     from alpha_lake.quality import check_market_sanity
     from alpha_lake.raw import read_raw
@@ -484,8 +468,6 @@ def ingest_dataset(
 
     clock_now = get_clock().now()
     run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
-
-    import json
 
     kwargs: dict = {}
     if dataset == "macro_series":
@@ -639,306 +621,78 @@ def ingest_dataset(
 
     fetch_id = raw_fetch.manifest.get("request_params_hash", f"fetch_{run_id}")
 
-    if dataset == "macro_series":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import econ_indicator_from_json
-
-            df = econ_indicator_from_json(
-                raw=records,
-                series_id=kwargs.get("series_id", series_id or "GDP"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            from alpha_lake.normalize import macro_series_from_json
-
-            df = macro_series_from_json(
-                raw=records,
-                series_id=kwargs.get("series_id", series_id or "GDP"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-    elif dataset == "news":
-        if src == "marketaux":
-            from alpha_lake.normalize import marketaux_news_from_json
-
-            df = marketaux_news_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            from alpha_lake.normalize import news_from_json
-
-            df = news_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-    elif dataset == "sentiment":
-        if src == "marketaux":
-            from alpha_lake.normalize import marketaux_sentiment_from_json
-
-            df = marketaux_sentiment_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        elif src == "stocktwits":
-            from alpha_lake.normalize import stocktwits_sentiment_from_json
-
-            df = stocktwits_sentiment_from_json(
-                raw=records,
-                symbol=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            from alpha_lake.normalize import sentiment_from_news
-
-            df = sentiment_from_news(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-    elif dataset == "economic_calendar":
-        from alpha_lake.normalize import economic_calendar_from_json
-
-        df = economic_calendar_from_json(
-            raw=records,
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
-    elif dataset == "attention_metrics":
-        from alpha_lake.normalize import apewisdom_attention_from_json
-
-        df = apewisdom_attention_from_json(
-            raw=records,
-            ticker=kwargs.get("ticker", security_id or "AAPL"),
-            cohort=kwargs.get("cohort", cohort),
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
-    elif dataset == "analyst_estimates":
-        from alpha_lake.normalize import analyst_estimates_from_json
-
-        df = analyst_estimates_from_json(
-            raw=records,
-            security_id=kwargs.get("symbol", security_id or "AAPL"),
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
-    elif dataset == "insider_tx":
-        from alpha_lake.normalize import insider_tx_from_json
-
-        df = insider_tx_from_json(
-            raw=records,
-            security_id=kwargs.get("symbol", security_id or "AAPL"),
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
-    elif dataset == "earnings_calendar":
-        if src == "finnhub":
-            from alpha_lake.normalize import earnings_calendar_from_finnhub
-
-            df = earnings_calendar_from_finnhub(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            from alpha_lake.normalize import earnings_calendar_from_json
-
-            df = earnings_calendar_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-    elif dataset == "fundamentals":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import fundamentals_from_json
-
-            df = fundamentals_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            from alpha_lake.normalize import fundamentals_from_json
-
-            df = fundamentals_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-    elif dataset == "corp_actions":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import corp_actions_from_json
-
-            df = corp_actions_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "insider_transactions":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import insider_transactions_from_json
-
-            df = insider_transactions_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "institutional_holdings":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import institutional_holdings_from_json
-
-            df = institutional_holdings_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "top_movers":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import top_movers_from_json
-
-            df = top_movers_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "ipo_calendar":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import ipo_calendar_from_json
-
-            df = ipo_calendar_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "etf_profiles":
-        if src == "alphav":
-            from alpha_lake.normalize.alphav import etf_profile_from_json
-
-            df = etf_profile_from_json(
-                raw=records,
-                security_id=kwargs.get("symbol", security_id or "AAPL"),
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    elif dataset == "congress_trades":
-        from alpha_lake.normalize import congress_trades_from_json
-
-        df = congress_trades_from_json(
-            raw=records,
-            source_id=src,
-            source_fetch_id=fetch_id,
-            ingestion_run_id=run_id,
-            content_hash=content_hash,
-            available_at=clock_now,
-        )
-    elif dataset == "social_posts":
-        if src == "reddit":
-            from alpha_lake.normalize import social_posts_from_json
-
-            df = social_posts_from_json(
-                raw=records,
-                source_id=src,
-                source_fetch_id=fetch_id,
-                ingestion_run_id=run_id,
-                content_hash=content_hash,
-                available_at=clock_now,
-                platform="reddit",
-            )
-        else:
-            raise ValueError(f"No normalize function for {src}/{dataset}")
-    else:
-        raise ValueError(f"No normalize function wired for dataset '{dataset}'")
-
-    table_aliases = {
-        "news": "news_articles",
-        "sentiment": "sentiment_annotations",
+    _import_normalizers = {
+        ("macro_series", "alphav"): "alpha_lake.normalize.alphav:econ_indicator_from_json",
+        ("macro_series", None): "alpha_lake.normalize:macro_series_from_json",
+        ("news", "marketaux"): "alpha_lake.normalize:marketaux_news_from_json",
+        ("news", None): "alpha_lake.normalize:news_from_json",
+        ("sentiment", "marketaux"): "alpha_lake.normalize:marketaux_sentiment_from_json",
+        ("sentiment", "stocktwits"): "alpha_lake.normalize:stocktwits_sentiment_from_json",
+        ("sentiment", None): "alpha_lake.normalize:sentiment_from_news",
+        ("economic_calendar", None): "alpha_lake.normalize:economic_calendar_from_json",
+        ("attention_metrics", None): "alpha_lake.normalize:apewisdom_attention_from_json",
+        ("analyst_estimates", None): "alpha_lake.normalize:analyst_estimates_from_json",
+        ("insider_tx", None): "alpha_lake.normalize:insider_tx_from_json",
+        ("earnings_calendar", "finnhub"): "alpha_lake.normalize:earnings_calendar_from_finnhub",
+        ("earnings_calendar", None): "alpha_lake.normalize:earnings_calendar_from_json",
+        ("fundamentals", "alphav"): "alpha_lake.normalize.alphav:fundamentals_from_json",
+        ("fundamentals", None): "alpha_lake.normalize:fundamentals_from_json",
+        ("corp_actions", "alphav"): "alpha_lake.normalize.alphav:corp_actions_from_json",
+        (
+            "insider_transactions",
+            "alphav",
+        ): "alpha_lake.normalize.alphav:insider_transactions_from_json",
+        (
+            "institutional_holdings",
+            "alphav",
+        ): "alpha_lake.normalize.alphav:institutional_holdings_from_json",
+        ("top_movers", "alphav"): "alpha_lake.normalize.alphav:top_movers_from_json",
+        ("ipo_calendar", "alphav"): "alpha_lake.normalize.alphav:ipo_calendar_from_json",
+        ("etf_profiles", "alphav"): "alpha_lake.normalize.alphav:etf_profile_from_json",
+        ("congress_trades", None): "alpha_lake.normalize:congress_trades_from_json",
+        ("social_posts", "reddit"): "alpha_lake.normalize:social_posts_from_json",
     }
+
+    _normalize_entry = _import_normalizers.get((dataset, src)) or _import_normalizers.get(
+        (dataset, None)
+    )
+    if _normalize_entry is None:
+        raise ValueError(f"No normalize function wired for dataset '{dataset}' source '{src}'")
+
+    import importlib as _il
+
+    _mod_path, _fn_name = _normalize_entry.split(":")
+    _mod = _il.import_module(_mod_path)
+    _normalize_fn = getattr(_mod, _fn_name)
+
+    _nkwargs: dict[str, Any] = {
+        "raw": records,
+        "source_id": src,
+        "source_fetch_id": fetch_id,
+        "ingestion_run_id": run_id,
+        "content_hash": content_hash,
+        "available_at": clock_now,
+    }
+    if dataset == "macro_series":
+        _nkwargs["series_id"] = kwargs.get("series_id", series_id or "GDP")
+    elif dataset in ("sentiment",) and src == "stocktwits":
+        _nkwargs["symbol"] = kwargs.get("symbol", security_id or "AAPL")
+    elif dataset == "attention_metrics":
+        _nkwargs["ticker"] = kwargs.get("ticker", security_id or "AAPL")
+        _nkwargs["cohort"] = kwargs.get("cohort", cohort)
+    elif dataset in ("analyst_estimates", "insider_tx") or dataset in (
+        "fundamentals",
+        "corp_actions",
+        "insider_transactions",
+        "institutional_holdings",
+        "etf_profiles",
+    ):
+        _nkwargs["security_id"] = kwargs.get("symbol", security_id or "AAPL")
+    elif dataset == "social_posts" and src == "reddit":
+        _nkwargs["platform"] = "reddit"
+
+    df = _normalize_fn(**_nkwargs)
+
     table = table_aliases.get(dataset, dataset)
     if df.is_empty():
         return 0
