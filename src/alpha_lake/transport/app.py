@@ -51,6 +51,9 @@ from alpha_lake.transport._shared import (
     _validate_lookback,
     _validate_price_mode,
 )
+from alpha_lake.transport._shared import (
+    _parse_fields as _parse_include,
+)
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -138,10 +141,6 @@ async def health():
         return catalog_health(_get_con())
     except Exception as exc:
         return {"snapshots": 0, "latest_snapshot_id": None, "status": "error", "detail": str(exc)}
-
-
-def _parse_include(include: str | None) -> set[str]:
-    return {s.strip() for s in include.split(",") if s.strip()} if include else set()
 
 
 @app.get("/v1/bars")
@@ -904,7 +903,8 @@ async def symbol_facts_bundle(
             if not df.is_empty():
                 sections["fundamentals"] = {
                     "metrics": [
-                        _fundamental_row_to_item(r, include_set) for r in df.rows(named=True)
+                        _fundamental_row_to_item(r, include_set or set())
+                        for r in df.rows(named=True)
                     ],
                     "metric_count": len(df),
                 }
@@ -1079,7 +1079,7 @@ async def batch_facts_bundle(request: Request, body: FactsBundleRequest):
                     if not df.is_empty():
                         sections["fundamentals"] = {
                             "metrics": [
-                                _fundamental_row_to_item(r, include_set)
+                                _fundamental_row_to_item(r, include_set or set())
                                 for r in df.rows(named=True)
                             ],
                             "metric_count": len(df),

@@ -177,7 +177,9 @@ def build_quota_exhausted_fetch(
 
 
 def compute_content_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    from alpha_lake.raw import content_hash as _ch
+
+    return _ch(data)
 
 
 def build_manifest(

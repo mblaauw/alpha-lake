@@ -143,15 +143,15 @@ def write(con: duckdb.DuckDBPyConnection, dataset: Dataset, df: pl.DataFrame) ->
 
 
 def write_bars(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
-    return write(con, DATASETS["lake_bars"], df)
+    return write(con, DATASETS["lake_bars"], df)  # wrapper
 
 
 def write_corp_actions(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> int:
-    return write(con, DATASETS["corp_actions"], df)
+    return write(con, DATASETS["corp_actions"], df)  # wrapper
 
 
 def write_dataset(con: duckdb.DuckDBPyConnection, table: str, df: pl.DataFrame) -> int:
-    return write(con, DATASETS[table], df)
+    return write(con, DATASETS[table], df)  # wrapper
 
 
 def _merge_into(

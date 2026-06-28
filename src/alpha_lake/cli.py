@@ -47,6 +47,13 @@ def _connect(
         con.close()
 
 
+def _on_step_factory(progress, task_id):
+    def _on_step(cur: int, total: int | None, label: str) -> None:
+        progress.update(task_id, completed=cur, total=total, description=label)
+
+    return _on_step
+
+
 app = typer.Typer(name="alpha-lake")
 
 
@@ -104,10 +111,9 @@ def ingest(
         with progress() as p:
             tid = p.add_task("Ingesting…", total=1)
 
-            def _on_step(cur: int, total: int | None, label: str) -> None:
-                p.update(tid, completed=cur, total=total, description=label)
-
-            count = ingest_bars(con, ids, from_date, to_date, source, on_step=_on_step)
+            count = ingest_bars(
+                con, ids, from_date, to_date, source, on_step=_on_step_factory(p, tid)
+            )
             p.update(tid, completed=1)
         panel(
             "Ingest", f"Ingested [bold]{count}[/] bars for [bold]{security_id}[/].", style="green"
@@ -134,10 +140,7 @@ def backfill(
         with progress() as p:
             tid = p.add_task(f"Backfilling {security_id}…", total=est_total)
 
-            def _on_step(cur: int, total: int | None, label: str) -> None:
-                p.update(tid, completed=cur, total=total or est_total, description=label)
-
-            count = backfill_bars(con, ids, sd, ed, source, on_step=_on_step)
+            count = backfill_bars(con, ids, sd, ed, source, on_step=_on_step_factory(p, tid))
             p.update(tid, completed=est_total)
         panel(
             "Backfill",
@@ -162,12 +165,7 @@ def reparse(
         with progress() as p:
             tid = p.add_task(f"Reparsing {security_id}…", total=None)
 
-            def _on_step(cur: int, total: int | None, label: str) -> None:
-                if total is not None:
-                    p.update(tid, total=total)
-                p.update(tid, completed=cur, description=label)
-
-            count = reparse_bars(con, ids, ed, on_step=_on_step)
+            count = reparse_bars(con, ids, ed, on_step=_on_step_factory(p, tid))
             p.update(tid, completed=count or 0, total=count or 0)
         panel(
             "Reparse",
@@ -231,11 +229,8 @@ def cli_compute_indicators(
         with progress() as p:
             tid = p.add_task("Computing indicators…", total=1)
 
-            def _on_step(cur: int, total: int | None, label: str) -> None:
-                p.update(tid, completed=cur, total=total or 1, description=label)
-
             count = compute_indicators(
-                con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step
+                con, as_of=get_clock().now(), security_ids=ids, on_step=_on_step_factory(p, tid)
             )
             p.update(tid, completed=1)
         panel(

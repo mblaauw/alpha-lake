@@ -499,7 +499,7 @@ def ingest_dataset(
         kwargs["from_date"] = from_date or _now.strftime("%Y-%m-01")
         kwargs["to_date"] = to_date or _now.strftime("%Y-%m-%d")
     elif dataset in ("congress_trades", "top_movers", "ipo_calendar"):
-        pass
+        pass  # no symbol/date kwargs needed
     else:
         kwargs["symbol"] = security_id or "AAPL"
         if from_date and dataset not in ("analyst_estimates", "insider_tx"):

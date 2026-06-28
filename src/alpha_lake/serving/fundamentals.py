@@ -12,7 +12,6 @@ from alpha_lake.interpretation.fundamentals_glossary import (
     get_threshold_profile,
     resolve_fundamental_state,
 )
-from alpha_lake.serving import _ensure_kernel, _pin_snapshot
 
 _VALID_PRICE_MODES = frozenset({"raw", "split_adjusted"})
 _PRICE_CURRENCY = "USD"
@@ -47,8 +46,10 @@ def read_fundamental_metrics_asof(
     if price_mode not in _VALID_PRICE_MODES:
         raise ValueError(f"Unknown price_mode '{price_mode}'. Valid: {sorted(_VALID_PRICE_MODES)}")
 
-    _pin_snapshot(con, snapshot_id)
-    _ensure_kernel(con)
+    from alpha_lake.serving import _ensure_kernel as _ek, _pin_snapshot as _ps
+
+    _ps(con, snapshot_id)
+    _ek(con)
 
     requested_metric_ids = set(metric_ids or [])
     query_categories, query_metric_ids = _query_filters(categories, metric_ids)
