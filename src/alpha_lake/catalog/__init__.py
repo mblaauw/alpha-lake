@@ -71,9 +71,11 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
                     "Failed to attach Postgres as pg_catalog — ops tables unavailable"
                 )
         ensure_ops_schema(con)
-        from alpha_lake.jobs.store import seed_job_defs_from_config
+        from alpha_lake.jobs.store import seed_default_job_defs, seed_job_defs_from_config
 
         seed_job_defs_from_config(con, cfg)
+        if not cfg.worker.job_definitions:
+            seed_default_job_defs(con)
 
     from alpha_lake.kernel import register_kernel
 

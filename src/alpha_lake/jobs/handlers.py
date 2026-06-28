@@ -167,17 +167,12 @@ def handle_bars_refresh(
     from alpha_lake.source_registry import get_primary_source
 
     symbols = _resolve_symbols(con, store, run.params_json)
-    src = run.params_json.get("source_id") or get_primary_source("bars_daily")
+    default_src = run.params_json.get("source_id") or get_primary_source("bars_daily")
     from_date = run.params_json.get("from_date", "")
     to_date = run.params_json.get("to_date", "")
 
-    if not src:
+    if not default_src:
         raise ValueError("No source configured for bars_daily")
-
-    connector = get_connector(src, "bars_daily")
-    creds = has_api_key(src)
-    if not (connector and creds):
-        raise RuntimeError(f"No API key or connector for source '{src}'")
 
     clock_now = get_clock().now()
     run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
@@ -189,6 +184,21 @@ def handle_bars_refresh(
     for symbol in symbols:
         if exhausted:
             deferred.append(symbol)
+            continue
+
+        src = default_src
+        override = (
+            store.get_symbol_source_override(symbol)
+            if callable(getattr(store, "get_symbol_source_override", None))
+            else None
+        )
+        if override:
+            src = override.source_id
+
+        connector = get_connector(src, "bars_daily")
+        creds = has_api_key(src)
+        if not (connector and creds):
+            results.append({"symbol": symbol, "rows": 0, "reason": f"no_connector_for_{src}"})
             continue
 
         try:
@@ -210,18 +220,18 @@ def handle_bars_refresh(
                 ),
             )
             total += rows
-            results.append({"symbol": symbol, "rows": rows})
+            results.append({"symbol": symbol, "rows": rows, "source": src})
         except BudgetExhaustedError as exc:
-            warn(f"Budget exhausted for {symbol}: {exc}")
+            warn(f"Budget exhausted for {symbol} ({src}): {exc}")
             exhausted = True
             deferred.append(symbol)
             results.append({"symbol": symbol, "rows": 0, "reason": str(exc)})
         except Exception as exc:
-            warn(f"Refresh failed for {symbol}: {exc}")
+            warn(f"Refresh failed for {symbol} ({src}): {exc}")
             results.append({"symbol": symbol, "rows": 0, "error": str(exc)})
 
     out: dict[str, Any] = {
-        "source_id": src,
+        "source_id": default_src,
         "symbols_attempted": len(symbols),
         "symbols_refreshed": sum(1 for r in results if r.get("rows", 0) > 0),
         "total_rows_written": total,

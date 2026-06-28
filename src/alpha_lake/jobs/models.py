@@ -104,6 +104,79 @@ class SymbolEntry:
 
 
 @dataclass
+class SymbolSourceOverride:
+    symbol: str
+    source_id: str
+    reason: str = ""
+    updated_by: str = "operator"
+    updated_at: datetime | None = None
+
+
+DEFAULT_JOB_DEFS: list[JobDefinition] = [
+    JobDefinition(
+        job_name="source.health",
+        job_type="source_health",
+        schedule_kind="interval",
+        schedule_json={"interval_seconds": 3600},
+        concurrency_key="health",
+        max_attempts=3,
+        priority=100,
+    ),
+    JobDefinition(
+        job_name="bars.bootstrap.active",
+        job_type="bars_bootstrap",
+        schedule_kind="manual",
+        params_json={"symbols": "active", "source_id": "stooq", "lookback_years": 3},
+        concurrency_key="bars",
+        source_id="stooq",
+        dataset="bars",
+        max_attempts=3,
+        priority=40,
+    ),
+    JobDefinition(
+        job_name="bars.refresh.eod",
+        job_type="bars_refresh",
+        schedule_kind="market_close",
+        schedule_json={"calendar": "XNYS", "offset_minutes": 30},
+        params_json={
+            "symbols": "active",
+            "from_policy": "last_missing_or_previous_session",
+            "to_policy": "latest_closed_session",
+            "source_id": "auto",
+        },
+        concurrency_key="bars",
+        dataset="bars",
+        max_attempts=3,
+        priority=10,
+    ),
+    JobDefinition(
+        job_name="indicators.compute.eod",
+        job_type="indicators_compute",
+        schedule_kind="daily_time",
+        schedule_json={
+            "timezone": "America/New_York",
+            "time": "18:00",
+            "calendar": "XNYS",
+            "skip_non_trading_days": True,
+        },
+        params_json={"symbols": "active", "trigger": "after_bars_refresh"},
+        concurrency_key="indicators",
+        dataset="technical_indicators",
+        max_attempts=3,
+        priority=20,
+    ),
+    JobDefinition(
+        job_name="stooq.rebuild",
+        job_type="stooq_rebuild",
+        schedule_kind="manual",
+        concurrency_key="stooq",
+        max_attempts=3,
+        priority=50,
+    ),
+]
+
+
+@dataclass
 class SourceWithLimits:
     source_id: str
     requires_key: bool = True
@@ -134,6 +207,7 @@ class JobStore(Protocol):
         source_id: str | None = None,
         dataset: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[JobRun]: ...
     def get_run(self, run_id: str) -> JobRun | None: ...
     def create_run(self, run: JobRun) -> JobRun: ...
@@ -174,3 +248,13 @@ class JobStore(Protocol):
     def add_symbol(self, symbol: str, added_by: str = "auto") -> SymbolEntry: ...
     def remove_symbol(self, symbol: str) -> SymbolEntry | None: ...
     def get_symbol(self, symbol: str) -> SymbolEntry | None: ...
+
+    def list_symbol_source_overrides(self) -> list[SymbolSourceOverride]: ...
+    def get_symbol_source_override(self, symbol: str) -> SymbolSourceOverride | None: ...
+    def set_symbol_source_override(
+        self,
+        symbol: str,
+        source_id: str,
+        reason: str = "",
+    ) -> SymbolSourceOverride: ...
+    def remove_symbol_source_override(self, symbol: str) -> bool: ...

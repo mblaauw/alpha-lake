@@ -90,8 +90,9 @@ def test_handle_bars_bootstrap_error():
 
 
 def test_handle_bars_refresh_no_source():
-    """When no primary source is available, handler raises."""
+    """When no primary source is available and no symbol override, handler returns empty result."""
     store = MemoryJobStore()
+    store.add_symbol("AAPL")
     cfg = get_config()
     run = JobRun(
         run_id="test",
@@ -101,8 +102,10 @@ def test_handle_bars_refresh_no_source():
         status="running",
     )
     con = duckdb.connect()
-    with pytest.raises((ValueError, RuntimeError)):
-        handle_bars_refresh(con, cfg, run, store)
+    result = handle_bars_refresh(con, cfg, run, store)
+    assert result["symbols_attempted"] == 1
+    assert result["total_rows_written"] == 0
+    assert result["results"][0]["reason"].startswith("no_connector")
     con.close()
 
 

@@ -523,6 +523,7 @@ def ops_jobs_runs(
     status: str = typer.Option(None, "--status", help="Filter by status"),
     job_name: str = typer.Option(None, "--job", help="Filter by job name"),
     limit: int = typer.Option(20, "--limit", help="Max rows"),
+    offset: int = typer.Option(0, "--offset", help="Row offset for pagination"),
 ):
     """List recent job runs."""
     _require_infra(get_config())
@@ -530,7 +531,7 @@ def ops_jobs_runs(
 
     con = connect(get_config())
     store = PostgresJobStore(con)
-    runs = store.list_runs(status=status, job_name=job_name, limit=limit)
+    runs = store.list_runs(status=status, job_name=job_name, limit=limit, offset=offset)
     if not runs:
         info("No job runs found.")
         con.close()
@@ -700,6 +701,87 @@ def ops_sources_set_limit(
 
 app.add_typer(_ops_app, name="jobs")
 app.add_typer(_sources_app, name="sources")
+
+_symbols_app = typer.Typer(help="Manage symbols and symbol-source overrides")
+
+
+@_symbols_app.command("list")
+def ops_symbols_list():
+    """List symbols in the registry."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    symbols = store.list_symbols(active_only=True)
+    if not symbols:
+        info("No symbols in registry.")
+        con.close()
+        return
+    rows = []
+    for s in symbols:
+        rows.append([s.symbol, str(s.added_at)[:19] if s.added_at else "-", s.added_by])
+    table("Symbols", ["Symbol", "Added", "Source"], rows)
+    con.close()
+
+
+@_symbols_app.command("source-set")
+def ops_symbol_source_set(
+    symbol: str = typer.Option(..., "--symbol", help="Symbol / security ID"),
+    source_id: str = typer.Option(..., "--source", help="Source ID to assign"),
+    reason: str = typer.Option("", "--reason", help="Reason for override"),
+):
+    """Pin a symbol to a specific source."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    store.set_symbol_source_override(symbol, source_id, reason=reason)
+    ok(f"Symbol [bold]{symbol}[/] → source [bold]{source_id}[/].")
+    con.close()
+
+
+@_symbols_app.command("source-list")
+def ops_symbol_source_list():
+    """List symbol-source overrides."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    overrides = store.list_symbol_source_overrides()
+    if not overrides:
+        info("No symbol-source overrides configured.")
+        con.close()
+        return
+    rows = []
+    for o in overrides:
+        rows.append(
+            [o.symbol, o.source_id, o.reason, str(o.updated_at)[:19] if o.updated_at else "-"]
+        )
+    table("Symbol Source Overrides", ["Symbol", "Source", "Reason", "Updated"], rows)
+    con.close()
+
+
+@_symbols_app.command("source-remove")
+def ops_symbol_source_remove(
+    symbol: str = typer.Option(..., "--symbol", help="Symbol / security ID"),
+):
+    """Remove a symbol-source override."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    if store.remove_symbol_source_override(symbol):
+        ok(f"Removed source override for [bold]{symbol}[/].")
+    else:
+        warn(f"No source override found for [bold]{symbol}[/].")
+    con.close()
+
+
+app.add_typer(_symbols_app, name="symbols")
 
 
 def main():
