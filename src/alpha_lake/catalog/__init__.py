@@ -58,10 +58,47 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     attach_str, data_path = _build_attach(cfg)
     con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
     con.execute("USE lake_catalog")
+
+    if cfg.lake.runtime == "stack":
+        pg_str = _pg_catalog_attach_str(cfg)
+        if pg_str:
+            try:
+                con.execute(f"ATTACH '{pg_str}' AS pg_catalog (TYPE postgres)")
+            except Exception:
+                import logging
+
+                logging.getLogger("alpha_lake").exception(
+                    "Failed to attach Postgres as pg_catalog — ops tables unavailable"
+                )
+        ensure_ops_schema(con)
+        from alpha_lake.jobs.store import seed_job_defs_from_config
+
+        seed_job_defs_from_config(con, cfg)
+
     from alpha_lake.kernel import register_kernel
 
     register_kernel(con)
     return con
+
+
+def _pg_catalog_attach_str(cfg: RootConfig) -> str | None:
+    """Derive a Postgres ATTACH string from the DuckLake catalog config."""
+    raw = cfg.lake.catalog
+    if raw.startswith("ducklake:postgres:"):
+        conn = raw.removeprefix("ducklake:postgres:")
+        return f"postgres:{conn}"
+    return None
+
+
+def ensure_ops_schema(con: duckdb.DuckDBPyConnection) -> None:
+    """Create the ops schema and all operational tables if they don't exist.
+
+    Safe to call repeatedly (idempotent).  Works in both stack mode (Postgres
+    via pg_catalog) and embedded mode (native DuckDB schema).
+    """
+    from alpha_lake.jobs.store import ensure_ops_schema as _ensure
+
+    _ensure(con)
 
 
 def _ensure_bucket(cfg: RootConfig) -> None:

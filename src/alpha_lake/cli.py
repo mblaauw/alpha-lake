@@ -471,6 +471,196 @@ def cli_bootstrap_bars():
     con.close()
 
 
+# ── Operations Commands ───────────────────────────────────────────────────
+
+_ops_app = typer.Typer(help="Manage data-job definitions and runs")
+
+
+@_ops_app.command("list")
+def ops_jobs_list():
+    """List configured job definitions."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    jobs = store.list_job_defs()
+    if not jobs:
+        info("No job definitions configured.")
+        con.close()
+        return
+    rows = []
+    for j in jobs:
+        status = "✓ active" if j.enabled and not j.hold else "held" if j.hold else "disabled"
+        rows.append([j.job_name, j.job_type, j.schedule_kind, status, str(j.priority)])
+    table("Jobs", ["Name", "Type", "Schedule", "Status", "Priority"], rows)
+    con.close()
+
+
+@_ops_app.command("runs")
+def ops_jobs_runs(
+    status: str = typer.Option(None, "--status", help="Filter by status"),
+    job_name: str = typer.Option(None, "--job", help="Filter by job name"),
+    limit: int = typer.Option(20, "--limit", help="Max rows"),
+):
+    """List recent job runs."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    runs = store.list_runs(status=status, job_name=job_name, limit=limit)
+    if not runs:
+        info("No job runs found.")
+        con.close()
+        return
+    rows = []
+    for r in runs:
+        rows.append(
+            [
+                r.run_id[:8],
+                r.job_name,
+                r.status,
+                r.attempt,
+                str(r.scheduled_at)[:19] if r.scheduled_at else "-",
+                str(r.finished_at)[:19] if r.finished_at else "-",
+            ]
+        )
+    table("Runs", ["ID", "Job", "Status", "Attempt", "Scheduled", "Finished"], rows)
+    con.close()
+
+
+@_ops_app.command("hold")
+def ops_jobs_hold(
+    job_name: str = typer.Option(..., "--job", help="Job name"),
+    _reason: str = typer.Option("", "--reason", help="Reason for hold"),
+):
+    """Hold a job definition (prevents scheduling)."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    store.update_job_def(job_name, hold=True)
+    ok(f"Held [bold]{job_name}[/].")
+    con.close()
+
+
+@_ops_app.command("resume")
+def ops_jobs_resume(
+    job_name: str = typer.Option(..., "--job", help="Job name"),
+):
+    """Resume a held job definition."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    store.update_job_def(job_name, hold=False)
+    ok(f"Resumed [bold]{job_name}[/].")
+    con.close()
+
+
+_sources_app = typer.Typer(help="Manage source rate limits and holds")
+
+
+@_sources_app.command("list")
+def ops_sources_list():
+    """List configured sources with limits and overrides."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    sources = store.list_sources()
+    if not sources:
+        info("No sources configured.")
+        con.close()
+        return
+    rows = []
+    for s in sources:
+        hold_mark = "held" if s.hold else ""
+        rows.append(
+            [
+                s.source_id,
+                "✓" if s.has_key else "✗",
+                str(s.effective_rate_limit_per_sec) if s.effective_rate_limit_per_sec else "-",
+                str(s.effective_rate_limit_per_min) if s.effective_rate_limit_per_min else "-",
+                str(s.effective_rate_limit_per_day) if s.effective_rate_limit_per_day else "-",
+                hold_mark,
+                str(s.calls_last_min),
+                str(s.calls_last_day),
+            ]
+        )
+    table(
+        "Sources",
+        ["Source", "Key", "/sec", "/min", "/day", "Hold", "1m calls", "24h calls"],
+        rows,
+    )
+    con.close()
+
+
+@_sources_app.command("hold")
+def ops_sources_hold(
+    source_id: str = typer.Option(..., "--source", help="Source ID"),
+    reason: str = typer.Option("", "--reason", help="Reason for hold"),
+):
+    """Hold a source (prevents jobs using it from starting)."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    store.set_source_hold(source_id, hold=True, reason=reason)
+    ok(f"Held source [bold]{source_id}[/].")
+    con.close()
+
+
+@_sources_app.command("resume")
+def ops_sources_resume(
+    source_id: str = typer.Option(..., "--source", help="Source ID"),
+):
+    """Resume a held source."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    store.set_source_hold(source_id, hold=False)
+    ok(f"Resumed source [bold]{source_id}[/].")
+    con.close()
+
+
+@_sources_app.command("set-limit")
+def ops_sources_set_limit(
+    source_id: str = typer.Option(..., "--source", help="Source ID"),
+    per_sec: float = typer.Option(None, "--per-sec", help="Rate limit per second"),
+    per_min: int = typer.Option(None, "--per-min", help="Rate limit per minute"),
+    per_day: int = typer.Option(None, "--per-day", help="Rate limit per day"),
+    reason: str = typer.Option("", "--reason", help="Reason"),
+):
+    """Override rate limits for a source."""
+    _require_infra(get_config())
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = connect(get_config())
+    store = PostgresJobStore(con)
+    try:
+        store.set_rate_limit(
+            source_id, per_sec=per_sec, per_min=per_min, per_day=per_day, reason=reason
+        )
+        ok(f"Updated limits for [bold]{source_id}[/].")
+    except ValueError as e:
+        fail(str(e))
+        raise typer.Exit(code=1) from e
+    finally:
+        con.close()
+
+
+app.add_typer(_ops_app, name="jobs")
+app.add_typer(_sources_app, name="sources")
+
+
 def main():
     app()
 

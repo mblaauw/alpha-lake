@@ -83,6 +83,39 @@ class TransportConfig(pydantic.BaseModel):
         return self
 
 
+class JobDefConfig(pydantic.BaseModel):
+    job_name: str
+    job_type: str
+    enabled: bool = True
+    hold: bool = False
+    schedule_kind: str = "manual"
+    schedule: dict[str, object] = {}
+    params: dict[str, object] = {}
+    max_attempts: int = 3
+    priority: int = 100
+    concurrency_key: str = ""
+    source_id: str | None = None
+    dataset: str | None = None
+
+
+class WorkerConfig(pydantic.BaseModel):
+    enabled: bool = False
+    poll_interval_seconds: float = 5.0
+    stale_after_seconds: int = 900
+    allow_rate_limit_raise: bool = False
+    max_active_runs: int = 1
+    job_definitions: list[JobDefConfig] = []
+
+    @pydantic.model_validator(mode="after")
+    def _from_env(self) -> WorkerConfig:
+        self.enabled = self.enabled or os.environ.get("ALPHA_LAKE_WORKER_ENABLED", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        return self
+
+
 class ReadoutsConfig(pydantic.BaseModel):
     profile_file: str = "config/threshold_profiles.toml"
     benchmark_symbol: str = "SPY"
@@ -92,6 +125,7 @@ class ReadoutsConfig(pydantic.BaseModel):
 class RootConfig(pydantic.BaseModel):
     lake: LakeConfig
     s3: S3Config = S3Config()
+    worker: WorkerConfig = WorkerConfig()
     readouts: ReadoutsConfig = ReadoutsConfig()
     transport: TransportConfig = TransportConfig()
     quality: dict[str, QualityConfig] = {}

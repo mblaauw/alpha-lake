@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
-from contextlib import suppress
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -11,11 +10,12 @@ from typing import Any
 import duckdb
 import polars as pl
 
+from alpha_lake.jobs.models import JobStore
+
 _ZIP_PATH = Path("/downloads/d_us_txt.zip")
 _BOOTSTRAP_DIR = Path("/data/bootstrap")
 _STOCKS_PARQUET = _BOOTSTRAP_DIR / "us_stocks.parquet"
 _ETFS_PARQUET = _BOOTSTRAP_DIR / "us_etfs.parquet"
-_REGISTRY_TABLE = "_symbol_registry"
 _STOOQ_SOURCE = "stooq"
 _STOOQ_SOURCE_ID = "stooq"
 
@@ -118,39 +118,53 @@ def rebuild_parquet() -> list[str]:
 #  Registry
 # ═══════════════════════════════════════════════════════════════════════
 
-_ops_con: duckdb.DuckDBPyConnection | None = None
+_ops_store: JobStore | None = None
 
 
-def _get_ops() -> duckdb.DuckDBPyConnection:
-    """Lazy-init a plain DuckDB connection for operational metadata.
+def _get_ops(con: duckdb.DuckDBPyConnection | None = None) -> JobStore:
+    """Return the job store for operational metadata.
 
-    This connection avoids DuckLake entirely (which forbids PRIMARY KEY).
+    Precedence:
+    1. Cached store instance.
+    2. If a DuckDB connection with ``pg_catalog.ops.symbol_registry`` is
+       provided, return a ``PostgresJobStore``.
+    3. Fall back to an in-memory ``MemoryJobStore``.
     """
-    global _ops_con
-    if _ops_con is None:
-        _ops_con = duckdb.connect()
-        _ops_con.execute("SET timezone = 'UTC'")
-        _ops_con.execute(
-            f"CREATE TABLE IF NOT EXISTS {_REGISTRY_TABLE} ("
-            "  symbol VARCHAR PRIMARY KEY,"
-            "  added_at TIMESTAMP WITH TIME ZONE DEFAULT now(),"
-            "  removed_at TIMESTAMP WITH TIME ZONE,"
-            "  added_by VARCHAR DEFAULT 'auto',"
-            "  metadata VARCHAR"
-            ")"
-        )
-    return _ops_con
+    global _ops_store
+    if _ops_store is not None:
+        return _ops_store
+    if con is not None:
+        try:
+            con.execute("SELECT 1 FROM pg_catalog.ops.symbol_registry LIMIT 0")
+            from alpha_lake.jobs.store import PostgresJobStore
+
+            _ops_store = PostgresJobStore(con)
+            return _ops_store
+        except Exception:
+            pass
+    from alpha_lake.jobs.store import MemoryJobStore
+
+    _ops_store = MemoryJobStore()
+    return _ops_store
 
 
-def _init_registry() -> None:
-    """Create _symbol_registry table if not exists, seed from lake_bars."""
-    ops = _get_ops()
-    with suppress(duckdb.CatalogException, Exception):
-        ops.execute(
-            f"INSERT OR IGNORE INTO {_REGISTRY_TABLE} (symbol, added_by) "
-            "SELECT DISTINCT security_id, 'auto' FROM lake_catalog.lake_bars"
+def _init_registry(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Seed symbol registry from DuckLake lake_bars."""
+    store = _get_ops(con)
+    try:
+        if con is None:
+            return
+        existing = {s.symbol for s in store.list_symbols(active_only=False)}
+        rows = con.execute(
+            "SELECT DISTINCT security_id FROM lake_catalog.lake_bars"
             " WHERE security_id NOT LIKE 'sec_%'"
-        )
+        ).fetchall()
+        for r in rows:
+            sym = r[0]
+            if sym not in existing:
+                store.add_symbol(sym, added_by="auto")
+    except Exception:
+        pass
 
 
 def _symbol_in_bootstrap(symbol: str) -> bool:
@@ -347,16 +361,10 @@ def ensure_registry(con: duckdb.DuckDBPyConnection) -> int:
     Returns number of new symbols backfilled.
     """
     rebuild_parquet()
-    _init_registry()
+    _init_registry(con)
 
-    ops = _get_ops()
-
-    active = {
-        r[0]
-        for r in ops.execute(
-            f"SELECT symbol FROM {_REGISTRY_TABLE} WHERE removed_at IS NULL"
-        ).fetchall()
-    }
+    store = _get_ops(con)
+    active_symbols = {s.symbol for s in store.list_symbols(active_only=True)}
     in_lake = {
         r[0]
         for r in con.execute(
@@ -366,15 +374,12 @@ def ensure_registry(con: duckdb.DuckDBPyConnection) -> int:
     }
 
     for sym in in_lake:
-        if sym not in active:
-            ops.execute(
-                f"INSERT OR IGNORE INTO {_REGISTRY_TABLE} (symbol, added_by) VALUES (?, 'auto')",
-                [sym],
-            )
-            active.add(sym)
+        if sym not in active_symbols:
+            store.add_symbol(sym, added_by="auto")
+            active_symbols.add(sym)
 
     total = 0
-    for sym in sorted(active):
+    for sym in sorted(active_symbols):
         total += _backfill_stooq_bars(con, sym)
 
     return total
@@ -393,29 +398,21 @@ def add_symbol(con: duckdb.DuckDBPyConnection, symbol: str) -> dict[str, Any]:
     3. Backfill bars, compute indicators, register
     """
     sym = symbol.upper().strip()
-    ops = _get_ops()
+    ops = _get_ops(con)
 
-    row = ops.execute(
-        f"SELECT removed_at FROM {_REGISTRY_TABLE} WHERE symbol = ?", [sym]
-    ).fetchone()
-    if row is not None and row[0] is None:
+    existing = ops.get_symbol(sym)
+    if existing is not None and existing.removed_at is None:
         return {"symbol": sym, "status": "already_active"}
 
     if not _symbol_in_bootstrap(sym):
         raise ValueError(f"Symbol '{sym}' not found in any known data source")
 
-    if row is not None:
-        ops.execute(
-            f"UPDATE {_REGISTRY_TABLE} SET removed_at = NULL, added_by = 'manual' WHERE symbol = ?",
-            [sym],
-        )
+    if existing is not None:
+        ops.add_symbol(sym, added_by="manual")
         return {"symbol": sym, "status": "restored"}
 
     count = _backfill_stooq_bars(con, sym)
-    ops.execute(
-        f"INSERT INTO {_REGISTRY_TABLE} (symbol, added_by) VALUES (?, 'manual')",
-        [sym],
-    )
+    ops.add_symbol(sym, added_by="manual")
     if count:
         _compute_for_symbol(con, sym)
 
@@ -426,33 +423,22 @@ def remove_symbol(symbol: str) -> dict[str, Any]:
     """Soft-remove a symbol: hides from UI, stops ingestion. Data stays in lake."""
     sym = symbol.upper().strip()
     ops = _get_ops()
-    ops.execute(
-        f"UPDATE {_REGISTRY_TABLE} SET removed_at = now() WHERE symbol = ? AND removed_at IS NULL",
-        [sym],
-    )
+    ops.remove_symbol(sym)
     return {"symbol": sym, "status": "removed"}
 
 
 def list_symbols(active_only: bool = True) -> list[dict[str, Any]]:
     """List symbols from the registry."""
     ops = _get_ops()
-    if active_only:
-        rows = ops.execute(
-            f"SELECT symbol, added_at, added_by"
-            f" FROM {_REGISTRY_TABLE} WHERE removed_at IS NULL ORDER BY symbol"
-        ).fetchall()
-        cols = ["symbol", "added_at", "added_by"]
-    else:
-        rows = ops.execute(
-            f"SELECT symbol, added_at, removed_at, added_by FROM {_REGISTRY_TABLE} ORDER BY symbol"
-        ).fetchall()
-        cols = ["symbol", "added_at", "removed_at", "added_by"]
-
+    entries = ops.list_symbols(active_only=active_only)
     result = []
-    for r in rows:
-        item = dict(zip(cols, r, strict=True))
-        for k, v in item.items():
-            if isinstance(v, datetime):
-                item[k] = v.isoformat()
+    for e in entries:
+        item: dict[str, Any] = {
+            "symbol": e.symbol,
+            "added_at": e.added_at.isoformat() if e.added_at else None,
+            "added_by": e.added_by,
+        }
+        if not active_only:
+            item["removed_at"] = e.removed_at.isoformat() if e.removed_at else None
         result.append(item)
     return result

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -1218,6 +1219,59 @@ async def remove_symbol_endpoint(request: Request, symbol: str):
 
     result = remove_symbol(symbol)
     return JSONResponse(result)
+
+
+# ── Ops (read-only) endpoints ────────────────────────────────────────────────
+
+
+@app.get("/v1/ops/defs")
+async def ops_defs(request: Request):
+    """List job definitions."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        defs = store.list_job_defs()
+        return JSONResponse([asdict(d) for d in defs])
+    finally:
+        con.close()
+
+
+@app.get("/v1/ops/runs")
+async def ops_runs(
+    request: Request,
+    status: str | None = None,
+    job_name: str | None = None,
+    limit: int = 20,
+):
+    """List job runs."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        runs = store.list_runs(status=status, job_name=job_name, limit=limit)
+        return JSONResponse([asdict(r) for r in runs])
+    finally:
+        con.close()
+
+
+@app.get("/v1/ops/sources")
+async def ops_sources(request: Request):
+    """List sources with limits and holds."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        sources = store.list_sources()
+        return JSONResponse([asdict(s) for s in sources])
+    finally:
+        con.close()
 
 
 # ── Dashboard API router ────────────────────────────────────────────────────
