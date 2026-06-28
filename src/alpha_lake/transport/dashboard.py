@@ -444,20 +444,39 @@ async def bars_summary(
 
     df = df.sort("effective_date")
     close, high, low, vol = df["close"], df["high"], df["low"], df["volume"]
-    last = float(close[-1])
-    prev = float(close[-2]) if (df.height >= 2 and close[-2] is not None) else last
+
+    import math as _math
+
+    def _fin(x: object) -> float | None:
+        if x is None:
+            return None
+        if isinstance(x, (int, float)):
+            v = float(x)
+            if _math.isnan(v) or _math.isinf(v):
+                return None
+            return v
+        try:
+            v = float(x)  # type: ignore
+            if _math.isnan(v) or _math.isinf(v):
+                return None
+            return v
+        except (ValueError, TypeError):
+            return None
 
     def _last(series) -> float | None:
         for x in reversed(list(series)):
-            if x is not None:
-                return float(x)
+            if (v := _fin(x)) is not None:
+                return v
         return None
+
+    last = _fin(close[-1]) or 0.0
+    prev = _fin(close[-2]) if (df.height >= 2) else last
 
     # aligned trend + volume series
     pairs = [
-        (c, v)
+        (_fin(c), _fin(v))
         for c, v in zip(list(close.tail(120)), list(vol.tail(120)), strict=False)
-        if c is not None
+        if _fin(c) is not None
     ]
     sym_disp, name_disp = _symbol_name_for(con, sec_id, as_of)
 
@@ -470,8 +489,8 @@ async def bars_summary(
         "latest_date": str(df["effective_date"][-1]),
         "quality_status": df["quality_status"][-1] if "quality_status" in df.columns else "valid",
         "source_id": df["source_id"][-1] if "source_id" in df.columns else None,
-        "trend": [float(c) for c, _ in pairs],
-        "volume": [float(v) if v is not None else 0.0 for _, v in pairs],
+        "trend": [c for c, _ in pairs if c is not None],
+        "volume": [v if v is not None else 0.0 for _, v in pairs],
     }
 
     # ── Try reading from stored technical_indicators first ──────────────
@@ -552,6 +571,8 @@ async def bars_summary(
 
 def _store_indicators_into(summary: dict[str, Any], row: dict[str, Any]) -> None:
     """Copy stored indicator values from a row dict into *summary*."""
+    import math as _math
+
     _model_to_dash: dict[str, str] = {
         "rsi_14": "rsi",
         "atr_14": "atr",
@@ -583,8 +604,10 @@ def _store_indicators_into(summary: dict[str, Any], row: dict[str, Any]) -> None
             summary[dst] = None
         elif col in _BOOL_INDICATOR_COLS:
             summary[dst] = bool(val)
-        elif isinstance(val, (int, float)):
+        elif isinstance(val, (int, float)) and not _math.isnan(float(val)):
             summary[dst] = float(val)
+        elif isinstance(val, float) and _math.isnan(val):
+            summary[dst] = None
         else:
             summary[dst] = val
 
