@@ -441,7 +441,7 @@ max_staleness_days = 2
 
 [precedence]
 analyst_estimates = ["finnhub", "fmp"]
-bars_daily = ["yahoo", "tiingo", "eodhd"]
+bars_daily = ["tiingo", "yahoo", "eodhd"]
 fundamentals = ["tiingo", "alphav"]
 insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
