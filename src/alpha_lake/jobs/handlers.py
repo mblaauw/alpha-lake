@@ -155,6 +155,7 @@ def handle_bars_refresh(
     """
     import asyncio
 
+    from alpha_lake.calendar_ import previous_trading_day
     from alpha_lake.clock import get_clock
     from alpha_lake.connectors import get_connector, has_api_key
     from alpha_lake.connectors.base import BudgetExhaustedError
@@ -162,14 +163,18 @@ def handle_bars_refresh(
     from alpha_lake.source_registry import get_primary_source
 
     symbols = _resolve_symbols(con, store, run.params_json)
-    default_src = run.params_json.get("source_id") or get_primary_source("bars_daily")
-    from_date = run.params_json.get("from_date", "")
-    to_date = run.params_json.get("to_date", "")
+    raw_src = run.params_json.get("source_id")
+    default_src = get_primary_source("bars_daily") if raw_src in (None, "", "auto") else raw_src
+    clock_now = get_clock().now()
+    # Default to the most recent closed trading session so the refresh
+    # actually fetches data for the last market day, not a no-op.
+    _prev_td = previous_trading_day(clock_now.date()).isoformat()
+    from_date = run.params_json.get("from_date", _prev_td)
+    to_date = run.params_json.get("to_date", _prev_td)
 
     if not default_src:
         raise ValueError("No source configured for bars_daily")
 
-    clock_now = get_clock().now()
     run_id = f"run_{clock_now.strftime('%Y%m%d_%H%M%S')}"
     total = 0
     results: list[dict[str, Any]] = []

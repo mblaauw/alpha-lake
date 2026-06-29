@@ -142,7 +142,6 @@ DEFAULT_JOB_DEFS: list[JobDefinition] = [
             "symbols": "active",
             "from_policy": "last_missing_or_previous_session",
             "to_policy": "latest_closed_session",
-            "source_id": "auto",
         },
         concurrency_key="bars",
         dataset="bars",
