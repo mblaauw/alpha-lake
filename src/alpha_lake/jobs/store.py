@@ -420,7 +420,9 @@ class PostgresJobStore:
                 run.job_type,
                 run.status,
                 run.idempotency_key,
-                run.params_json,
+                json.dumps(run.params_json)
+                if isinstance(run.params_json, dict)
+                else run.params_json,
                 run.requested_for_date,
                 run.source_id,
                 run.dataset,

@@ -172,6 +172,7 @@ max_retries = 3
 
 [sources.sec]
 base_url = "https://data.sec.gov"
+requires_key = false
 rate_limit_per_sec = 10.0
 max_retries = 5
 
@@ -503,7 +504,7 @@ concurrency_key = "datasets"
 max_attempts = 3
 priority = 30
 schedule = { timezone = "America/New_York", time = "06:00" }
-params = { datasets = ["earnings_calendar", "insider_tx", "attention_metrics"] }
+params = { datasets = ["earnings_calendar", "insider_tx", "attention_metrics", "news", "sentiment"] }
 
 [[worker.job_definitions]]
 job_name = "source.health"
