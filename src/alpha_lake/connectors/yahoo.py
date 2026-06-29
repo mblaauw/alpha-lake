@@ -34,7 +34,11 @@ async def fetch_bars_daily(
     }
     async with build_client(cfg) as client:
         endpoint = f"/v8/finance/chart/{symbol}"
-        response = await fetch_with_retry(client, endpoint, params=params)
+        # Yahoo blocks the default httpx User-Agent from container IPs
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        }
+        response = await client.get(endpoint, params=params, headers=headers)
         raw_bytes = response.content
 
         rows: list[dict[str, Any]] = []
