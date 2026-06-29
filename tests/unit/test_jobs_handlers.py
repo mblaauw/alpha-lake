@@ -101,6 +101,7 @@ def test_handle_bars_refresh_no_source():
         job_type="bars_refresh",
         idempotency_key="test",
         status="running",
+        params_json={"source_id": "_nonexistent_"},
     )
     con = duckdb.connect()
     result = handle_bars_refresh(con, cfg, run, store)

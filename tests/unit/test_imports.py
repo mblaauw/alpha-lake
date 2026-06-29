@@ -33,7 +33,7 @@ def test_source_registry():
         get_source_precedence,
     )
 
-    assert get_source_precedence("bars_daily") == ["eodhd", "tiingo"]
+    assert get_source_precedence("bars_daily") == ["yahoo", "tiingo", "eodhd"]
     assert get_dataset_posture("news_articles").tier == "experimental"
     assert get_dataset_posture("news_articles").supported is False
     assert "tiingo" not in get_dataset_sources("news_articles")

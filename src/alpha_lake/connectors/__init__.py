@@ -45,6 +45,7 @@ from alpha_lake.connectors.stocktwits import fetch_sentiment as _stocktwits
 from alpha_lake.connectors.tiingo import fetch_bars_daily as _tiingo_bars
 from alpha_lake.connectors.tiingo_fundamentals import fetch_fundamentals as _tiingo_fundamentals
 from alpha_lake.connectors.tiingo_news import fetch_news as _tiingo_news
+from alpha_lake.connectors.yahoo import fetch_bars_daily as _yahoo_bars
 
 if TYPE_CHECKING:
     from alpha_lake.connectors.base import RawFetch
@@ -67,6 +68,8 @@ def has_api_key(source_id: str) -> bool:
 
     try:
         cfg = get_source(source_id)
+        if not cfg.requires_key:
+            return True
         return bool(cfg.api_key)
     except KeyError:
         return False
@@ -81,6 +84,7 @@ register("alphav", "etf_profiles", _alphav_etf)
 register("alphav", "ipo_calendar", _alphav_ipo)
 register("alphav", "top_movers", _alphav_movers)
 register("alpaca", "bars_daily", _alpaca_bars)
+register("yahoo", "bars_daily", _yahoo_bars)
 register("apewisdom", "attention_metrics", _apewisdom)
 register("eodhd", "bars_daily", _eodhd_bars)
 register("eodhd", "earnings_calendar", _eodhd_earnings)

@@ -50,7 +50,7 @@ def test_kernel_registers_precedence():
     register_kernel(con)
     rows = con.execute("SELECT * FROM _kernel_source_priority ORDER BY priority").fetchall()
     assert len(rows) >= 1
-    assert ("bars_daily", "eodhd", 0) in rows or ("bars_daily", "eodhd", 1) in rows
+    assert ("bars_daily", "yahoo", 0) in rows or ("bars_daily", "yahoo", 1) in rows
     con.close()
 
 
@@ -138,11 +138,12 @@ def _bar_from(close: float, eff: str, avail: str, source: str = "eodhd") -> pl.D
 
 
 def test_kernel_precedence_wins_over_freshness():
+    """Higher-precedence source wins even if its data is less fresh."""
     con = duckdb.connect()
     load_config("config/stack.toml")
     register_kernel(con)
-    write_bars(con, _bar_from(100.0, "2026-01-05", "2026-01-05T16:00:00+00:00", "eodhd"))
-    write_bars(con, _bar_from(999.0, "2026-01-05", "2026-01-10T16:00:00+00:00", "tiingo"))
+    write_bars(con, _bar_from(100.0, "2026-01-05", "2026-01-05T16:00:00+00:00", "tiingo"))
+    write_bars(con, _bar_from(999.0, "2026-01-05", "2026-01-10T16:00:00+00:00", "eodhd"))
     result = read_bars_asof(
         con,
         ["sec_t"],

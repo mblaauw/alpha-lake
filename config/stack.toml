@@ -150,6 +150,13 @@ rate_limit_per_sec = 10.0
 rate_limit_per_day = 1000
 max_retries = 3
 
+[sources.yahoo]
+base_url = "https://query1.finance.yahoo.com"
+requires_key = false
+rate_limit_per_sec = 2.0
+rate_limit_per_min = 60
+max_retries = 3
+
 [sources.tiingo]
 base_url = "https://api.tiingo.com"
 rate_limit_per_sec = 0.5
@@ -242,6 +249,11 @@ parser_version = 1
 
 [source_datasets.eodhd.earnings_calendar]
 enabled = false
+parser_version = 1
+
+[source_datasets.yahoo]
+[source_datasets.yahoo.bars_daily]
+enabled = true
 parser_version = 1
 
 [source_datasets.tiingo]
@@ -429,7 +441,7 @@ max_staleness_days = 2
 
 [precedence]
 analyst_estimates = ["finnhub", "fmp"]
-bars_daily = ["tiingo", "eodhd"]
+bars_daily = ["yahoo", "tiingo", "eodhd"]
 fundamentals = ["tiingo", "alphav"]
 insider_tx = ["sec", "finnhub"]
 news = ["finnhub", "marketaux", "tiingo"]
@@ -467,11 +479,10 @@ job_type = "bars_refresh"
 schedule_kind = "market_close"
 concurrency_key = "bars"
 dataset = "bars"
-source_id = "auto"
 max_attempts = 3
 priority = 10
 schedule = { calendar = "XNYS", offset_minutes = 30 }
-params = { symbols = "active", from_policy = "last_missing_or_previous_session", to_policy = "latest_closed_session", source_id = "auto" }
+params = { symbols = "active", from_policy = "last_missing_or_previous_session", to_policy = "latest_closed_session" }
 
 [[worker.job_definitions]]
 job_name = "indicators.compute.eod"
