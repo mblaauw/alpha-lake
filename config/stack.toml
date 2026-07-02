@@ -486,6 +486,17 @@ schedule = { calendar = "XNYS", offset_minutes = 30 }
 params = { symbols = "active", from_policy = "last_missing_or_previous_session", to_policy = "latest_closed_session" }
 
 [[worker.job_definitions]]
+job_name = "bars.refresh.morning"
+job_type = "bars_refresh"
+schedule_kind = "daily_time"
+concurrency_key = "bars"
+dataset = "bars"
+max_attempts = 3
+priority = 5
+schedule = { timezone = "Europe/Amsterdam", time = "07:05", calendar = "XNYS", skip_non_trading_days = true }
+params = { symbols = "active", source_id = "yahoo" }
+
+[[worker.job_definitions]]
 job_name = "indicators.compute.eod"
 job_type = "indicators_compute"
 schedule_kind = "daily_time"
@@ -493,7 +504,7 @@ concurrency_key = "indicators"
 dataset = "technical_indicators"
 max_attempts = 3
 priority = 20
-schedule = { timezone = "America/New_York", time = "18:00", calendar = "XNYS", skip_non_trading_days = true }
+schedule = { timezone = "Europe/Amsterdam", time = "07:15", calendar = "XNYS", skip_non_trading_days = true }
 params = { symbols = "active", trigger = "after_bars_refresh" }
 
 [[worker.job_definitions]]
@@ -503,8 +514,8 @@ schedule_kind = "daily_time"
 concurrency_key = "datasets"
 max_attempts = 3
 priority = 30
-schedule = { timezone = "America/New_York", time = "06:00" }
-params = { datasets = ["earnings_calendar", "insider_tx", "attention_metrics", "news", "sentiment"] }
+schedule = { timezone = "Europe/Amsterdam", time = "07:00" }
+params = { datasets = ["earnings_calendar", "insider_tx", "attention_metrics", "news", "sentiment", "analyst_estimates", "macro_series"] }
 
 [[worker.job_definitions]]
 job_name = "source.health"
