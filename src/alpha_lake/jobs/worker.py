@@ -71,6 +71,13 @@ class Worker:
         while not self._shutdown:
             self._heartbeat()
 
+            # Check if this worker has been paused via the API
+            workers = self._store.list_workers()
+            my_state = next((w for w in workers if w.worker_id == self._worker_id), None)
+            if my_state is not None and my_state.paused:
+                time.sleep(self._poll_interval)
+                continue
+
             try:
                 self._scheduler.enqueue_due()
             except Exception as exc:
@@ -86,13 +93,14 @@ class Worker:
 
         info("Worker shut down.")
 
-    def _heartbeat(self) -> None:
+    def _heartbeat(self, current_run_id: str | None = None) -> None:
         from alpha_lake.jobs.models import WorkerState
 
         self._store.upsert_worker_state(
             WorkerState(
                 worker_id=self._worker_id,
                 heartbeat_at=_utcnow(),
+                current_run_id=current_run_id,
                 version="0.1.0",
             )
         )
@@ -106,6 +114,7 @@ class Worker:
             return
 
         info(f"Running {run.job_name} ({run.run_id[:8]}) job_type={run.job_type}")
+        self._heartbeat(current_run_id=run.run_id)
         t0 = time.monotonic()
         try:
             con = self._connect()

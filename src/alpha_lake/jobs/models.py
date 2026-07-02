@@ -92,6 +92,7 @@ class WorkerState:
     heartbeat_at: datetime | None = None
     current_run_id: str | None = None
     version: str = ""
+    paused: bool = False
 
 
 @dataclass

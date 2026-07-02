@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime, timedelta
 from typing import Any
@@ -132,9 +133,15 @@ def ensure_ops_schema(con: duckdb.DuckDBPyConnection) -> None:
         "  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
         "  heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
         "  current_run_id TEXT,"
-        "  version TEXT NOT NULL DEFAULT ''"
+        "  version TEXT NOT NULL DEFAULT '',"
+        "  paused BOOLEAN NOT NULL DEFAULT FALSE"
         ")"
     )
+    try:
+        con.execute(f"ALTER TABLE {_OPS_SCHEMA}.worker_state ADD COLUMN paused BOOLEAN")
+    except Exception:
+        with contextlib.suppress(Exception):
+            con.execute("ROLLBACK")
     con.execute(
         f"CREATE TABLE IF NOT EXISTS {_OPS_SCHEMA}.symbol_registry ("
         "  symbol TEXT PRIMARY KEY,"
@@ -695,18 +702,20 @@ class PostgresJobStore:
     def upsert_worker_state(self, state: WorkerState) -> None:
         self._con.execute(
             f"INSERT INTO {_OPS_SCHEMA}.worker_state "
-            "(worker_id, started_at, heartbeat_at, current_run_id, version) "
-            "VALUES (?, ?, ?, ?, ?) "
+            "(worker_id, started_at, heartbeat_at, current_run_id, version, paused) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (worker_id) DO UPDATE SET"
             "  heartbeat_at = EXCLUDED.heartbeat_at,"
             "  current_run_id = EXCLUDED.current_run_id,"
-            "  version = EXCLUDED.version",
+            "  version = EXCLUDED.version,"
+            "  paused = EXCLUDED.paused",
             [
                 state.worker_id,
                 state.started_at or _utcnow(),
                 state.heartbeat_at or _utcnow(),
                 state.current_run_id,
                 state.version,
+                state.paused,
             ],
         )
 
@@ -721,6 +730,7 @@ class PostgresJobStore:
                 heartbeat_at=r[2],
                 current_run_id=r[3],
                 version=r[4],
+                paused=r[5] if len(r) > 5 else False,
             )
             for r in rows
         ]

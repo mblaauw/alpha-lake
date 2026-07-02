@@ -1187,7 +1187,7 @@ async def ops_defs(request: Request):
     _auth(request)
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = _get_con()
+    con = _get_ops_connection()
     try:
         store = PostgresJobStore(con)
         defs = store.list_job_defs()
@@ -1208,7 +1208,7 @@ async def ops_runs(
     _auth(request)
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = _get_con()
+    con = _get_ops_connection()
     try:
         store = PostgresJobStore(con)
         runs = store.list_runs(status=status, job_name=job_name, limit=limit, offset=offset)
@@ -1223,7 +1223,7 @@ async def ops_sources(request: Request):
     _auth(request)
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = _get_con()
+    con = _get_ops_connection()
     try:
         store = PostgresJobStore(con)
         sources = store.list_sources()
@@ -1236,10 +1236,10 @@ async def ops_sources(request: Request):
 async def ops_job_enqueue(request: Request, job_name: str):
     """Enqueue a manual run for the given job definition."""
     _auth(request)
-    from alpha_lake.jobs.scheduler import Scheduler
+    from alpha_lake.jobs.models import WorkerState
     from alpha_lake.jobs.store import PostgresJobStore
 
-    con = _get_con()
+    con = _get_ops_connection()
     try:
         store = PostgresJobStore(con)
         sched = Scheduler(store, get_config())
@@ -1313,6 +1313,122 @@ async def ops_symbol_source_delete(request: Request, symbol: str):
 
 
 # ── Dashboard API router ────────────────────────────────────────────────────
+
+# ── Worker status + control endpoints ─────────────────────────────────────
+
+
+from alpha_lake.transport._shared import _get_ops_connection
+
+
+@app.get("/v1/ops/workers")
+async def ops_workers(request: Request):
+    """List worker state summaries."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_ops_connection()
+    try:
+        store = PostgresJobStore(con)
+        workers = store.list_workers()
+        result = []
+        for w in workers:
+            age = (_now() - w.heartbeat_at).total_seconds() if w.heartbeat_at else None
+            status = (
+                "stale" if age is not None and age > 60 else ("paused" if w.paused else "running")
+            )
+            result.append(
+                {
+                    "worker_id": w.worker_id,
+                    "status": status,
+                    "started_at": w.started_at.isoformat() if w.started_at else None,
+                    "heartbeat_at": w.heartbeat_at.isoformat() if w.heartbeat_at else None,
+                    "heartbeat_age_seconds": age,
+                    "current_run_id": w.current_run_id,
+                    "version": w.version,
+                    "paused": w.paused,
+                }
+            )
+        return JSONResponse(result)
+    finally:
+        con.close()
+
+
+@app.post("/v1/ops/workers/{worker_id}/pause")
+async def ops_worker_pause(request: Request, worker_id: str):
+    """Pause a worker — it will finish its current job but not claim new ones."""
+    _auth(request)
+    from alpha_lake.jobs.models import WorkerState
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        store.upsert_worker_state(
+            WorkerState(worker_id=worker_id, paused=True, heartbeat_at=_now())
+        )
+        return JSONResponse({"worker_id": worker_id, "paused": True})
+    finally:
+        con.close()
+
+
+@app.post("/v1/ops/workers/{worker_id}/resume")
+async def ops_worker_resume(request: Request, worker_id: str):
+    """Resume a paused worker."""
+    _auth(request)
+    from alpha_lake.jobs.models import WorkerState
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_con()
+    try:
+        store = PostgresJobStore(con)
+        store.upsert_worker_state(
+            WorkerState(worker_id=worker_id, paused=False, heartbeat_at=_now())
+        )
+        return JSONResponse({"worker_id": worker_id, "paused": False})
+    finally:
+        con.close()
+
+
+@app.get("/v1/ops/config")
+async def ops_config(request: Request):
+    """Return current worker and schedule configuration."""
+    _auth(request)
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    con = _get_ops_connection()
+    try:
+        store = PostgresJobStore(con)
+        cfg = get_config()
+        defs = store.list_job_defs()
+        schedules = []
+        for jd in defs:
+            if jd.schedule_kind == "manual":
+                continue
+            schedules.append(
+                {
+                    "job_name": jd.job_name,
+                    "schedule_kind": jd.schedule_kind,
+                    "schedule_json": jd.schedule_json,
+                    "priority": jd.priority,
+                    "enabled": jd.enabled,
+                    "hold": jd.hold,
+                    "source_id": jd.source_id,
+                    "dataset": jd.dataset,
+                }
+            )
+        return JSONResponse(
+            {
+                "poll_interval_seconds": cfg.worker.poll_interval_seconds,
+                "stale_after_seconds": cfg.worker.stale_after_seconds,
+                "max_active_runs": cfg.worker.max_active_runs,
+                "allow_rate_limit_raise": cfg.worker.allow_rate_limit_raise,
+                "worker_enabled": cfg.worker.enabled,
+                "schedules": schedules,
+            }
+        )
+    finally:
+        con.close()
+
 
 from alpha_lake.transport.dashboard import router as dashboard_router  # noqa: E402
 

@@ -73,10 +73,10 @@ class _ConnectionPool:
 
         try:
             return connect(load_config())
-        except Exception:
+        except Exception as exc:
             import logging
 
-            logging.getLogger("alpha_lake").warning(
+            logging.getLogger("alpha_lake").exception(
                 "Failed to attach catalog; creating raw DuckDB connection"
             )
             con = duckdb.connect()
@@ -92,6 +92,17 @@ _conn_pool = _ConnectionPool()
 
 def _get_connection() -> duckdb.DuckDBPyConnection:
     return _conn_pool.get()
+
+
+def _get_ops_connection() -> duckdb.DuckDBPyConnection:
+    """Return a fresh disposable connection for ops admin endpoints.
+
+    The caller owns this connection and MUST close it when done.
+    """
+    from alpha_lake.catalog import connect
+    from alpha_lake.config import load_config
+
+    return connect(load_config())
 
 
 def _set_test_connection(con: duckdb.DuckDBPyConnection) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 import duckdb
 
 from alpha_lake.config import RootConfig
@@ -35,6 +37,8 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
     In embedded mode: DuckLake + SQLite catalog + local FS data.
     """
     con = duckdb.connect()
+    with contextlib.suppress(Exception):
+        con.execute("ROLLBACK")
     con.execute("SET timezone = 'UTC'")
 
     con.execute("INSTALL ducklake")
@@ -56,8 +60,14 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
             con.execute("SET s3_url_style = ?", [s3.url_style])
 
     attach_str, data_path = _build_attach(cfg)
-    con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
-    con.execute("USE lake_catalog")
+    try:
+        con.execute(f"ATTACH '{attach_str}' AS lake_catalog (DATA_PATH '{data_path}')")
+        con.execute("USE lake_catalog")
+    except Exception as exc:
+        from alpha_lake.cli_ui import warn as _warn
+
+        _warn(f"DuckLake ATTACH failed: {exc}")
+        raise
 
     if cfg.lake.runtime == "stack":
         pg_str = _pg_catalog_attach_str(cfg)
@@ -70,6 +80,8 @@ def connect(cfg: RootConfig) -> duckdb.DuckDBPyConnection:
                 logging.getLogger("alpha_lake").exception(
                     "Failed to attach Postgres as pg_catalog — ops tables unavailable"
                 )
+                with contextlib.suppress(Exception):
+                    con.execute("ROLLBACK")
         ensure_ops_schema(con)
         from alpha_lake.jobs.store import seed_default_job_defs, seed_job_defs_from_config
 
