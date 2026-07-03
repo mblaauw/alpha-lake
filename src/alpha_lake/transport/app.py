@@ -1433,3 +1433,25 @@ async def ops_config(request: Request):
 from alpha_lake.transport.dashboard import router as dashboard_router  # noqa: E402
 
 app.include_router(dashboard_router)
+
+# ── MCP server (AI agent protocol) ──────────────────────────────────────
+# Exposes all FastAPI routes as MCP tools so AI agents can query the lake
+# and invoke ops directly.  Access is controlled by the same API key auth
+# as the REST API.
+from fastapi_mcp import FastApiMCP as _FastApiMCP  # noqa: E402
+
+_mcp = _FastApiMCP(
+    app,
+    name="Alpha Lake",
+    description="Alpha-Lake market-data lakehouse — bars, indicators, "
+    "fundamentals, news, sentiment, earnings, insider transactions, "
+    "corporate actions, and data-job operations.",
+)
+import logging as _logging
+
+_logging.getLogger("alpha_lake").warning(
+    "MCP tools discovered: %d (%s)",
+    len(_mcp.tools) if _mcp.tools else 0,
+    "ok" if _mcp.tools else "empty",
+)
+_mcp.mount_sse(mount_path="/mcp")
