@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "alpha_lake": {
+      "type": "remote",
+      "url": "http://localhost:8000/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:ALPHA_LAKE_API_KEY}"
+      }
+    }
+  }
+}
