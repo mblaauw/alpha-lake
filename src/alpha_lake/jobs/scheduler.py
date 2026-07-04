@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from alpha_lake.config import RootConfig
 from alpha_lake.jobs._shared import _new_id, _utcnow
 from alpha_lake.jobs.models import JobDefinition, JobRun, JobStore
+
+log = logging.getLogger("alpha_lake")
 
 
 class Scheduler:
@@ -115,6 +118,11 @@ class Scheduler:
 
                 today = local_now.date()
                 if not is_trading_day(today):
+                    log.debug(
+                        "daily_time skip %s: %s is not a trading day",
+                        jd.job_name,
+                        today,
+                    )
                     return None
             cutoff = datetime.combine(
                 local_now.date(),
@@ -122,15 +130,30 @@ class Scheduler:
                 tzinfo=tz,
             )
             if local_now < cutoff:
+                log.debug(
+                    "daily_time skip %s: now=%s < cutoff=%s",
+                    jd.job_name,
+                    local_now,
+                    cutoff,
+                )
                 return None
-            return f"scheduled:daily_time:{local_now.date().isoformat()}:{run_time}"
+            key = f"scheduled:daily_time:{local_now.date().isoformat()}:{run_time}"
+            log.debug("daily_time due %s → %s", jd.job_name, key)
+            return key
 
         if sk == "market_close":
             today = now.date()
             from alpha_lake.calendar_ import is_trading_day
 
             if not is_trading_day(today):
+                log.debug(
+                    "market_close skip %s: %s is not a trading day",
+                    jd.job_name,
+                    today,
+                )
                 return None
-            return f"scheduled:market_close:{today.isoformat()}"
+            key = f"scheduled:market_close:{today.isoformat()}"
+            log.debug("market_close due %s → %s", jd.job_name, key)
+            return key
 
         return None

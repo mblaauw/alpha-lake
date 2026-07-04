@@ -126,6 +126,79 @@ at `http://localhost:8000/`. The dashboard is enabled via `ALPHA_LAKE_DASHBOARD_
 | Catalog metadata size | >1 GB | >5 GB |
 | Per-table rows | >10M | >50M |
 
+## Worker & Job Operations
+
+### Starting the Worker
+
+```bash
+# Via Compose (starts automatically with `just up`):
+docker compose up -d worker
+
+# One-off run (single poll cycle):
+docker compose run --rm app worker --once
+
+# Interactive with debug logging:
+docker compose run --rm app worker --verbose
+docker compose run --rm app worker -v
+```
+
+### `just ops` Recipe
+
+Run any `alpha-lake jobs` or `alpha-lake ops` CLI command against the running stack:
+
+```bash
+just ops jobs list
+just ops jobs runs --status failed --limit 10
+just ops force-refresh
+just ops force-refresh --include bars.refresh.eod
+just ops sources limits
+```
+
+The `just ops` recipe passes all arguments to `docker compose run --rm app` with the `ops` subcommand.
+
+### Force-Refresh
+
+Manually enqueue all 4 data-refresh jobs (skips `source.health`, `stooq.rebuild`, `bars.bootstrap.active`):
+
+```bash
+docker compose run --rm app jobs force-refresh
+```
+
+Use `--include` to specify a subset:
+
+```bash
+docker compose run --rm app jobs force-refresh --include bars.refresh.eod --include indicators.compute.eod
+```
+
+### Scheduler Debug Logging
+
+The scheduler logs idempotency-key decisions at `DEBUG` level. Enable with:
+
+```bash
+# CLI:
+docker compose run --rm app worker --verbose
+docker compose run --rm app worker -v
+
+# Environment (for persistent Docker config):
+ALPHA_LAKE_LOG_LEVEL=DEBUG docker compose up -d worker
+```
+
+This logs why `daily_time`/`market_close` jobs skip (non-trading day, before cutoff) and when a key is generated.
+
+### Job Definitions
+
+All 7 job definitions are seeded on worker startup:
+
+| Job name | Type | Schedule | Purpose |
+|---|---|---|---|
+| `stooq.rebuild` | `stooq_rebuild` | manual | Rebuild local Parquet from mounted STOOQ zip |
+| `bars.bootstrap.active` | `bars_bootstrap` | manual | Backfill active symbols from bulk STOOQ data |
+| `bars.refresh.eod` | `bars_refresh` | market close + 30m | Refresh active symbols from primary source |
+| `bars.refresh.morning` | `bars_refresh` | daily 08:30 ET | Refresh active symbols before market open |
+| `indicators.compute.eod` | `indicators_compute` | after bars.refresh.eod | Compute neutral technical facts after new bars |
+| `datasets.refresh.core` | `dataset_refresh` | daily 06:00 ET | Refresh enabled non-bars datasets |
+| `source.health` | `source_health` | interval 5m | Probe source status and budgets |
+
 ## STOOQ Bootstrap
 
 On every server restart, `ensure_registry()` auto-runs:

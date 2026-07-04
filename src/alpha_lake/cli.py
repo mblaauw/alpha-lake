@@ -61,7 +61,16 @@ app = typer.Typer(name="alpha-lake")
 def _main(
     ctx: typer.Context,
     log_json: bool = typer.Option(False, "--log-json", help="Output structured JSON"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug-level logging"),
 ):
+    import logging as _logging
+
+    _log_level = os.environ.get("ALPHA_LAKE_LOG_LEVEL", "").upper()
+    if verbose or _log_level in ("DEBUG", "TRACE"):
+        _logging.basicConfig(
+            level=_logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        )
     set_mode(log_json)
     install_rich_traceback()
     load_config()
@@ -565,6 +574,39 @@ def ops_jobs_enqueue(
             ok(f"Enqueued [bold]{job_name}[/] as run [bold]{run.run_id[:8]}[/].")
         else:
             warn(f"Job [bold]{job_name}[/] not found or disabled.")
+
+
+@_ops_app.command("force-refresh")
+def ops_jobs_force_refresh(
+    include: str = typer.Option(
+        "bars.refresh.morning,bars.refresh.eod,datasets.refresh.core,indicators.compute.eod",
+        "--include",
+        help="Comma-separated job names to enqueue",
+    ),
+):
+    """Enqueue data-refresh jobs that may have been missed (e.g. after a holiday).
+
+    Defaults to all scheduled refresh jobs. Use --include to override.
+    """
+    from alpha_lake.jobs.scheduler import Scheduler
+    from alpha_lake.jobs.store import PostgresJobStore
+
+    names = [n.strip() for n in include.split(",") if n.strip()]
+    with _connect() as con:
+        store = PostgresJobStore(con)
+        sched = Scheduler(store, get_config())
+        count = 0
+        for job_name in names:
+            run = sched.enqueue_manual(job_name)
+            if run:
+                ok(f"Enqueued [bold]{job_name}[/] as run [bold]{run.run_id[:8]}[/].")
+                count += 1
+            else:
+                warn(f"Job [bold]{job_name}[/] not found or disabled.")
+        if count:
+            ok(f"Done — {count} job(s) enqueued.")
+        else:
+            warn("No jobs were enqueued — check that job names exist and are enabled.")
 
 
 @_ops_app.command("hold")

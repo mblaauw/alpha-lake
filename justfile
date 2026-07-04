@@ -81,6 +81,10 @@ vendor:
     tar czf vendor/images.tar.gz -C vendor/images .
     echo "Vendor complete — transfer vendor/ to air-gapped environment"
 
+# Run CLI commands against the stack (e.g. `just ops list`, `just ops force-refresh`)
+ops *args:
+    docker compose run --rm app {{ args }}
+
 # Lint and type-check
 lint:
     uv run ruff check src/ tests/

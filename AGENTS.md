@@ -61,6 +61,7 @@ just replay *[path]                  # golden replay (tests/replay/)
 just freeze-fixtures                 # freeze golden replay fixtures
 just compute-indicators              # compute technical indicators for all symbols
 just lint                            # ruff + ruff format --check + ty + import-linter
+just ops *[args]                     # run ops CLI commands (e.g. `just ops jobs list`, `just ops force-refresh`)
 just vendor                          # offline wheelhouse + images (online step)
 ```
 

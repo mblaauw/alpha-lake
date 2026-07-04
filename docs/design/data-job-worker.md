@@ -639,26 +639,46 @@ No endpoint is required to add workers. Workers are created by starting containe
 
 ## CLI Surface
 
-Add commands:
+Commands:
 
 ```text
 alpha-lake worker --poll-interval 5 --once
+alpha-lake worker --verbose                          # debug scheduler logging
 alpha-lake jobs list
 alpha-lake jobs runs --status failed --limit 20
 alpha-lake jobs hold bars.refresh.eod --reason "provider incident"
 alpha-lake jobs resume bars.refresh.eod
+alpha-lake jobs force-refresh                        # enqueue all 4 data-refresh jobs
+alpha-lake jobs force-refresh --include bars.refresh.eod  # enqueue specific job(s)
 alpha-lake sources limits
 alpha-lake sources hold alphav --reason "quota protection"
 alpha-lake sources set-limit tiingo --per-min 20
 ```
 
-The CLI may include a manual run command for trusted operators:
+Manual run command for trusted operators:
 
 ```text
 alpha-lake jobs enqueue bars.bootstrap.active --reason "initial lake load"
 ```
 
 This is acceptable because the user specifically asked not to expose public API endpoints to add/remove jobs. A local CLI command for seeded definitions is useful for bootstrap and recovery.
+
+### `--verbose` / `-v` Flag
+
+The `worker` command supports `--verbose` / `-v` to enable debug-level logging from the scheduler.
+This logs why `daily_time`/`market_close` jobs are skipped (non-trading day, before cutoff) and when an
+idempotency key is generated. The `ALPHA_LAKE_LOG_LEVEL=DEBUG` environment variable achieves the same effect
+for persistent Docker configuration.
+
+### `just ops` Recipe
+
+```makefile
+ops *args:
+    docker compose run --rm app ops {{args}}
+```
+
+Allows running any `alpha-lake jobs` or `alpha-lake ops` CLI command through Compose without the full
+`docker compose run --rm app ops ...` prefix.
 
 ## Config
 
