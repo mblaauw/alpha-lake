@@ -63,6 +63,9 @@ class Scheduler:
                 if (not has_calendar) or self._is_trading_day(day, sched):
                     idem_key = self._missed_key(jd, day, run_time)
                     if not self._key_exists(jd.job_name, idem_key):
+                        params = dict(jd.params_json)
+                        params["from_date"] = day.isoformat()
+                        params["to_date"] = day.isoformat()
                         self._store.create_run(
                             JobRun(
                                 run_id=_new_id(),
@@ -70,7 +73,7 @@ class Scheduler:
                                 job_type=jd.job_type,
                                 status="queued",
                                 idempotency_key=idem_key,
-                                params_json=jd.params_json,
+                                params_json=params,
                                 requested_for_date=day,
                                 source_id=jd.source_id,
                                 dataset=jd.dataset,

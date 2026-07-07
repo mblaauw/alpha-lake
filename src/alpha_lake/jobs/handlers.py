@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import duckdb
@@ -155,7 +156,7 @@ def handle_bars_refresh(
     """
     import asyncio
 
-    from alpha_lake.calendar_ import previous_trading_day
+    from alpha_lake.calendar_ import is_trading_day, previous_trading_day, shift_trading_days
     from alpha_lake.clock import get_clock
     from alpha_lake.connectors import get_connector, has_api_key
     from alpha_lake.connectors.base import BudgetExhaustedError
@@ -166,11 +167,29 @@ def handle_bars_refresh(
     raw_src = run.params_json.get("source_id")
     default_src = get_primary_source("bars_daily") if raw_src in (None, "", "auto") else raw_src
     clock_now = get_clock().now()
-    # Default to the most recent closed trading session so the refresh
-    # actually fetches data for the last market day, not a no-op.
-    _prev_td = previous_trading_day(clock_now.date()).isoformat()
-    from_date = run.params_json.get("from_date", _prev_td)
-    to_date = run.params_json.get("to_date", _prev_td)
+
+    # Resolve to_date: explicit override, or latest closed session.
+    to_policy = run.params_json.get("to_policy", "latest_closed_session")
+    _raw_to = run.params_json.get("to_date")
+    if _raw_to:
+        to_date = _raw_to
+    elif to_policy == "latest_closed_session":
+        latest = previous_trading_day(clock_now.date())
+        if is_trading_day(clock_now.date()):
+            latest = shift_trading_days(latest, -1)
+        to_date = latest.isoformat()
+    else:
+        to_date = previous_trading_day(clock_now.date()).isoformat()
+
+    # Resolve from_date: explicit override, or scan backward for gaps.
+    from_policy = run.params_json.get("from_policy", "previous_session")
+    _raw_from = run.params_json.get("from_date")
+    if _raw_from:
+        from_date = _raw_from
+    elif from_policy == "last_missing_or_previous_session":
+        from_date = shift_trading_days(date.fromisoformat(to_date), -30).isoformat()
+    else:
+        from_date = to_date
 
     if not default_src:
         raise ValueError("No source configured for bars_daily")
