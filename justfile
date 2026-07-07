@@ -12,7 +12,7 @@ bootstrap-bars:
 
 # Start the reference stack
 up *flags:
-    docker compose up -d postgres rustfs {{ flags }}
+    docker compose up -d postgres rustfs app worker {{ flags }}
 
 # Stop the reference stack
 down:

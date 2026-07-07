@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from alpha_lake.config import RootConfig
@@ -10,6 +10,8 @@ from alpha_lake.jobs.models import JobDefinition, JobRun, JobStore
 
 log = logging.getLogger("alpha_lake")
 
+_MAX_CATCHUP_DAYS = 30
+
 
 class Scheduler:
     """Check job definitions and enqueue runs that are due."""
@@ -17,6 +19,89 @@ class Scheduler:
     def __init__(self, store: JobStore, cfg: RootConfig) -> None:
         self._store = store
         self._cfg = cfg
+
+    def catch_up_missed(self) -> int:
+        """Enqueue runs for trading/calendar days missed since last success.
+
+        Called once on worker startup so that downtime (host reboot, holiday
+        gap, container exit) doesn't silently create data gaps.  Skips today
+        (handled by the normal enqueue_due loop).  Capped at 30 days.
+        """
+        now = _utcnow()
+        today = now.date()
+        defs = self._store.list_job_defs()
+        count = 0
+        for jd in defs:
+            if not jd.enabled or jd.hold:
+                continue
+            if jd.schedule_kind in ("manual", "interval"):
+                continue
+            if self._source_is_held(jd.source_id):
+                continue
+
+            sched = jd.schedule_json or {}
+            has_calendar = bool(sched.get("calendar"))
+            run_time = sched.get("time", "18:00") if jd.schedule_kind == "daily_time" else None
+
+            last_runs = self._store.list_runs(
+                job_name=jd.job_name,
+                status="succeeded",
+                limit=1,
+            )
+            if not last_runs:
+                continue
+            last_date = last_runs[0].requested_for_date
+            if last_date is None:
+                if last_runs[0].scheduled_at:
+                    last_date = last_runs[0].scheduled_at.date()
+                else:
+                    continue
+
+            day = last_date + timedelta(days=1)
+            lookback = 0
+            while day < today and lookback < _MAX_CATCHUP_DAYS:
+                if (not has_calendar) or self._is_trading_day(day, sched):
+                    idem_key = self._missed_key(jd, day, run_time)
+                    if not self._key_exists(jd.job_name, idem_key):
+                        self._store.create_run(
+                            JobRun(
+                                run_id=_new_id(),
+                                job_name=jd.job_name,
+                                job_type=jd.job_type,
+                                status="queued",
+                                idempotency_key=idem_key,
+                                params_json=jd.params_json,
+                                requested_for_date=day,
+                                source_id=jd.source_id,
+                                dataset=jd.dataset,
+                                priority=jd.priority,
+                                max_attempts=jd.max_attempts,
+                                scheduled_at=now,
+                            )
+                        )
+                        count += 1
+                day += timedelta(days=1)
+                lookback += 1
+
+        if count:
+            log.info("Catch-up enqueued %d missed run(s)", count)
+        return count
+
+    @staticmethod
+    def _missed_key(jd: JobDefinition, day: date, run_time: str | None) -> str:
+        if jd.schedule_kind == "market_close":
+            return f"scheduled:market_close:{day.isoformat()}"
+        return f"scheduled:daily_time:{day.isoformat()}:{run_time or '18:00'}"
+
+    @staticmethod
+    def _is_trading_day(day: date, sched: dict) -> bool:
+        from alpha_lake.calendar_ import is_trading_day
+
+        return is_trading_day(day, sched.get("calendar", "XNYS"))
+
+    def _key_exists(self, job_name: str, key: str) -> bool:
+        runs = self._store.list_runs(job_name=job_name, limit=200)
+        return any(r.idempotency_key == key for r in runs)
 
     def _source_is_held(self, source_id: str | None) -> bool:
         if not source_id:

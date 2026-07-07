@@ -68,6 +68,7 @@ class Worker:
 
     def run(self) -> None:
         """Main loop: poll → schedule → claim → execute."""
+        self._catch_up()
         while not self._shutdown:
             self._heartbeat()
 
@@ -92,6 +93,15 @@ class Worker:
                 time.sleep(self._poll_interval)
 
         info("Worker shut down.")
+
+    def _catch_up(self) -> None:
+        """Enqueue runs for missed trading days on startup."""
+        try:
+            count = self._scheduler.catch_up_missed()
+            if count:
+                ok(f"Catch-up enqueued {count} missed job run(s).")
+        except Exception as exc:
+            warn(f"Catch-up error (non-fatal): {exc}")
 
     def _heartbeat(self, current_run_id: str | None = None) -> None:
         from alpha_lake.jobs.models import WorkerState
